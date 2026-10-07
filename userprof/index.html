@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>userprof — userのプロフィール帳</title>
+  <meta name="description" content="AIチャットzetaで使う自分のキャラクター(user)のプロフィール・年表・設定メモ・画像を、プロットごとにブラウザ内へ保存できるプロフィール帳。">
+  <meta name="theme-color" content="#6d5dfc">
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/kit.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="shell">
+    <nav class="sidebar" aria-label="メニュー">
+      <p class="sidebar-label">userprof</p>
+      <a class="nav-item" href="#/" data-nav="list"><span data-icon="list"></span><span>user一覧</span></a>
+      <a class="nav-item" href="#/backup" data-nav="backup"><span data-icon="download"></span><span>バックアップ</span></a>
+      <p class="sidebar-foot"><span class="dot"></span>このブラウザに保存</p>
+    </nav>
+    <main id="app" tabindex="-1"></main>
+  </div>
+
+  <script src="../assets/kit.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/views-list.js"></script>
+  <script src="js/views-detail.js"></script>
+  <script src="js/views-backup.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

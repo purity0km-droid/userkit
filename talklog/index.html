@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>talklog — zetaのトークを手元に保存</title>
+  <meta name="description" content="zetaのトークを、吹き出しのまま読めるHTMLファイルとして手元に保存するツール。パソコン・iPhone・Androidで使えます。書き出したログの閲覧・テキスト化も。内容はどこにも送信しません。">
+  <meta name="theme-color" content="#6d5dfc">
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/kit.css">
+  <link rel="stylesheet" href="talklog.css">
+</head>
+<body>
+  <main id="app" class="log-app">
+    <section class="log-hero">
+      <div>
+        <h1>zetaのトークを、<br>吹き出しのまま手元に保存</h1>
+        <p class="lead">zeta(Web版)のトーク画面で動かすと、読み込まれた発言を集めて、1つのHTMLファイルに書き出します。ファイルはブラウザで開くだけで読めます。無料・登録不要。</p>
+        <p class="privacy"><span data-icon="eye" data-icon-size="16"></span>読み取った内容はあなたの端末の中だけで扱い、どこにも送信しません。</p>
+      </div>
+      <div class="sample" aria-label="書き出したファイルの見本">
+        <div class="s-m them"><span class="s-nm">黒羽 蓮</span><span class="s-bb"><i>読みかけの本に栞を挟んで、顔を上げる。</i><br>……遅い。待ちくたびれた。</span></div>
+        <div class="s-m nar"><span class="s-bb">放課後の図書室に、雨の音だけが響いている。</span></div>
+        <div class="s-m me"><span class="s-nm">あなた</span><span class="s-bb">ごめん、委員会が長引いて。</span></div>
+      </div>
+    </section>
+
+    <section class="panel steps-card">
+      <h2>1. 準備(はじめの1回だけ)</h2>
+      <div class="seg dev-tabs" role="tablist" aria-label="端末の種類">
+        <button type="button" role="tab" data-dev="pc" aria-pressed="true">パソコン</button>
+        <button type="button" role="tab" data-dev="ios" aria-pressed="false">iPhone・iPad</button>
+        <button type="button" role="tab" data-dev="android" aria-pressed="false">Android</button>
+      </div>
+
+      <div class="dev" data-dev-panel="pc">
+        <p class="hint">Chrome・Edge・Safari・Firefox など。ブックマークバーを表示しておいてください。</p>
+        <ol class="howto">
+          <li>下の <b>「talklogで保存」</b> ボタンを、ブックマークバーへドラッグして置きます。
+            <div class="bm-row"><a class="bm-link" id="bm-drag" href="#" title="ブックマークバーへドラッグしてください"><span data-icon="bubble" data-icon-size="16"></span>talklogで保存</a><span class="hint">← ドラッグ</span></div>
+          </li>
+          <li>ドラッグできないときは、<button type="button" class="link-btn" data-copy="bm">ブックマーク用の文字列をコピー</button>し、ブックマークを新しく作って「URL」欄に貼り付けます(名前は「talklogで保存」など)。</li>
+        </ol>
+      </div>
+
+      <div class="dev" data-dev-panel="ios" hidden>
+        <p class="hint">Safari で使います。どちらか一方の方法でOKです。</p>
+        <h3>方法A: ブックマークで使う(アプリ不要)</h3>
+        <ol class="howto">
+          <li><button type="button" class="btn btn-outline btn-sm" data-copy="bm"><span data-icon="copy"></span>ブックマーク用の文字列をコピー</button></li>
+          <li>Safari で今のページを開いたまま、共有ボタン →「ブックマークを追加」で保存します。</li>
+          <li>ブックマーク一覧で今のブックマークを長押し →「編集」。名前を「talklogで保存」にし、アドレス欄を消して、コピーした文字列を貼り付けて保存します。</li>
+        </ol>
+        <h3>方法B: アプリ「Userscripts」で使う(ボタンが出て便利)</h3>
+        <ol class="howto">
+          <li>App Store で無料アプリ「Userscripts」を入れ、Safari の機能拡張で有効にします。</li>
+          <li>Safari でこのリンクを開き、機能拡張から「インストール」します: <a id="us-link" href="talklog.user.js">talklog.user.js</a></li>
+          <li>zeta のトーク画面の右下に <b>「talklog」</b> ボタンが出るようになります。</li>
+        </ol>
+      </div>
+
+      <div class="dev" data-dev-panel="android" hidden>
+        <p class="hint">Chrome で使います。</p>
+        <ol class="howto">
+          <li><button type="button" class="btn btn-outline btn-sm" data-copy="bm"><span data-icon="copy"></span>ブックマーク用の文字列をコピー</button></li>
+          <li>今のページをブックマークに追加し、ブックマークを編集。名前を「talklogで保存」に、URLをコピーした文字列に置き換えて保存します。</li>
+          <li>使うときは、zeta のトーク画面でアドレスバーに <b>talklogで保存</b> と入力し、候補に出たブックマーク(★)をタップします。</li>
+        </ol>
+        <p class="hint">Firefox(Android) に拡張機能「Violentmonkey」を入れて、<a href="talklog.user.js">talklog.user.js</a> をインストールする方法もあります(トーク画面にボタンが出ます)。</p>
+      </div>
+
+      <details class="fold">
+        <summary>短い版で動かないとき(全部入り版)</summary>
+        <p class="hint">上のブックマークは、毎回このサイトから本体を読み込みます。zeta 側の設定で外部の読み込みが止められて動かない場合は、本体を丸ごと入れた長い版を試してください(更新は自動では入りません)。</p>
+        <button type="button" class="btn btn-outline btn-sm" data-copy="full"><span data-icon="copy"></span>全部入り版をコピー</button>
+      </details>
+      <p class="hint warn-note">貼り付けたあと、先頭の <code>javascript:</code> が消えていないか確かめてください。ブラウザが自動で取り除くことがあります。消えていたら手で打ち足してください。</p>
+    </section>
+
+    <section class="panel steps-card">
+      <h2>2. 保存する</h2>
+      <ol class="howto">
+        <li>ブラウザで <b>zeta(Web版)</b> を開き、保存したいトークの画面を表示します。</li>
+        <li>ブックマーク「talklogで保存」(またはトーク画面の「talklog」ボタン)を押します。画面の下にパネルが出て、まず最新の発言まで自動で読み込みます。</li>
+        <li>いちばん古い発言まで、ゆっくり上へスクロールします。パネルの <b>「自動で遡る」</b> を押すと自動で上まで戻ります。</li>
+        <li><b>「書き出す」</b> を押すと、<code>talklog_</code> ではじまる HTML ファイルが保存されます。</li>
+      </ol>
+      <div class="notice">
+        <p><b>保存できたら、必ずファイルを開いて確かめてください。</b>いちばん古い発言と新しい発言が入っていれば成功です。足りないときは、もう一度上まで遡ってから書き出してください。</p>
+      </div>
+      <ul class="limits">
+        <li>集められるのは、画面に読み込まれた発言だけです。上まで遡らないと、遡ったところから先しか入りません。</li>
+        <li>発言の日時、画像・ボイス・スタンプは入りません(文字だけです)。</li>
+        <li>再生成した候補は、そのとき表示しているものだけが入ります。</li>
+        <li>zeta の画面の作りが変わると、動かなくなることがあります。</li>
+      </ul>
+    </section>
+
+    <section class="panel viewer-card" id="viewer">
+      <div class="viewer-head">
+        <div>
+          <h2>3. 書き出したログを見る</h2>
+          <p class="hint">保存した <code>talklog_….html</code> を選ぶと、ここで読めます。検索・テキストでの保存・印刷(PDF)もできます。</p>
+        </div>
+        <button type="button" class="btn btn-primary" id="open-log"><span data-icon="file"></span>ログファイルを開く</button>
+      </div>
+      <input type="file" id="log-file" accept=".html,.htm,.json,text/html,application/json" hidden>
+      <div id="log-view"></div>
+    </section>
+  </main>
+
+  <script src="../assets/kit.js"></script>
+  <script src="talklog.js"></script>
+</body>
+</html>

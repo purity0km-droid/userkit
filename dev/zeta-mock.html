@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模擬トーク(黒羽 蓮) - zeta</title>
+<!--
+  talklog/collector.js の動作確認用の模擬ページ(開発用。zeta の画面ではありません)
+  zeta の目印(data-sentry-component / data-key / .caption1 / Swiper)を同じ形で置き、
+  見えている範囲だけ描く仮想リストと、上端での古い発言の読み込みを再現する。
+  ?mobile を付けると data-index / data-key の無い画面になる。
+-->
+<style>
+  body { margin: 0; font: 15px/1.6 system-ui, sans-serif; background: #f4f2f7; }
+  .bar { position: fixed; top: 0; left: 0; right: 0; height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: #fff; border-bottom: 1px solid #ddd; z-index: 5; }
+  .list { position: fixed; top: 48px; bottom: 0; left: 0; right: 0; overflow-y: auto; }
+  .row { height: 150px; box-sizing: border-box; padding: 8px 14px; overflow: hidden; }
+  .items-end { display: flex; flex-direction: column; align-items: flex-end; }
+  .bub { display: inline-block; background: #fff; border-radius: 14px; padding: 6px 12px; margin: 2px 0; }
+  .items-end .bub { background: #d9c8ff; }
+  .nar { color: #777; font-style: italic; }
+  .caption1 { font-size: 12px; color: #666; display: block; }
+  .swiper { overflow: hidden; } .swiper-wrapper { display: flex; } .swiper-slide { flex: 0 0 100%; }
+  .chat { display: block; font-size: 12px; }
+  .loading { text-align: center; color: #999; font-size: 12px; padding: 6px; }
+</style>
+</head>
+<body>
+<div class="bar"><b>模擬トーク</b><button id="run">talklog を起動(ブックマークレット相当)</button><span id="info"></span></div>
+<div class="list" id="list"></div>
+<script>
+(function () {
+  const MOBILE = location.search.includes('mobile');
+  const N = 150, H = 150;
+  const CHAR = '黒羽 蓮', CHAR2 = '白石 澪', ME = '水瀬 遥';
+  // ---- 会話データ ----
+  const msgs = [];
+  for (let i = 0; i < N; i++) {
+    const id = 'm' + (1000 + i);
+    if (i === N - 1) msgs.push({ id, type: 'cands', cands: ['候補A: もう寝る時間だよ', '候補B: *あくびをして* また明日ね', '候補C: 眠れないの?'], active: 1 });
+    else if (i % 37 === 20) msgs.push({ id, type: 'dice' });
+    else if (i % 29 === 10) msgs.push({ id, type: 'info', rows: [['時間', '放課後 ' + i], ['場所', '旧校舎']], person: [CHAR, [['気分', '少し眠い']]] });
+    else if (i % 23 === 5) msgs.push({ id, type: 'multi', parts: [[CHAR, `第${i}話: 先に行くね`], ['narr', `${CHAR2}が扉の陰から顔を出す。`], [CHAR2, `第${i}話: 待って、私も!`]] });
+    else if (i % 2 === 0) msgs.push({ id, type: 'char', text: `第${i}話: *本を閉じて* ねえ、聞いてる?`, narr: i % 6 === 0 ? `窓の外で雨が降り出した(${i})。` : null });
+    else msgs.push({ id, type: 'user', text: i % 10 === 3 ? 'うん' : `第${i}話: うん、聞いてるよ` });
+  }
+  const expanded = new Set();
+
+  // ---- 正解(書き出されるべき内容) ----
+  window.__truth = () => {
+    const out = [];
+    for (const m of msgs) {
+      if (m.type === 'dice') continue;
+      if (m.type === 'user') out.push({ kind: 'speech', name: ME, right: true, body: m.text });
+      if (m.type === 'char') {
+        out.push({ kind: 'speech', name: CHAR, right: false, body: m.text });
+        if (m.narr) out.push({ kind: 'narration', name: '', right: false, body: m.narr });
+      }
+      if (m.type === 'multi') for (const [who, t] of m.parts) out.push(who === 'narr' ? { kind: 'narration', name: '', right: false, body: t } : { kind: 'speech', name: who, right: false, body: t });
+      if (m.type === 'info') out.push({ kind: 'info', name: 'インフォボックス', right: false, body: m.rows.map(([a, b]) => a + '：' + b).concat(['【' + m.person[0] + '】'], m.person[1].map(([a, b]) => a + '：' + b)).join('\n') });
+      if (m.type === 'cands') out.push({ kind: 'speech', name: CHAR, right: false, body: m.cands[m.active] });
+    }
+    return out;
+  };
+
+  // ---- DOM(Reactのように、同じidの要素は描き直しても使い回す) ----
+  const S = (name, cls) => { const d = document.createElement('div'); d.setAttribute('data-sentry-component', name); if (cls) d.className = cls; return d; };
+  const bubble = (text) => {
+    const b = S('ChatBubbleContainer', 'bub');
+    const p = document.createElement('p'); p.style.margin = 0;
+    // *...* は em に
+    text.split(/(\*[^*]+\*)/).forEach((part) => {
+      if (/^\*[^*]+\*$/.test(part)) { const em = document.createElement('em'); em.textContent = part.slice(1, -1); p.append(em); }
+      else if (part) p.append(document.createTextNode(part));
+    });
+    b.append(p); return b;
+  };
+  const left = (who, text) => { const v = S('LeftContentView'); const c = document.createElement('span'); c.className = 'caption1'; c.textContent = who; v.append(c, bubble(text)); return v; };
+  const narr = (t) => { const n = S('NarratorBubble', 'nar'); n.textContent = t; return n; };
+  const chatRow = (txt) => { const s = document.createElement('span'); s.className = 'chat'; const a = document.createElement('span'); a.textContent = txt[0]; const b = document.createElement('span'); b.textContent = txt[1]; s.append(a, '  ', b); return s; };
+
+  function build(m, i) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    if (!MOBILE) { row.setAttribute('data-index', String(i)); row.setAttribute('data-key', (m.type === 'cands' ? 'local-reply-' : 'message-') + m.id); }
+    const cm = S('ChatMessage');
+    if (m.type === 'user') { const r = S('RightContentView', 'items-end'); const c = document.createElement('span'); c.className = 'caption1'; c.textContent = ME; r.append(c, bubble(m.text)); cm.append(r); }
+    if (m.type === 'char') { cm.append(left(CHAR, m.text)); if (m.narr) cm.append(narr(m.narr)); }
+    if (m.type === 'multi') for (const [who, t] of m.parts) cm.append(who === 'narr' ? narr(t) : left(who, t));
+    if (m.type === 'dice') { const d = S('DiceRecordContent'); d.textContent = '🎲 サイコロ: 4'; cm.append(d); }
+    if (m.type === 'info') {
+      const box = S('InfoBoxContent');
+      if (!expanded.has(m.id)) {
+        const btn = document.createElement('button');
+        const col = S('InfoBoxCollapsedContent'); col.append(chatRow(m.rows[0]));
+        btn.append(col);
+        btn.onclick = () => { expanded.add(m.id); cache.delete(m.id); render(); };
+        box.append(btn);
+      } else {
+        const ex = S('InfoBoxExpandedContent');
+        const scene = S('InfoBoxContent'); m.rows.forEach((r) => scene.append(chatRow(r)));
+        const ps = S('InfoBoxCharacterSection'); const c = document.createElement('span'); c.className = 'caption1'; c.textContent = m.person[0]; ps.append(c); m.person[1].forEach((r) => ps.append(chatRow(r)));
+        ex.append(scene, ps); box.append(ex);
+      }
+      cm.append(box);
+    }
+    if (m.type === 'cands') {
+      const sw = document.createElement('div'); sw.className = 'swiper';
+      const wr = document.createElement('div'); wr.className = 'swiper-wrapper';
+      m.cands.forEach((t, k) => { const sl = document.createElement('div'); sl.className = 'swiper-slide' + (k === m.active ? ' swiper-slide-active' : ''); sl.append(left(CHAR, t)); wr.append(sl); });
+      sw.append(wr); cm.append(sw);
+    }
+    row.append(cm);
+    return row;
+  }
+
+  // ---- 仮想リスト ----
+  const list = document.getElementById('list');
+  const topPad = document.createElement('div'), botPad = document.createElement('div'), loading = document.createElement('div');
+  loading.className = 'loading'; loading.textContent = '読み込み中…';
+  let loadedStart = N - 60;
+  const cache = new Map();
+  function render() {
+    const total = (N - loadedStart) * H;
+    const st = list.scrollTop, vh = list.clientHeight;
+    const a = Math.max(loadedStart, loadedStart + Math.floor(st / H) - 2);
+    const b = Math.min(N, loadedStart + Math.ceil((st + vh) / H) + 2);
+    topPad.style.height = (a - loadedStart) * H + 'px';
+    botPad.style.height = (N - b) * H + 'px';
+    const nodes = [];
+    for (let i = a; i < b; i++) {
+      const m = msgs[i];
+      if (!cache.has(m.id)) cache.set(m.id, build(m, i));
+      nodes.push(cache.get(m.id));
+    }
+    for (const k of [...cache.keys()]) { const idx = msgs.findIndex((m) => m.id === k); if (idx < a || idx >= b) cache.delete(k); }
+    list.replaceChildren(topPad, ...nodes, botPad);
+    document.getElementById('info').textContent = `読み込み済み ${N - loadedStart}/${N} 件`;
+  }
+  let loadingOlder = false;
+  list.addEventListener('scroll', () => {
+    render();
+    if (list.scrollTop < 20 && loadedStart > 0 && !loadingOlder) {
+      loadingOlder = true;
+      setTimeout(() => {
+        const add = Math.min(30, loadedStart);
+        loadedStart -= add;
+        render();
+        list.scrollTop += add * H;
+        loadingOlder = false;
+        render();
+      }, 500);
+    }
+  });
+  render();
+  list.scrollTop = list.scrollHeight;
+  // 最初は少し上の位置から始める(途中から始めても最新まで拾えるか確かめる)
+  setTimeout(() => { list.scrollTop = list.scrollHeight - list.clientHeight - 900; render(); }, 50);
+
+  document.getElementById('run').onclick = () => {
+    window.__talklogAuto = true;
+    const s = document.createElement('script');
+    s.src = '../talklog/collector.js?' + Date.now();
+    document.body.appendChild(s);
+  };
+})();
+</script>
+</body>
+</html>
