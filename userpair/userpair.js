@@ -15,7 +15,7 @@
     colors: [{ label: 'HAIR', list: ['#3b3340', '#6b5a72'] }, { label: 'EYES', list: ['#b0476a', '#e48aa6'] }]
   });
   const defaults = () => ({
-    mode: 2, theme: 'basic', title: '', sub: '', foot: '',
+    mode: 2, theme: 'basic', palette: {}, title: '', sub: '', foot: '',
     show: { tags: true, desc: true, group: true, note: true, colors: true, sd: true, full: false, relation: true, head: true, foot: true },
     people: [person(), person()],
     rel: { ab: '', ba: '', a: null, b: null }
@@ -34,7 +34,7 @@
 
   const app = document.getElementById('app');
   const toolbar = h('div.ed-toolbar');
-  const tip = h('p.ed-tip', '文字は押してそのまま書けます。画像の枠はクリック・ドラッグ・貼り付け(Ctrl+V)で追加、ホイールや2本指で拡大、ドラッグで位置を合わせられます。内容はこのブラウザに自動で保存されます。');
+  const tip = h('p.ed-tip', '文字は押してそのまま書けます。画像の枠はクリック・ドラッグ・貼り付け(Ctrl+V)で追加、ホイールや2本指で拡大、ドラッグで位置を合わせられます。カラーの丸を押すと、入れた画像からスポイトで色を取れます。内容はこのブラウザに自動で保存されます。');
   app.append(toolbar, tip);
 
   const ed = Ed.create({ app: 'userpair', version: 1, width: 880, defaults, migrate, render, mount: app });
@@ -62,7 +62,7 @@
       s.colors && ed.list(`${p}.colors`, (c, j, cp) => h('div.pc-colors',
         ed.text(`${cp}.label`, { cls: 'pc-colors-label', ph: 'COLOR' }),
         h('div.pc-swatches',
-          ed.list(`${cp}.list`, (hex, k) => h('div.pc-sw', ed.color(`${cp}.list.${k}`)), { cls: 'pc-sw-list', add: () => '#cccccc', addLabel: '', max: 5, rmLabel: '色を削除' }))),
+          ed.list(`${cp}.list`, (hex, k) => h('div.pc-sw', ed.color(`${cp}.list.${k}`, { title: () => ed.get(`${cp}.label`), sources: () => colorSources(i) })), { cls: 'pc-sw-list', add: () => '#cccccc', addLabel: '', max: 5, rmLabel: '色を削除' }))),
       { cls: 'pc-colors-list', add: () => ({ label: '', list: ['#cccccc'] }), addLabel: '色グループ', max: 4 }),
       s.sd && h('div.pc-sd', ed.image(`${p}.sd`, { ratio: 1, label: 'SD・ちびキャラ' })));
 
@@ -74,6 +74,19 @@
       h('div.pc-body' + (s.full ? '.with-full' : ''),
         main, side,
         s.full && h('div.pc-full', ed.image(`${p}.full`, { ratio: 9 / 22, label: '全身' }))));
+  }
+
+  // スポイトで色を取れる画像(その人の画像を先に)
+  function colorSources(i) {
+    const s = ed.state;
+    const out = [];
+    (s.mode === 2 ? [i, 1 - i] : [i]).forEach((j) => {
+      const q = s.people[j];
+      const who = j === i ? '' : `(${q.name || (j === 0 ? '上の人' : '下の人')})`;
+      [['face', '顔'], ['sd', 'SD'], ['full', '全身']].forEach(([k, l]) => { if (q[k] && q[k].src) out.push({ src: q[k].src, label: l + who }); });
+    });
+    if (s.mode === 2) [['a', 'A'], ['b', 'B']].forEach(([k, l]) => { const v = s.rel[k]; if (v && v.src) out.push({ src: v.src, label: 'アイコン' + l }); });
+    return out;
   }
 
   function relation() {
@@ -88,7 +101,7 @@
 
   function render() {
     const s = ed.state;
-    return h('div.pair-sheet' + (s.mode === 1 ? '.solo' : ''), { style: Ed.themeVars(s.theme) },
+    return h('div.pair-sheet' + (s.mode === 1 ? '.solo' : ''), { style: Ed.themeVars(s.theme, s.palette) },
       s.show.head && h('header.ps-head',
         ed.text('title', { cls: 'ps-title', ph: 'TITLE' }),
         ed.text('sub', { cls: 'ps-subtitle', ph: 'pair profile' })),

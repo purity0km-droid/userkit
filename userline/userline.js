@@ -12,7 +12,7 @@
     desc: ''
   });
   const defaults = () => ({
-    theme: 'basic', label: '', title: '',
+    theme: 'basic', palette: {}, label: '', title: '',
     show: { profile: true, timeline: true, banner: true, summary: true, relation: true, foot: true },
     people: [person(), person()],
     banner: null,
@@ -58,7 +58,7 @@
   function render() {
     const s = ed.state;
     const n = s.people.length;
-    return h('div.line-sheet', { style: Ed.themeVars(s.theme) },
+    return h('div.line-sheet', { style: Ed.themeVars(s.theme, s.palette) },
       h('header.ul-head',
         h('span.ul-accent'),
         ed.text('label', { cls: 'ul-label', ph: 'ラベル' }),
@@ -127,7 +127,7 @@
       Array.from({ length: Math.min(4, n + 1) }, (_, i) => h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: () => { close(); importFrom(i); } },
         i < n ? `${i + 1}人目に読み込む` : `${i + 1}人目として追加`))));
     toolbar.replaceChildren(
-      Ed.themePicker(ed, 'theme'),
+      Ed.themePicker(ed, 'theme', { tokens: ['main', 'soft', 'bg', 'card', 'text', 'muted', 'line'] }),
       Ed.showPicker(ed, 'show', [['profile', 'PROFILE'], ['timeline', 'TIMELINE'], ['banner', 'TIMELINEの画像'], ['summary', 'SUMMARY'], ['relation', 'RELATION'], ['foot', '下の一文']]),
       imp,
       h('span.spacer'),

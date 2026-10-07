@@ -23,7 +23,7 @@
 /* ---------- カード ---------- */
 .pc-card { background: var(--t-card); border: 1px solid var(--t-line); border-radius: 22px; overflow: hidden; box-shadow: 0 6px 22px rgba(60, 30, 50, .07); }
 .pc-bar { display: flex; align-items: baseline; gap: 12px; padding: 13px 22px; background: var(--t-main); color: var(--t-ink); }
-.pc-bar .ed-text { --ph: rgba(255, 255, 255, .7); --ph-line: rgba(255, 255, 255, .4); }
+.pc-bar .ed-text { --ph: color-mix(in srgb, var(--t-ink) 70%, transparent); --ph-line: color-mix(in srgb, var(--t-ink) 40%, transparent); }
 .pair-sheet .pc-bar .ed-text:focus { background: rgba(255, 255, 255, .18); box-shadow: 0 0 0 2px rgba(255, 255, 255, .7); }
 .pc-name { font: 700 21px/1.3 var(--display); letter-spacing: .06em; min-width: 8em; }
 .pc-sub { font-size: 11.5px; opacity: .9; letter-spacing: .12em; min-width: 6em; }

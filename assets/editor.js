@@ -233,20 +233,35 @@
       return wrap;
     };
 
-    /* ---------- 色 ---------- */
+    /* ---------- 色 (押すと、画像からスポイト・パレット・カラーコードで選べる) ---------- */
+    // o.sources: () => [{ src, label }] スポイトに使う画像(省略時はシート内の画像すべて) / o.title: 文字 or () => 文字
     ed.color = (p, o) => {
       o = o || {};
-      const v = ed.get(p) || '#cccccc';
-      const sw = h('label.ed-color', { title: o.label || '色を選ぶ', style: { '--c': v } },
-        h('input.ed-ui', { type: 'color', value: v, 'aria-label': o.label || '色を選ぶ' }),
-        o.code !== false && h('span.ed-color-code', v.toUpperCase()));
-      sw.querySelector('input').addEventListener('input', (e) => {
-        ed.set(p, e.target.value);
-        sw.style.setProperty('--c', e.target.value);
-        const code = sw.querySelector('.ed-color-code');
-        if (code) code.textContent = e.target.value.toUpperCase();
+      const sw = h('button.ed-color', { type: 'button', title: '色を変える(画像からスポイトもできます)' });
+      const show = () => {
+        const v = ed.get(p) || '#cccccc';
+        sw.style.setProperty('--c', v);
+        sw.setAttribute('aria-label', `色 ${v.toUpperCase()}(押して変える)`);
+        sw.replaceChildren(...(o.code !== false ? [h('span.ed-color-code', v.toUpperCase())] : []));
+      };
+      sw.addEventListener('click', async () => {
+        const t = typeof o.title === 'function' ? o.title() : o.title;
+        const v = await pickColor({ value: ed.get(p), title: t ? `${t} の色` : '色を選ぶ', sources: (o.sources || ed.images)() });
+        if (v) { ed.set(p, v); show(); }
       });
+      show();
       return sw;
+    };
+    /** シートに入っている画像 [{ src }] */
+    ed.images = () => {
+      const out = [];
+      const walk = (x) => {
+        if (!x || typeof x !== 'object') return;
+        if (typeof x.src === 'string' && x.src) out.push({ src: x.src });
+        else Object.values(x).forEach(walk);
+      };
+      walk(ed.state);
+      return out;
     };
 
     /* ---------- 書き出し・保存 ---------- */
@@ -308,7 +323,8 @@
     ed.popover = (label, iconName, build) => {
       const box = h('details.ed-pop', h('summary.btn.btn-outline.btn-sm', icon(iconName), label), h('div.ed-pop-body'));
       box.addEventListener('toggle', () => { if (box.open) box.querySelector('.ed-pop-body').replaceChildren(build(() => { box.open = false; })); });
-      document.addEventListener('click', (e) => { if (box.open && !box.contains(e.target)) box.open = false; });
+      // パネルから開いたダイアログ(色を選ぶなど)の操作では閉じない
+      document.addEventListener('click', (e) => { if (box.open && !box.contains(e.target) && !(e.target.closest && e.target.closest('dialog'))) box.open = false; });
       return box;
     };
     return ed;
@@ -385,6 +401,167 @@
     });
   }
 
+  /* ================================================================ 色を選ぶ (画像からスポイト) */
+  let extraImages = [];   // 「ほかの画像」で開いた画像(保存しない。ページを開いている間だけ残す)
+  const normHex = (s) => {
+    const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(s || '').trim());
+    if (!m) return null;
+    const x = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1];
+    return '#' + x.toLowerCase();
+  };
+  const toHex = (r, g, b) => '#' + [r, g, b].map((n) => Math.round(n).toString(16).padStart(2, '0')).join('');
+  const LOUPE_PX = 11;    // ルーペに映す範囲(画像の画素数・奇数)
+  const LOUPE_SIZE = 104;
+
+  /** 色を選ぶダイアログ。選んだ色(#rrggbb)を返す。やめたら null */
+  function pickColor({ value, title, sources }) {
+    return new Promise((resolve) => {
+      const before = normHex(value) || '#cccccc';
+      let cur = before, ok = false;
+      let off = null, token = 0, down = false, selected = null;
+
+      const chipNew = h('i.cp-chip', { style: { '--c': cur } });
+      const hex = h('input.cp-hex', { type: 'text', value: cur.toUpperCase(), maxlength: 7, spellcheck: 'false', 'aria-label': 'カラーコード' });
+      const native = h('input', { type: 'color', value: cur, 'aria-label': 'パレットで選ぶ' });
+      const setCur = (v, from) => {
+        cur = v;
+        chipNew.style.setProperty('--c', v);
+        if (from !== 'hex') hex.value = v.toUpperCase();
+        if (from !== 'native') native.value = v;
+      };
+      hex.addEventListener('input', () => { const v = normHex(hex.value); if (v) setCur(v, 'hex'); });
+      hex.addEventListener('change', () => { hex.value = cur.toUpperCase(); });
+      hex.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); apply(); } });
+      native.addEventListener('input', () => setCur(native.value, 'native'));
+
+      /* 画像の一覧 */
+      const srcs = h('div.cp-srcs', { role: 'group', 'aria-label': '色を取る画像' });
+      const file = h('input', { type: 'file', accept: 'image/*', hidden: true });
+      const all = () => {
+        const seen = new Set();
+        return (sources || []).concat(extraImages).filter((s) => s && s.src && !seen.has(s.src) && seen.add(s.src));
+      };
+      const drawSrcs = () => {
+        srcs.replaceChildren(...all().map((s) => h('button.cp-src', {
+          type: 'button', title: s.label || '画像', 'aria-pressed': s.src === selected ? 'true' : 'false', onclick: () => select(s.src)
+        }, h('img', { src: s.src, alt: '' }), s.label && h('span', s.label))),
+        h('button.cp-src.add', { type: 'button', title: 'ほかの画像を開く(色を取るためだけに使います)', onclick: () => file.click() }, icon('plus', 16), h('span', 'ほかの画像')), file);
+      };
+      const addFile = async (f) => {
+        if (!f || !f.type || !f.type.startsWith('image/')) return U.toast('画像ファイルを選んでください', 'error');
+        try {
+          const src = await U.fileToDataUrl(f, 1400);
+          extraImages = extraImages.filter((s) => s.src !== src).concat({ src, label: 'ほかの画像' });
+          select(src);
+        } catch (e) { U.toast('画像を読み込めませんでした', 'error'); }
+      };
+      file.addEventListener('change', () => { addFile(file.files[0]); file.value = ''; });
+
+      /* スポイト */
+      const img = h('img.cp-img', { alt: '色を取る画像', draggable: 'false' });
+      const stage = h('div.cp-stage');
+      const lcv = h('canvas', { width: LOUPE_SIZE * 2, height: LOUPE_SIZE * 2 });
+      const lcode = h('b');
+      const loupe = h('div.cp-loupe', { 'aria-hidden': 'true' }, lcv, lcode);
+      async function select(src) {
+        const my = ++token;
+        selected = src;
+        off = null;
+        drawSrcs();
+        try {
+          const im = await U.loadImage(src);
+          if (my !== token) return;
+          const c = document.createElement('canvas');
+          c.width = im.naturalWidth; c.height = im.naturalHeight;
+          const cx = c.getContext('2d', { willReadFrequently: true });
+          cx.drawImage(im, 0, 0);
+          off = { c, w: c.width, h: c.height, data: cx.getImageData(0, 0, c.width, c.height).data };
+          img.src = src;
+          stage.replaceChildren(img);
+        } catch (e) { if (my === token) U.toast('画像を読み込めませんでした', 'error'); }
+      }
+      const sample = (e) => {
+        const r = img.getBoundingClientRect();
+        const x = clamp(Math.floor((e.clientX - r.left) / r.width * off.w), 0, off.w - 1);
+        const y = clamp(Math.floor((e.clientY - r.top) / r.height * off.h), 0, off.h - 1);
+        const i = (y * off.w + x) * 4, d = off.data, a = d[i + 3] / 255;
+        // 透明な所は白の上に置いた色にする
+        return { x, y, hex: toHex(d[i] * a + 255 * (1 - a), d[i + 1] * a + 255 * (1 - a), d[i + 2] * a + 255 * (1 - a)) };
+      };
+      const showLoupe = (e, s) => {
+        const ctx = lcv.getContext('2d');
+        const half = (LOUPE_PX - 1) / 2, cell = lcv.width / LOUPE_PX;
+        ctx.imageSmoothingEnabled = false;
+        ctx.fillStyle = '#d8d8d8';
+        ctx.fillRect(0, 0, lcv.width, lcv.height);
+        ctx.drawImage(off.c, s.x - half, s.y - half, LOUPE_PX, LOUPE_PX, 0, 0, lcv.width, lcv.height);
+        ctx.lineWidth = 2; ctx.strokeStyle = '#000';
+        ctx.strokeRect(half * cell, half * cell, cell, cell);
+        ctx.strokeStyle = '#fff';
+        ctx.strokeRect(half * cell - 2, half * cell - 2, cell + 4, cell + 4);
+        loupe.style.setProperty('--c', s.hex);
+        lcode.textContent = s.hex.toUpperCase();
+        // 指で押しているときは指に隠れないよう上に、マウスのときは右上に出す
+        const touch = e.pointerType !== 'mouse', gap = LOUPE_SIZE * 0.5 + 34;
+        let lx = e.clientX + (touch ? 0 : gap * 0.75), ly = e.clientY - (touch ? gap + 10 : gap * 0.75);
+        if (ly - LOUPE_SIZE / 2 < 4) ly = e.clientY + (touch ? gap + 10 : gap * 0.75);
+        if (lx + LOUPE_SIZE / 2 > innerWidth - 4) lx = e.clientX - (touch ? 0 : gap * 0.75);
+        loupe.style.left = clamp(lx, LOUPE_SIZE / 2 + 4, innerWidth - LOUPE_SIZE / 2 - 4) + 'px';
+        loupe.style.top = ly + 'px';
+        loupe.classList.add('show');
+      };
+      const hideLoupe = () => loupe.classList.remove('show');
+      img.addEventListener('pointerdown', (e) => {
+        if (!off || (e.pointerType === 'mouse' && e.button !== 0)) return;
+        e.preventDefault();
+        try { img.setPointerCapture(e.pointerId); } catch (err) { /* 合成イベントなど */ }
+        down = true;
+        const s = sample(e);
+        setCur(s.hex);
+        showLoupe(e, s);
+      });
+      img.addEventListener('pointermove', (e) => {
+        if (!off || (!down && e.pointerType !== 'mouse')) return;
+        const s = sample(e);
+        if (down) setCur(s.hex);
+        showLoupe(e, s);
+      });
+      const up = (e) => { down = false; if (e.pointerType !== 'mouse') hideLoupe(); };
+      img.addEventListener('pointerup', up);
+      img.addEventListener('pointercancel', up);
+      img.addEventListener('pointerleave', () => { if (!down) hideLoupe(); });
+      img.addEventListener('contextmenu', (e) => e.preventDefault());
+
+      const apply = () => { ok = true; ctl.close(); };
+      const body = h('div.modal-body.cp-body',
+        h('p.modal-lead', '画像の上を押す(なぞる)と、その場所の色を取れます。'),
+        srcs, stage,
+        h('div.cp-row',
+          h('span.cp-chips', { title: '前の色 → 新しい色' }, h('i.cp-chip.old', { style: { '--c': before } }), icon('arrow', 14), chipNew),
+          hex,
+          h('label.btn.btn-outline.btn-sm.cp-palette', icon('palette'), 'パレット', native)),
+        h('div.modal-foot',
+          h('button.btn.btn-outline', { type: 'button', onclick: () => ctl.close() }, 'キャンセル'),
+          h('button.btn.btn-primary', { type: 'button', onclick: apply }, icon('check'), 'この色にする')));
+      const ctl = U.openDialog({ title: title || '色を選ぶ', content: body, wide: true, onClose: () => { token++; resolve(ok ? cur : null); } });
+      ctl.dlg.append(loupe);   // ダイアログの中に置かないと背面に隠れる
+      // 画像のドロップ・貼り付けでも開ける
+      ctl.dlg.addEventListener('dragover', (e) => e.preventDefault());
+      ctl.dlg.addEventListener('drop', (e) => { e.preventDefault(); if (e.dataTransfer.files[0]) addFile(e.dataTransfer.files[0]); });
+      ctl.dlg.addEventListener('paste', (e) => {
+        const f = U.imageFromPaste(e);
+        if (f) { e.preventDefault(); e.stopPropagation(); addFile(f); }
+      });
+
+      const first = all()[0];
+      if (first) select(first.src);
+      else {
+        drawSrcs();
+        stage.replaceChildren(h('p.cp-empty', 'シートにまだ画像がありません。', h('br'), '「ほかの画像」から開くか、画像をここにドロップ・貼り付けしてください。'));
+      }
+    });
+  }
+
   /* ================================================================ テーマ(配色) */
   const THEMES = [
     // 初期値: pair-canvas と同じ配色
@@ -398,21 +575,106 @@
     { id: 'night', name: 'ナイト', main: '#b79cff', soft: '#2c2840', bg: '#17151f', card: '#211e2d', text: '#ece8f7', muted: '#9a93b3', line: '#363149', ink: '#17151f' }
   ];
   const themeOf = (id) => THEMES.find((t) => t.id === id) || THEMES[0];
+  // 自分で決められる色 [キー, 名前, 使われる所]
+  const TOKENS = [
+    ['main', 'メイン', '見出し・帯・点'], ['soft', '淡い色', 'タグ・枠の面'], ['bg', '背景', 'シートの地'], ['card', 'カード', 'カードの地'],
+    ['text', '文字', ''], ['muted', '薄い文字', 'ラベルなど'], ['line', '線', '枠線・区切り'], ['ink', '帯の文字', 'メインの上の文字']
+  ];
+  const rgbOf = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const mix = (a, b, t) => { const x = rgbOf(a), y = rgbOf(b); return toHex(...x.map((v, i) => v * t + y[i] * (1 - t))); };
+  const lum = (hex) => {
+    const [r, g, b] = rgbOf(hex).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  /**
+   * テーマの色に、自分で決めた色(pal: { main: '#rrggbb', ... })を重ねる。
+   * 決めていない色のうち、淡い色・線・薄い文字・帯の文字は、決めた色に合わせて作り直す。
+   */
+  function themeColors(id, pal) {
+    const t = Object.assign({}, themeOf(id));
+    const o = {};
+    TOKENS.forEach(([k]) => { const v = normHex(pal && pal[k]); if (v) o[k] = v; });
+    ['main', 'bg', 'card', 'text'].forEach((k) => { if (o[k]) t[k] = o[k]; });
+    t.soft = o.soft || (o.main || o.card ? mix(t.main, t.card, 0.13) : t.soft);
+    t.line = o.line || (o.main || o.card ? mix(t.main, t.card, 0.2) : t.line);
+    t.muted = o.muted || (o.text || o.card ? mix(t.text, t.card, 0.65) : t.muted);
+    t.ink = o.ink || (o.main ? (1.05 / (lum(t.main) + 0.05) >= 3 ? '#ffffff' : '#1f1d26') : t.ink);
+    return t;
+  }
   /** シートに付けるCSS変数 */
-  function themeVars(id) {
-    const t = themeOf(id);
+  function themeVars(id, pal) {
+    const t = themeColors(id, pal);
     return {
       '--t-main': t.main, '--t-soft': t.soft, '--t-bg': t.bg, '--t-card': t.card, '--t-text': t.text,
       '--t-muted': t.muted, '--t-line': t.line, '--t-ink': t.ink,
       '--accent': t.main, '--ph': t.muted + 'aa', '--ph-line': t.line, '--muted-c': t.muted, '--img-bg': t.soft
     };
   }
-  /** テーマを選ぶポップオーバー */
-  function themePicker(ed, path) {
-    return ed.popover('テーマ', 'palette', (close) => h('div.theme-grid', THEMES.map((t) => h('button.theme-opt', {
-      type: 'button', 'aria-pressed': ed.get(path) === t.id ? 'true' : 'false',
-      onclick: () => { ed.set(path, t.id, { rerender: true }); close(); }
-    }, h('span.theme-dots', h('i', { style: { background: t.main } }), h('i', { style: { background: t.soft } }), h('i', { style: { background: t.bg } })), t.name))));
+  /**
+   * テーマを選ぶポップオーバー。下で色を自分で決めることもできる(カラーコード・パレット・画像からスポイト)。
+   * o.palette: 自分で決めた色を入れる場所(既定 'palette') / o.tokens: 出す色のキー(既定 すべて)
+   */
+  function themePicker(ed, path, o) {
+    o = o || {};
+    const palPath = o.palette || 'palette';
+    const tokens = TOKENS.filter(([k]) => !o.tokens || o.tokens.includes(k));
+    const pal = () => {
+      let v = ed.get(palPath);
+      if (!v || typeof v !== 'object') { v = {}; ed.set(palPath, v); }
+      return v;
+    };
+    // シートは作り直さず、色の変数だけ差し替える(入力中の文字や画像をそのままにするため)
+    const restyle = () => {
+      if (!ed.sheet) return;
+      Object.entries(themeVars(ed.get(path), pal())).forEach(([k, v]) => ed.sheet.style.setProperty(k, v));
+    };
+    return ed.popover('テーマ', 'palette', () => {
+      const setOwn = (k, v) => { if (v) ed.set(`${palPath}.${k}`, v); else { delete pal()[k]; ed.dirty(); } };
+      // 表示をいまの色にそろえる(入力中の欄は書き換えない)
+      const sync = () => {
+        const p = pal();
+        const eff = themeColors(ed.get(path), p);
+        themeBtns.forEach((b) => b.setAttribute('aria-pressed', b.dataset.id === ed.get(path) ? 'true' : 'false'));
+        rows.forEach(({ k, row, sw, hex, rm }) => {
+          const own = normHex(p[k]);
+          row.classList.toggle('own', !!own);
+          sw.style.setProperty('--c', eff[k]);
+          hex.placeholder = eff[k].toUpperCase();
+          if (document.activeElement !== hex) hex.value = own ? own.toUpperCase() : '';
+          rm.disabled = !own;
+        });
+        resetAll.disabled = !tokens.some(([k]) => normHex(p[k]));
+        restyle();
+      };
+      const themeBtns = THEMES.map((t) => h('button.theme-opt', {
+        type: 'button', 'data-id': t.id, onclick: () => { ed.set(path, t.id); sync(); }
+      }, h('span.theme-dots', h('i', { style: { background: t.main } }), h('i', { style: { background: t.soft } }), h('i', { style: { background: t.bg } })), t.name));
+      const rows = tokens.map(([k, name, where]) => {
+        const sw = h('button.pal-sw', { type: 'button', title: '色を選ぶ(パレット・画像からスポイト)', 'aria-label': `${name}の色を選ぶ` });
+        const hex = h('input.pal-hex', { type: 'text', maxlength: 7, spellcheck: 'false', 'aria-label': `${name}のカラーコード` });
+        const rm = h('button.pal-rm', { type: 'button', title: 'テーマの色に戻す', 'aria-label': `${name}をテーマの色に戻す`, onclick: () => { setOwn(k, null); sync(); } }, icon('close', 11));
+        sw.addEventListener('click', async () => {
+          const v = await pickColor({ value: themeColors(ed.get(path), pal())[k], title: name.endsWith('色') ? name : `${name}の色`, sources: ed.images() });
+          if (v) { setOwn(k, v); sync(); }
+        });
+        hex.addEventListener('input', () => {
+          const v = normHex(hex.value);
+          if (v || !hex.value.trim()) { setOwn(k, v); sync(); }
+        });
+        // 入力を終えたら、書きかけ(不正なコード)を消して決まった色の表記にそろえる
+        hex.addEventListener('change', () => { const own = normHex(pal()[k]); hex.value = own ? own.toUpperCase() : ''; });
+        hex.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); hex.blur(); } });
+        return { k, sw, hex, rm, row: h('div.pal-row', sw, h('span.pal-name', h('b', name), where && h('small', where)), hex, rm) };
+      });
+      const resetAll = h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => { ed.set(palPath, {}); sync(); } }, icon('refresh', 13), 'すべて戻す');
+      const box = h('div.theme-pop',
+        h('div.theme-grid', themeBtns),
+        h('div.pal-head', h('b', '色を自分で決める'), resetAll),
+        h('p.hint', 'カラーコード(#RRGGBB)を入れるか、色の丸を押して選びます(画像からスポイトも可)。決めた色はテーマより優先されます。'),
+        h('div.pal-list', rows.map((r) => r.row)));
+      sync();
+      return box;
+    });
   }
   /** 表示する項目を選ぶポップオーバー */
   function showPicker(ed, path, items) {
@@ -424,5 +686,5 @@
       })));
   }
 
-  window.Ed = { create, pickUserprof, getIn, setIn, THEMES, themeVars, themePicker, showPicker };
+  window.Ed = { create, pickUserprof, pickColor, getIn, setIn, THEMES, themeColors, themeVars, themePicker, showPicker };
 })();
