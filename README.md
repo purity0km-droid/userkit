@@ -7,7 +7,7 @@ AIチャット「zeta」で使う、自分のキャラクター（user）のた�
 
 | ツール | できること |
 |---|---|
-| [userprof](https://purity0km-droid.github.io/userkit/userprof/) | userのプロフィール・年表・設定メモ・画像を、プロットごとにまとめて保存。zetaに貼る用のコピーも |
+| [userprof](https://purity0km-droid.github.io/userkit/userprof/) | userのプロフィール・年表・設定メモ・画像を、プロットごとにまとめて保存。zetaのユーザープロフィール(1000字)を丸ごと保存して、字数を数えながら1000字に収める道具も |
 | [usermask](https://purity0km-droid.github.io/userkit/usermask/) | スクショのユーザー名・アイコンを、なぞるだけで隠す。登録した名前・アイコンは次の画像から自動で見つける |
 | [talklog](https://purity0km-droid.github.io/userkit/talklog/) | zeta（Web版）のトークを、吹き出しのまま読めるHTMLファイルに保存。書き出したログの閲覧・テキスト化も |
 | [userpair](https://purity0km-droid.github.io/userkit/userpair/) | 2人（または1人）のキャラシートを作って画像で保存 |

@@ -7,7 +7,10 @@
   const DB_NAME = 'userprof-images';
   const BACKUP_APP = 'userprof';
 
-  /** 目印の色 (userカード・詳細画面の色帯に使用) */
+  /** zetaのユーザープロフィールの上限(改行も1字) */
+  const ZETA_LIMIT = 1000;
+
+  /** 目印の色 (userカード・詳細画面の色帯に使用)。user.color はこの番号か、自由に選んだ '#rrggbb' */
   const COLORS = [
     { name: 'ラベンダー', hex: '#b79ce0' },
     { name: 'セージ', hex: '#9dbd9d' },
@@ -73,6 +76,7 @@
     const u = {
       id: U.uid(), name: '', plot: '', partners: [], color: 0, bio: '',
       timeline: [], notes: [], images: [],
+      zeta: { source: '', text: '' },     // zetaプロフ: source=元の文章(丸ごと) / text=zetaに貼る文章
       createdAt: now, updatedAt: now
     };
     FIELDS.forEach((f) => { u[f.key] = ''; });
@@ -86,7 +90,7 @@
     u.name = s(raw.name);
     u.plot = s(raw.plot);
     u.partners = Array.isArray(raw.partners) ? raw.partners.map(s).filter(Boolean) : [];
-    u.color = Number.isInteger(raw.color) && raw.color >= 0 && raw.color < COLORS.length ? raw.color : 0;
+    u.color = normColor(raw.color);
     u.bio = s(raw.bio);
     FIELDS.forEach((f) => { u[f.key] = s(raw[f.key]); });
     u.timeline = (Array.isArray(raw.timeline) ? raw.timeline : []).map((t) => ({
@@ -98,9 +102,27 @@
     u.images = (Array.isArray(raw.images) ? raw.images : []).map((i) => ({
       id: s(i.id) || U.uid(), caption: s(i.caption)
     }));
+    const z = raw.zeta && typeof raw.zeta === 'object' ? raw.zeta : {};
+    u.zeta = { source: s(z.source), text: s(z.text) };
     u.createdAt = Number.isFinite(raw.createdAt) ? raw.createdAt : u.createdAt;
     u.updatedAt = Number.isFinite(raw.updatedAt) ? raw.updatedAt : u.updatedAt;
     return u;
+  }
+
+  function normColor(c) {
+    if (Number.isInteger(c) && c >= 0 && c < COLORS.length) return c;
+    if (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c.trim())) return c.trim().toLowerCase();
+    return 0;
+  }
+  /** user の目印の色 (#rrggbb) */
+  const colorHex = (u) => (typeof u.color === 'string' ? u.color : (COLORS[u.color] || COLORS[0]).hex);
+  /** 目印の色と、その上に載せる文字の色 (淡い色を選んだときは濃い文字) */
+  function markStyle(u) {
+    const hex = colorHex(u);
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return { '--mark': hex, '--mark-ink': lum > 0.55 ? '#2c2c2c' : '#ffffff' };
   }
 
   const users = () => state.users;
@@ -281,7 +303,7 @@
   }
 
   window.Store = {
-    COLORS, FIELDS, load, users, getUser, plots, emptyUser, saveUser, touch, deleteUser,
+    COLORS, FIELDS, ZETA_LIMIT, load, users, colorHex, markStyle, getUser, plots, emptyUser, saveUser, touch, deleteUser,
     exportBackup, importBackup,
     text: { profile: profileText, timeline: timelineText, notes: notesText, all: allText }
   };

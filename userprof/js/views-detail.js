@@ -6,6 +6,7 @@
 
   const TABS = [
     { id: 'profile', label: 'プロフィール', icon: 'user' },
+    { id: 'zeta', label: 'zetaプロフ', icon: 'file' },
     { id: 'timeline', label: '年表', icon: 'list' },
     { id: 'notes', label: '設定メモ', icon: 'edit' },
     { id: 'images', label: '画像', icon: 'image' }
@@ -268,9 +269,8 @@
       window.scrollTo(0, y);
     };
 
-    const color = Store.COLORS[u.color].hex;
     const avatar = h('span.hero-avatar', { 'data-avatar': u.images[0] ? u.images[0].id : '' }, u.name.slice(0, 1));
-    const hero = h('header.hero', { style: { '--mark': color } },
+    const hero = h('header.hero', { style: Store.markStyle(u) },
       avatar,
       h('div.hero-main',
         h('h1', u.name),
@@ -282,7 +282,7 @@
         copyBtn(() => Store.text.all(u), '全部コピー'),
         h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: () => Views.openUserForm(u, refresh) }, icon('edit'), '編集'),
         h('button.btn.btn-outline.btn-sm.btn-danger-o', { type: 'button', onclick: async () => {
-          if (await U.confirmDialog({ title: 'userを削除', message: `「${u.name}」のプロフィール・年表・設定メモ・画像をすべて削除します。元に戻せません。`, okLabel: '削除する', danger: true })) {
+          if (await U.confirmDialog({ title: 'userを削除', message: `「${u.name}」のプロフィール・zetaプロフ・年表・設定メモ・画像をすべて削除します。元に戻せません。`, okLabel: '削除する', danger: true })) {
             await Store.deleteUser(u.id);
             U.toast('削除しました');
             location.hash = '#/';
@@ -296,6 +296,7 @@
     const panel = h('section.panel.tab-panel', { role: 'tabpanel' });
     panel.append(({
       profile: () => tabProfile(u, refresh),
+      zeta: () => Views.tabZeta(u, refresh),
       timeline: () => tabTimeline(u, refresh),
       notes: () => tabNotes(u, refresh),
       images: () => tabImages(u, refresh)

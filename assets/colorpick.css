@@ -1,0 +1,25 @@
+/* userkit 共通: 色を選ぶダイアログ (colorpick.js) */
+.cp-body { gap: 12px; }
+.cp-srcs { display: flex; flex-wrap: wrap; gap: 8px; }
+.cp-src { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 66px; min-height: 74px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--muted); font-size: 10.5px; line-height: 1.3; }
+.cp-src img { width: 54px; height: 54px; object-fit: cover; border-radius: 7px; background: var(--soft); }
+.cp-src span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-src:hover { border-color: var(--line-strong); }
+.cp-src[aria-pressed="true"] { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(109, 93, 252, .2); color: var(--text); font-weight: 700; }
+.cp-src.add { border-style: dashed; color: var(--primary); font-weight: 700; }
+.cp-stage { flex: none; display: grid; place-items: center; min-height: 160px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.cp-img { display: block; max-width: 100%; max-height: min(48vh, 440px); cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-user-drag: none; -webkit-touch-callout: none; }
+.cp-empty { color: var(--muted); font-size: 13px; text-align: center; }
+.cp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.cp-chips { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.cp-chip { width: 36px; height: 36px; border-radius: 50%; background: var(--c); border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .15); }
+.cp-chip.old { width: 24px; height: 24px; }
+/* kit.css の入力欄(幅いっぱい・高さ44px)を小さな欄に上書き */
+input.cp-hex { flex: none; width: 7.5em; height: 36px; min-height: 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 9px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; text-transform: uppercase; }
+.cp-palette { position: relative; overflow: hidden; }
+.cp-palette input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.cp-loupe { position: fixed; z-index: 10; display: none; transform: translate(-50%, -50%); border: 5px solid var(--c, #fff); border-radius: 50%; overflow: hidden; background: #d8d8d8;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), 0 8px 22px rgba(0, 0, 0, .3); pointer-events: none; }
+.cp-loupe.show { display: block; }
+.cp-loupe canvas { display: block; width: 104px; height: 104px; }
+.cp-loupe b { position: absolute; left: 50%; bottom: 7px; transform: translateX(-50%); padding: 0 5px; border-radius: 5px; background: rgba(0, 0, 0, .6); color: #fff; font: 700 10px/1.5 ui-monospace, Consolas, monospace; }

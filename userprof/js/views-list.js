@@ -21,12 +21,41 @@
     const plotList = h('datalist', { id: 'plot-options' }, Store.plots().map((p) => h('option', { value: p })));
     const partners = h('input', { type: 'text', id: 'f-partners', value: draft.partners.join('、'), autocomplete: 'off', placeholder: '、で区切って複数入力' });
 
-    // 目印の色 (ラジオのスウォッチ)
+    // 目印の色 (ラジオのスウォッチ + 自由に選んだ色)
+    let own = typeof draft.color === 'string' ? draft.color : null;
+    const ownRadio = h('input', { type: 'radio', name: 'color', value: 'own', checked: !!own });
+    const ownDot = h('span');
+    const ownName = h('em');
+    const ownSw = h('label.swatch', ownRadio, ownDot, ownName);
+    const showOwn = () => {
+      ownSw.hidden = !own;
+      if (!own) return;
+      ownDot.style.background = own;
+      ownName.textContent = own.toUpperCase();
+      ownSw.title = `自由に選んだ色 ${ownName.textContent}`;
+    };
+    showOwn();
+    const pickOwn = async () => {
+      const cur = form.querySelector('input[name=color]:checked');
+      const v = await ColorPick.pick({
+        value: cur.value === 'own' ? own : Store.COLORS[cur.value].hex,
+        title: '目印の色',
+        sources: await imageSources(draft),
+        emptyText: 'このuserにはまだ画像がありません。'
+      });
+      if (!v) return;
+      own = v;
+      showOwn();
+      ownRadio.checked = true;
+    };
     const swatches = h('div.swatches', { role: 'radiogroup', 'aria-label': '目印の色' },
       Store.COLORS.map((c, i) => h('label.swatch', { title: c.name },
         h('input', { type: 'radio', name: 'color', value: i, checked: draft.color === i }),
         h('span', { style: { background: c.hex } }),
-        h('em', c.name))));
+        h('em', c.name))),
+      ownSw,
+      h('button.swatch-pick', { type: 'button', title: '好きな色を選ぶ(カラーコード・パレット・画像からスポイト)', onclick: pickOwn },
+        icon('palette', 16), '自由に選ぶ'));
 
     // 詳しいプロフィール
     const detailInputs = {};
@@ -69,7 +98,8 @@
       draft.name = name.value.trim();
       draft.plot = plot.value.trim();
       draft.partners = parsePartners(partners.value);
-      draft.color = Number(form.querySelector('input[name=color]:checked').value);
+      const c = form.querySelector('input[name=color]:checked').value;
+      draft.color = c === 'own' ? own : Number(c);
       Store.FIELDS.forEach((f) => { draft[f.key] = detailInputs[f.key].value.trim(); });
       draft.bio = bio.value.trim();
       if (!Store.saveUser(draft)) return;
@@ -83,6 +113,15 @@
   }
   Views.openUserForm = openUserForm;
 
+  /** user の画像を、色のスポイト用に [{ src, label }] で返す */
+  async function imageSources(u) {
+    const list = await Promise.all(u.images.map(async (im, i) => ({
+      src: await Images.url(im.id).catch(() => null),
+      label: im.caption || (i === 0 ? 'アイコン' : `画像${i + 1}`)
+    })));
+    return list.filter((x) => x.src);
+  }
+
   /* ------------------------------------------------ 一覧 */
   function matches(u, q) {
     if (!q) return true;
@@ -91,9 +130,8 @@
   }
 
   function userCard(u) {
-    const color = Store.COLORS[u.color].hex;
     const meta = [u.age && `${u.age}`.replace(/歳$/, '') + '歳', u.gender, u.occupation].filter(Boolean).join(' / ');
-    return h('a.card', { href: `#/user/${u.id}`, style: { '--mark': color } },
+    return h('a.card', { href: `#/user/${u.id}`, style: Store.markStyle(u) },
       h('span.card-avatar', { 'data-avatar': u.images[0] ? u.images[0].id : '' }, u.name.slice(0, 1)),
       h('span.card-main',
         h('strong.card-name', u.name),
