@@ -9,6 +9,7 @@
   zeta の目印(data-sentry-component / data-key / .caption1 / Swiper)を同じ形で置き、
   見えている範囲だけ描く仮想リストと、上端での古い発言の読み込みを再現する。
   ?mobile を付けると data-index / data-key の無い画面になる。
+  スクロール欄は実際の zeta と同じ「下から積む」(column-reverse)。?normal でふつうの向きになる。
 -->
 <style>
   body { margin: 0; font: 15px/1.6 system-ui, sans-serif; background: #f4f2f7; }
@@ -115,14 +116,20 @@
   }
 
   // ---- 仮想リスト ----
+  // 実際の zeta と同じく、スクロール欄は flex-direction: column-reverse(いちばん下=最新が scrollTop 0、上はマイナス)。
+  // ?normal を付けると、ふつうの上から積むスクロールになる。
+  const REVERSE = !location.search.includes('normal');
   const list = document.getElementById('list');
+  const inner = document.createElement('div');
+  if (REVERSE) { list.style.display = 'flex'; list.style.flexDirection = 'column-reverse'; list.append(inner); }
+  const box = REVERSE ? inner : list;
+  const fromTop = () => (REVERSE ? list.scrollHeight - list.clientHeight + list.scrollTop : list.scrollTop);
   const topPad = document.createElement('div'), botPad = document.createElement('div'), loading = document.createElement('div');
   loading.className = 'loading'; loading.textContent = '読み込み中…';
   let loadedStart = N - 60;
   const cache = new Map();
   function render() {
-    const total = (N - loadedStart) * H;
-    const st = list.scrollTop, vh = list.clientHeight;
+    const st = fromTop(), vh = list.clientHeight;
     const a = Math.max(loadedStart, loadedStart + Math.floor(st / H) - 2);
     const b = Math.min(N, loadedStart + Math.ceil((st + vh) / H) + 2);
     topPad.style.height = (a - loadedStart) * H + 'px';
@@ -134,28 +141,30 @@
       nodes.push(cache.get(m.id));
     }
     for (const k of [...cache.keys()]) { const idx = msgs.findIndex((m) => m.id === k); if (idx < a || idx >= b) cache.delete(k); }
-    list.replaceChildren(topPad, ...nodes, botPad);
+    box.replaceChildren(topPad, ...nodes, botPad);
     document.getElementById('info').textContent = `読み込み済み ${N - loadedStart}/${N} 件`;
   }
   let loadingOlder = false;
   list.addEventListener('scroll', () => {
     render();
-    if (list.scrollTop < 20 && loadedStart > 0 && !loadingOlder) {
+    if (fromTop() < 20 && loadedStart > 0 && !loadingOlder) {
       loadingOlder = true;
       setTimeout(() => {
         const add = Math.min(30, loadedStart);
         loadedStart -= add;
         render();
-        list.scrollTop += add * H;
+        // 下から積む欄は下端基準なので、上に足しても見た目の位置はそのまま。上から積む欄だけ足した分ずらす
+        if (!REVERSE) list.scrollTop += add * H;
         loadingOlder = false;
         render();
       }, 500);
     }
   });
   render();
-  list.scrollTop = list.scrollHeight;
-  // 最初は少し上の位置から始める(途中から始めても最新まで拾えるか確かめる)
-  setTimeout(() => { list.scrollTop = list.scrollHeight - list.clientHeight - 900; render(); }, 50);
+  // 最初は最新より少し上の位置から始める(途中から始めても最新まで拾えるか確かめる)
+  if (REVERSE) list.scrollTop = -900;
+  else list.scrollTop = list.scrollHeight - list.clientHeight - 900;
+  setTimeout(render, 50);
 
   document.getElementById('run').onclick = () => {
     window.__talklogAuto = true;

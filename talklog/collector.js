@@ -18,7 +18,7 @@
  */
 (function () {
   'use strict';
-  var VER = '1.0.0';
+  var VER = '1.1.0';
 
   if (window.__talklog && window.__talklog.ver) {
     if (window.__talklogAuto) { window.__talklogAuto = false; window.__talklog.open(); }
@@ -347,14 +347,18 @@
   }
 
   var visNow = 0;
-  /** 読み取って継ぎ足す。前回までと重なりがあれば true */
-  function scan() {
+  // 前回までと重なりが見つからなかった(=間を読み飛ばしたかもしれない)回数。書き出し後に知らせる
+  var gapEvents = 0;
+  /** 読み取って継ぎ足す。前回までと重なりがあれば true。quiet のときは読み飛ばしとして数えない */
+  function scan(quiet) {
     var vis = visibleBlocks();
     visNow = vis.length;
-    var linked = !order.length;
+    var hadOrder = order.length > 0;
+    var linked = !hadOrder;
     if (vis.length) {
       var keyed = vis.every(function (v) { return v.key; });
       linked = (keyed ? merge(vis) : mergeSeq(vis)) || linked;
+      if (!linked && hadOrder && quiet !== true) gapEvents++;
     }
     var t = scroller();
     if (t) {
@@ -409,17 +413,18 @@
       if (domSig() !== before) break;
     }
     await sleep(60);
-    if (scan()) return;
+    if (scan(true)) return;
     // 重なりが無かった: 戻りながら細かく読み直す
-    var back = t.scrollTop;
+    var back = t.scrollTop, filled = false;
     for (var k = 1; k <= 3 && my === runId; k++) {
       t.scrollTop = back - dy * k / 4;
       await sleep(200);
-      if (scan()) break;
+      if (scan(true)) { filled = true; break; }
     }
+    if (!filled) gapEvents++;
     t.scrollTop = back;
     await sleep(150);
-    scan();
+    scan(true);
   }
   /** 少しずつ下ろして、最新まで読み込む(最後の1画面を取りこぼさないため) */
   async function sweepDown() {
@@ -494,7 +499,13 @@
     }).filter(Boolean).join('');
   }
   function pageTitle() {
-    return (document.title || 'トーク').replace(/\s*[-|｜]\s*zeta.*$/i, '').trim() || 'トーク';
+    var t = (document.title || '').replace(/\s*[-|｜]\s*zeta.*$/i, '').trim();
+    // zeta のページタイトルは「zeta」だけなので、画面上部のヘッダーにあるトーク名を使う
+    if (!t || /^zeta$/i.test(t)) {
+      var hd = document.querySelector(SC('Header') + ' .title16') || document.querySelector(SC('Header') + ' .truncate');
+      if (hd && hd.textContent.trim()) t = hd.textContent.trim();
+    }
+    return t || 'トーク';
   }
 
   function buildHtml(items) {
@@ -644,7 +655,11 @@
   function setState(s, n) {
     state = s;
     msgOverride = null;
-    if (s === 'done') msgOverride = { text: n + '件を書き出しました。保存したファイルを開いて、いちばん古い発言と新しい発言が入っているか確かめてください。' };
+    if (s === 'done') {
+      msgOverride = gapEvents
+        ? { warn: true, text: n + '件を書き出しました。ただし途中で読み飛ばした可能性があります(' + gapEvents + '回)。抜けがないかファイルを確かめ、足りなければ、もう一度ゆっくり遡ってから書き出してください。' }
+        : { text: n + '件を書き出しました。保存したファイルを開いて、いちばん古い発言と新しい発言が入っているか確かめてください。' };
+    }
     updatePanel();
   }
 
@@ -675,12 +690,14 @@
       observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] });
       document.addEventListener('scroll', schedule, true);
     }
-    if (!timer) timer = setInterval(scan, 700);
+    if (!timer) timer = setInterval(idleScan, 700);
   }
+  // 自動で動かしている間は stepBy が重なりを確かめるので、ここでの読み取りは読み飛ばしとして数えない
+  function idleScan() { scan(state === 'sweeping' || state === 'climbing' || state === 'exporting'); }
   var pendingScan = 0;
   function schedule() {
     if (pendingScan) return;
-    pendingScan = setTimeout(function () { pendingScan = 0; scan(); }, 120);
+    pendingScan = setTimeout(function () { pendingScan = 0; idleScan(); }, 120);
   }
   function stopWatching() {
     if (observer) { observer.disconnect(); observer = null; document.removeEventListener('scroll', schedule, true); }
@@ -719,7 +736,11 @@
   }
   function hideLauncher() { if (ui && ui.launch) ui.launch.style.display = 'none'; }
 
-  window.__talklog = { ver: VER, open: open, close: close, scan: scan, collect: collect, buildHtml: buildHtml };
+  window.__talklog = {
+    ver: VER, open: open, close: close, scan: scan, collect: collect, buildHtml: buildHtml,
+    // 動作確認用: 集めた塊の数と、読み飛ばしたかもしれない回数
+    stats: function () { return { blocks: order.length, gaps: gapEvents, keys: order.slice() }; }
+  };
 
   if (window.__talklogAuto) {
     window.__talklogAuto = false;
