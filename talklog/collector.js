@@ -378,7 +378,15 @@
     var se = document.scrollingElement;
     return se && se.scrollHeight > window.innerHeight + 10 ? se : null;
   }
-  var atBottom = function (t) { return t.scrollHeight - t.clientHeight - t.scrollTop <= 8; };
+  /*
+   * zeta のトーク欄は flex-direction: column-reverse(下から積む)。この場合 scrollTop は
+   * いちばん下(最新)が 0 で、上へ行くほどマイナスになる(Chrome/Safari/Firefox 共通)。
+   * 「上からの距離」にそろえて判定する。動かす向き(足すと下、引くと上)はどちらも同じ。
+   */
+  var reversed = function (t) { return t.scrollTop < 0 || getComputedStyle(t).flexDirection === 'column-reverse'; };
+  var fromTop = function (t) { return reversed(t) ? t.scrollHeight - t.clientHeight + t.scrollTop : t.scrollTop; };
+  var atTop = function (t) { return fromTop(t) <= 2; };
+  var atBottom = function (t) { return t.scrollHeight - t.clientHeight - fromTop(t) <= 8; };
   var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
 
   var runId = 0;
@@ -395,8 +403,7 @@
    */
   async function stepBy(t, dy, my) {
     var before = domSig();
-    var from = t.scrollTop;
-    t.scrollTop = Math.max(0, from + dy);
+    t.scrollTop = t.scrollTop + dy;   // 端を越える分はブラウザが止める(下から積む画面では上がマイナス)
     for (var w = 0; w < 20 && my === runId; w++) {
       await sleep(80);
       if (domSig() !== before) break;
@@ -423,9 +430,9 @@
     scan();
     for (var i = 0; i < 800 && my === runId; i++) {
       if (atBottom(t)) break;
-      var prev = t.scrollTop;
+      var prev = fromTop(t);
       await stepBy(t, Math.max(80, Math.round(t.clientHeight * 0.45)), my);
-      stuck = t.scrollTop <= prev ? stuck + 1 : 0;
+      stuck = fromTop(t) <= prev ? stuck + 1 : 0;
       if (stuck > 3) break;
     }
     scan();
@@ -439,11 +446,11 @@
     var still = 0;
     scan();
     while (my === runId) {
-      if (t.scrollTop <= 2) {
+      if (atTop(t)) {
         var h0 = t.scrollHeight;
         await sleep(1200);   // 古い発言の読み込みを待つ
         scan();
-        if (t.scrollHeight === h0 && t.scrollTop <= 2) { if (++still >= 3) break; } else still = 0;
+        if (t.scrollHeight === h0 && atTop(t)) { if (++still >= 3) break; } else still = 0;
         continue;
       }
       still = 0;
