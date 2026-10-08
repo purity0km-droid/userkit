@@ -1,0 +1,208 @@
+/* usersns — 作業画面のならび + SNS風の画面(書き出す画像と同じ見た目。フォントは端末にあるものだけを使う) */
+
+/* ---------- 作業画面: 左に画面、右に設定 ---------- */
+.sns-work { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+.sns-left { min-width: 0; }
+.sns-side {
+  position: sticky; top: calc(var(--kitbar-h) + 76px); max-height: calc(100vh - var(--kitbar-h) - 90px); overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px; padding: 16px;
+}
+.sns-sec { display: flex; flex-direction: column; gap: 8px; }
+.sns-sec + .sns-sec { padding-top: 14px; border-top: 1px solid var(--line); }
+.sns-sec h3 { font-size: 13px; font-weight: 700; color: var(--heading); }
+.sns-sec .hint { font-size: 11.5px; line-height: 1.55; }
+.sns-sec .seg { align-self: flex-start; flex-wrap: wrap; }
+.sns-sec .seg button { padding: 6px 10px; font-size: 12.5px; }
+.sns-sec .btn { align-self: flex-start; }
+.sns-sec .check { font-size: 13px; }
+.sns-side input[type=text] { min-height: 36px; padding: 6px 12px; font-size: 14px; }
+.sns-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.sns-num { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.sns-side .sns-num input { width: 70px; min-height: 34px; padding: 4px 10px; }
+.sns-range { display: grid; grid-template-columns: 3.6em minmax(0, 1fr) 3.2em; align-items: center; gap: 8px; font-size: 12.5px; }
+.sns-range output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sns-add { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sns-add .btn { align-self: stretch; padding: 0 8px; }
+.sns-sw { display: flex; flex-wrap: wrap; gap: 7px; }
+.sns-sw button { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid #fff; background: var(--c); box-shadow: 0 0 0 1px rgba(0, 0, 0, .18); }
+.sns-sw button[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--primary); }
+.sns-sw .sns-sw-more { display: grid; place-items: center; background: var(--surface); color: var(--muted); border: 1px dashed var(--line-strong); box-shadow: none; }
+.sns-bg button { width: 38px; height: 38px; border-radius: 11px; }
+.sns-modes button { padding: 7px 14px; }
+body.sns-dragging, body.sns-dragging * { user-select: none !important; -webkit-user-select: none !important; }
+
+@media (max-width: 900px) {
+  .sns-work { grid-template-columns: minmax(0, 1fr); }
+  .sns-side { position: static; max-height: none; overflow: visible; }
+}
+
+/* ---------- 画面の共通 ---------- */
+.sns-sheet {
+  --sys: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans JP", sans-serif;
+  --img-r: 0;
+  position: relative; width: 430px; overflow: hidden;
+  font: 400 14px/1.35 var(--sys); letter-spacing: 0;
+}
+.sns-sheet *, .sns-sheet *::before, .sns-sheet *::after { box-sizing: border-box; }
+.sns-sheet .ed-text:focus { background: rgba(128, 128, 128, .22); }
+.sns-ic { fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; flex: none; display: block; }
+
+/* ステータスバー */
+.sb { height: 47px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 2px 26px 0 38px; font-size: 16px; font-weight: 600; }
+.sb-time { min-width: 2.2em; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.sb-icons { display: flex; align-items: center; gap: 6px; }
+.sb-icons svg { display: block; fill: currentColor; }
+
+/* ---------- Vlog(セットログ風) ---------- */
+.vl-sheet {
+  background: #000; color: #fff; display: flex; flex-direction: column;
+  --img-bg: #0b0b0b; --ph: rgba(255, 255, 255, .5); --ph-line: rgba(255, 255, 255, .35); --accent: #fff;
+}
+.vl-sheet.gap { gap: 2px; }
+.vl-panel { position: relative; }
+.vl-panel > .ed-img { display: block; }
+.vl-over { position: absolute; inset: 0; pointer-events: none; text-shadow: 0 0 6px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .4); }
+.vl-over .ed-text { pointer-events: auto; }
+.vl-name { position: absolute; left: 13px; top: 9px; max-width: 62%; font-size: 13.5px; font-weight: 500; }
+.vl-mid { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; padding: 0 13px; }
+.vl-l { justify-self: start; }
+.vl-r { justify-self: end; }
+.vl-c { display: flex; flex-direction: column; align-items: center; gap: 3px; max-width: 250px; text-align: center; }
+.vl-mark { font: 800 23px/1 "Arial Rounded MT Bold", "Hiragino Maru Gothic ProN", "Segoe UI", sans-serif; letter-spacing: -.01em; }
+.vl-time { font-size: 13.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.vl-cap { font-size: 15px; font-weight: 500; line-height: 1.35; }
+.vl-panel > .ed-img .ed-img-tools { top: auto; bottom: 8px; }
+/* 画像を入れる案内は、真ん中の文字と重ならないよう下に寄せる */
+.vl-panel > .ed-img .ed-img-ph { flex-direction: row; justify-content: flex-start; align-items: flex-end; gap: 6px; padding: 0 14px 10px; }
+.vl-panel > .ed-img .ed-img-ph small { display: none; }
+.exporting .vl-name.is-empty { display: none; }
+
+/* ---------- インスタ風の投稿 ---------- */
+.ig-post {
+  --ig-bg: #ffffff; --ig-text: #000000; --ig-muted: #737373; --ig-link: #00376b; --ig-dot: #c7c7c7; --ig-blue: #0095f6;
+  --img-bg: #efefef; --ph: rgba(0, 0, 0, .32); --ph-line: rgba(0, 0, 0, .15); --accent: #0095f6;
+  background: var(--ig-bg); color: var(--ig-text); padding-bottom: 16px;
+}
+.ig-post.dark {
+  --ig-bg: #000000; --ig-text: #f5f5f5; --ig-muted: #a8a8a8; --ig-link: #e0f1ff; --ig-dot: #4a4a4a;
+  --img-bg: #1c1c1c; --ph: rgba(255, 255, 255, .4); --ph-line: rgba(255, 255, 255, .25);
+}
+.ig-nav { height: 44px; display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; padding: 0 6px; }
+.ig-nav-title { display: flex; flex-direction: column; align-items: center; line-height: 1.2; min-width: 0; }
+.ig-nav-title small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; font-weight: 600; color: var(--ig-muted); text-transform: uppercase; letter-spacing: .03em; }
+.ig-nav-title b { font-size: 16px; font-weight: 700; }
+.ig-head { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 12px; }
+.ig-ava { width: 32px; flex: none; border-radius: 50%; }
+.ig-ava.ring { width: 38px; padding: 2px; background: linear-gradient(45deg, #fdd06b, #f77737 35%, #e1306c 65%, #9c3cc4); }
+.ig-ava.ring > .ed-img { border: 2px solid var(--ig-bg); }
+.ig-ava .ed-img, .st-ava .ed-img { background: #dbdbdb; }
+.exporting .ig-ava .ed-img:not(.has-img), .exporting .st-ava .ed-img:not(.has-img) { visibility: visible; }
+.ig-who { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.ig-name-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.ig-uname { font-size: 14px; font-weight: 600; }
+.ig-verified { flex: none; }
+.ig-loc { font-size: 12px; }
+.ig-media { position: relative; }
+.ig-media > .ed-img { display: block; }
+.ig-media > .ed-img .ed-img-tools { top: auto; bottom: 10px; }
+.exporting .ig-media > .ed-img:not(.has-img) { visibility: visible; }
+.ig-count { position: absolute; top: 12px; right: 12px; padding: 3px 9px; border-radius: 999px; background: rgba(18, 18, 18, .72); color: #fff; font-size: 12px; font-weight: 500; letter-spacing: .02em; pointer-events: none; }
+.ig-person { position: absolute; left: 12px; bottom: 12px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: rgba(18, 18, 18, .78); color: #fff; pointer-events: none; }
+.ig-tags { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.ig-tag {
+  position: absolute; transform: translate(-50%, 7px); pointer-events: auto; touch-action: none; cursor: grab;
+  padding: 7px 11px; border-radius: 6px; background: rgba(18, 18, 18, .84); color: #fff; font-size: 13px; font-weight: 600; white-space: nowrap;
+  --ph: rgba(255, 255, 255, .55);
+}
+.ig-tag::before { content: ""; position: absolute; left: 50%; top: -6px; transform: translateX(-50%); border: 6px solid transparent; border-top: 0; border-bottom-color: rgba(18, 18, 18, .84); }
+.ig-tag.dragging { cursor: grabbing; }
+.ig-tag-x { position: absolute; right: -9px; top: -9px; display: none; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: #fff; color: #333; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
+.ig-tag:hover .ig-tag-x, .ig-tag:focus-within .ig-tag-x { display: grid; }
+@media (pointer: coarse) { .ig-tag-x { display: grid; } }
+.exporting .ig-tag:has(.ig-tag-t.is-empty) { display: none; }
+.ig-actions { position: relative; display: flex; align-items: center; justify-content: space-between; height: 46px; padding: 0 12px 0 14px; }
+.ig-act-l { display: flex; align-items: center; gap: 15px; }
+.ig-btn { display: grid; place-items: center; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; }
+.ig-liked.on { color: #ff3040; }
+.ig-liked.on .sns-ic, .ig-saved.on .sns-ic { fill: currentColor; }
+.ig-dots { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; gap: 4px; }
+.ig-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--ig-dot); }
+.ig-dots i.on { background: var(--ig-blue); }
+.ig-likes { padding: 0 12px; font-size: 14px; font-weight: 600; }
+.ig-cap { padding: 4px 12px 0; font-size: 14px; line-height: 1.42; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ig-cap > b { font-weight: 600; }
+.ig-cap-text { display: inline; }
+.ig-link { color: var(--ig-link); }
+.ig-more { padding: 5px 12px 0; font-size: 14px; color: var(--ig-muted); }
+.ig-date { padding: 5px 12px 0; font-size: 12px; color: var(--ig-muted); }
+.exporting .ig-loc.is-empty, .exporting .ig-likes.is-empty, .exporting .ig-more.is-empty, .exporting .ig-date.is-empty,
+.exporting .ig-cap:has(.ig-cap-text.is-empty) { display: none; }
+
+/* ---------- インスタ風のストーリー ---------- */
+.st-sheet { background: #000; color: #fff; --img-bg: transparent; --ph: rgba(255, 255, 255, .6); --ph-line: rgba(255, 255, 255, .45); --accent: #fff; }
+.st-sheet.framed { height: 932px; display: flex; flex-direction: column; }
+.st-frame { position: relative; flex: none; width: 430px; height: 764px; overflow: hidden; }
+.st-sheet.framed .st-frame { border-radius: 10px; }
+.st-frame > .ed-img { display: block; }
+.st-frame > .ed-img .ed-img-tools { top: auto; bottom: 12px; right: 12px; }
+.st-frame > .ed-img .ed-img-ph { justify-content: flex-end; padding-bottom: 64px; text-shadow: 0 1px 3px rgba(0, 0, 0, .25); }
+.st-shade { position: absolute; left: 0; right: 0; top: 0; height: 150px; background: linear-gradient(rgba(0, 0, 0, .36), rgba(0, 0, 0, 0)); pointer-events: none; }
+.st-layer { position: absolute; inset: 0; pointer-events: none; }
+.st-top { position: absolute; left: 0; right: 0; top: 0; padding: 8px 8px 0; pointer-events: none; text-shadow: 0 0 3px rgba(0, 0, 0, .2); }
+.st-top .ed-text, .st-top .ed-img { pointer-events: auto; }
+.st-bars { display: flex; gap: 3px; }
+.st-bar { flex: 1; height: 2px; border-radius: 2px; overflow: hidden; background: rgba(255, 255, 255, .38); }
+.st-bar i { display: block; height: 100%; background: #fff; }
+.st-head { display: flex; align-items: center; gap: 9px; padding: 11px 6px 0 6px; }
+.st-ava { width: 32px; flex: none; }
+.st-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; line-height: 1.3; }
+.st-name-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.st-name { font-size: 14px; font-weight: 600; }
+.st-time { font-size: 14px; color: rgba(255, 255, 255, .78); }
+.st-music { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+.st-head-r { display: flex; align-items: center; gap: 14px; }
+.st-foot { position: relative; flex: 1; display: flex; align-items: flex-start; gap: 16px; padding: 14px 14px 0 12px; }
+.st-reply { flex: 1; min-width: 0; height: 44px; display: flex; align-items: center; padding: 0 18px; border: 1px solid rgba(255, 255, 255, .6); border-radius: 22px; }
+.st-reply-t { font-size: 14px; color: rgba(255, 255, 255, .92); white-space: nowrap; }
+.st-foot > .sns-ic { margin-top: 8px; }
+.st-home { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); width: 134px; height: 5px; border-radius: 3px; background: #fff; }
+.exporting .st-music:has(.is-empty), .exporting .st-time.is-empty { display: none; }
+
+/* スタンプ */
+.st-sticker { position: absolute; pointer-events: auto; touch-action: none; cursor: grab; transform-origin: center; }
+.st-sticker.dragging { cursor: grabbing; }
+.st-sticker.sel { outline: 2px dashed rgba(255, 255, 255, .95); outline-offset: 6px; }
+.st-sticker.sel::after { content: ""; position: absolute; inset: -9px; border: 1px solid rgba(0, 0, 0, .3); border-radius: 3px; pointer-events: none; }
+.exporting .st-sticker.sel { outline: none; }
+.exporting .st-sticker.sel::after { content: none; }
+.exporting .st-sticker:has(.st-t.is-empty) { display: none; }
+.st-x { position: absolute; right: -20px; top: -20px; display: none; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: #fff; color: #333; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); }
+.st-sticker.sel .st-x { display: grid; }
+.st-inner { display: flex; align-items: center; gap: .25em; }
+.st-g { display: flex; align-items: baseline; }
+.st-t { min-width: .6em; }
+.st-sticker .ed-text:focus { background: transparent; box-shadow: none; }
+
+/* 文字 */
+.t-text .st-inner { display: block; max-width: 390px; padding: 4px 10px; border-radius: 9px; color: var(--c); font-size: 26px; line-height: 1.28; white-space: pre-wrap; overflow-wrap: anywhere; }
+.t-text .st-g { display: block; }
+.t-text.s-box .st-inner { background: var(--c); color: var(--ink); padding: 6px 13px; }
+.t-text.a-left .st-inner { text-align: left; }
+.t-text.a-center .st-inner { text-align: center; }
+.t-text.a-right .st-inner { text-align: right; }
+.f-classic .st-inner { font-family: var(--sys); font-weight: 700; }
+.f-serif .st-inner { font-family: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", Georgia, serif; font-weight: 600; }
+.f-mono .st-inner { font-family: "Courier New", "Osaka-Mono", "MS Gothic", monospace; font-weight: 700; letter-spacing: .02em; }
+.f-strong .st-inner { font-family: var(--sys); font-weight: 900; font-style: italic; letter-spacing: -.01em; text-transform: uppercase; }
+
+/* メンション・ハッシュタグ・場所 */
+.st-sticker:not(.t-text) .st-inner { padding: 7px 12px; border-radius: 8px; font-size: 21px; font-weight: 800; line-height: 1.2; text-transform: uppercase; white-space: nowrap; letter-spacing: .01em; }
+.st-sticker:not(.t-text) { --grad: linear-gradient(90deg, #f7a23b, #ee2a7b 55%, #b72fc4); }
+.t-location { --grad: linear-gradient(90deg, #a537f0, #6b46ff); }
+.st-pin { width: 1em; height: 1em; stroke-width: 2.4; }
+.s-white .st-inner { background: #fff; box-shadow: 0 1px 6px rgba(0, 0, 0, .12); }
+.s-white .st-g { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; caret-color: #ee2a7b; }
+.s-white .st-pin { color: #b72fc4; }
+.t-location.s-white .st-pin { color: #8a3cf5; }
+.s-color .st-inner { background: var(--grad); color: #fff; }
+.s-clear .st-inner { color: #fff; text-shadow: 0 1px 5px rgba(0, 0, 0, .35); }

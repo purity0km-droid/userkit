@@ -83,7 +83,8 @@
     github: '<path d="M9 19c-4 1.3-4-2-6-2.5M15 21v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12 12 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/>',
     arrow: '<path d="M4 12h16m0 0-5-5m5 5-5 5"/>',
     swap: '<path d="M4 8h14m0 0-4-4m4 4-4 4M20 16H6m0 0 4-4m-4 4 4 4"/>',
-    book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5M8 7h7"/>'
+    book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5M8 7h7"/>',
+    phone: '<rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/>'
   };
   function icon(name, size) {
     const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -306,7 +307,9 @@
     { id: 'userpair', label: 'ペアプロフィール', icon: 'pair',
       desc: '2人(または1人)のキャラシートを作って、画像で保存。userprofのプロフィールも読み込めます。' },
     { id: 'userline', label: 'タイムラインペアカード', icon: 'timeline',
-      desc: 'プロフィール・年表・まとめ・関係を1枚に。縦長のタイムライン風カードを画像で保存。' }
+      desc: 'プロフィール・年表・まとめ・関係を1枚に。縦長のタイムライン風カードを画像で保存。' },
+    { id: 'usersns', label: 'SNS風画面', icon: 'phone',
+      desc: 'セットログ風のVlog画面(2〜4人)、インスタ風の投稿(タグ付け)・ストーリーを、1つの画面で切り替えて作って画像で保存。' }
   ];
   const toolUrl = (id) => new URL(id ? id + '/' : './', BASE).href;
 

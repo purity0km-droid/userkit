@@ -12,6 +12,7 @@ AIチャット「zeta」で使う、自分のキャラクター（user）のた�
 | [talklog](https://purity0km-droid.github.io/userkit/talklog/) | zeta（Web版）のトークを、吹き出しのまま読めるHTMLファイルに保存。書き出したログの閲覧・テキスト化も |
 | [userpair](https://purity0km-droid.github.io/userkit/userpair/) | 2人（または1人）のキャラシートを作って画像で保存 |
 | [userline](https://purity0km-droid.github.io/userkit/userline/) | プロフィール・年表・まとめ・関係を1枚にしたタイムライン風ペアカードを画像で保存 |
+| [usersns](https://purity0km-droid.github.io/userkit/usersns/) | セットログ風のVlog画面(2〜4人)・インスタ風の投稿(タグ付け)・ストーリーを、1つの画面で切り替えて作って画像で保存 |
 
 ## 注意
 
@@ -29,7 +30,7 @@ python -m http.server 5175
 
 → http://127.0.0.1:5175/
 
-- `assets/` … 共通の部品（kit.js / kit.css：共通バー・ダイアログなど、editor.js / editor.css：userpair と userline の編集部品）
+- `assets/` … 共通の部品（kit.js / kit.css：共通バー・ダイアログなど、editor.js / editor.css：userpair・userline・usersns の編集部品）
 - `dev/zeta-mock.html` … talklog の収集スクリプトを確かめるための模擬トーク画面（zeta の画面ではありません）
 
-PNG書き出し（userpair / userline）には [html-to-image](https://github.com/bubkoo/html-to-image)（MIT）を CDN から読み込んで使っています。
+PNG書き出し（userpair / userline / usersns）には [html-to-image](https://github.com/bubkoo/html-to-image)（MIT）を CDN から読み込んで使っています。

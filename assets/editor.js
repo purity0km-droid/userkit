@@ -84,7 +84,11 @@
       el.textContent = v0;
       el.classList.toggle('is-empty', !v0.trim());
       el.addEventListener('input', () => {
+        // innerText は CSS の text-transform(大文字表示など)を反映して返すので、外して読む(入力したとおりに保存する)
+        const tt = el.style.textTransform;
+        el.style.textTransform = 'none';
         let v = el.innerText.replace(/ /g, ' ').replace(/\n+$/, '');
+        el.style.textTransform = tt;
         if (!o.multi) v = v.replace(/\n/g, ' ');
         ed.set(p, v);
         el.classList.toggle('is-empty', !v.trim());
