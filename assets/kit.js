@@ -309,7 +309,7 @@
     { id: 'userline', label: 'タイムラインペアカード', icon: 'timeline',
       desc: 'プロフィール・年表・まとめ・関係を1枚に。縦長のタイムライン風カードを画像で保存。' },
     { id: 'usersns', label: 'SNS風画面', icon: 'phone',
-      desc: 'セットログ風のVlog画面(2〜4人)、インスタ風の投稿(タグ付け)・ストーリーを、1つの画面で切り替えて作って画像で保存。' }
+      desc: 'セットログ風のVlog画面(2〜4人)、インスタ風の投稿・ストーリー、LINE風のトーク、Twitter風のプロフィール・リプ画面を、切り替えて作って画像で保存。' }
   ];
   const toolUrl = (id) => new URL(id ? id + '/' : './', BASE).href;
 

@@ -105,8 +105,10 @@
     };
 
     /* ---------- 画像の枠 ---------- */
+    // o.onChange: 画像を入れた・外したときに呼ぶ(同じ画像を何か所にも出すとき、ほかの場所も描き直すため)
     ed.image = (p, o) => {
       o = o || {};
+      const changed = () => (o.onChange ? o.onChange() : draw());
       const R = o.ratio || 1;
       const slot = h('div.ed-img' + (o.round ? '.round' : '') + (o.cls ? '.' + o.cls : ''), {
         tabindex: 0, role: 'button', 'aria-label': (o.label || '画像') + '(クリックで選ぶ・ドラッグ・貼り付け)',
@@ -143,7 +145,7 @@
         slot.append(img, h('div.ed-img-tools.ed-ui',
           h('button', { type: 'button', title: '画像を変える', 'aria-label': '画像を変える', onclick: (e) => { e.stopPropagation(); input.click(); } }, icon('image', 14)),
           h('button', { type: 'button', title: '大きさ・位置を戻す', 'aria-label': '大きさ・位置を戻す', onclick: (e) => { e.stopPropagation(); Object.assign(v, { x: 0, y: 0, zoom: 1 }); ed.dirty(); draw(); } }, icon('refresh', 14)),
-          h('button', { type: 'button', title: '画像を外す', 'aria-label': '画像を外す', onclick: (e) => { e.stopPropagation(); ed.set(p, null); draw(); } }, icon('close', 14))));
+          h('button', { type: 'button', title: '画像を外す', 'aria-label': '画像を外す', onclick: (e) => { e.stopPropagation(); ed.set(p, null); changed(); } }, icon('close', 14))));
       };
       const setFile = async (f) => {
         if (!f || !f.type || !f.type.startsWith('image/')) return U.toast('画像ファイルを選んでください', 'error');
@@ -151,7 +153,7 @@
           const src = await U.fileToDataUrl(f, o.max || 1400);
           const img = await U.loadImage(src);
           ed.set(p, { src, w: img.naturalWidth, h: img.naturalHeight, x: 0, y: 0, zoom: 1 });
-          draw();
+          changed();
         } catch (e) { U.toast('画像を読み込めませんでした', 'error'); }
       };
       slot.__setFile = setFile;
