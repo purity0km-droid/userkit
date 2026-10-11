@@ -18,7 +18,7 @@
  */
 (function () {
   'use strict';
-  var VER = '1.1.0';
+  var VER = '1.1.1';
 
   if (window.__talklog && window.__talklog.ver) {
     if (window.__talklogAuto) { window.__talklogAuto = false; window.__talklog.open(); }
@@ -41,7 +41,8 @@
   var blocks = new Map();   // blockKey → { items:[{kind,name,right,body}], idx, local }
   var order = [];           // blockKey の並び(古い→新しい)
   var opts = { narration: true, info: true };
-  var lastScrollTop = null, scrollDir = 0, sawBottom = false;
+  // scrollDir: 最後に動いた向き(上 -1 / 下 1)。moveDir: 自動で動かしている間の向き(手で動かしているときは 0)
+  var lastFromBottom = null, scrollDir = 0, moveDir = 0, sawBottom = false;
   var infoClicked = typeof WeakSet === 'function' ? new WeakSet() : null;
 
   /* ------------------------------------------------------------ 文字の取り出し */
@@ -224,25 +225,53 @@
     return out;
   }
 
+  /*
+   * 画面で隣り合っていた塊どうしのつながり(いちばん確かな並び)。
+   * 並び(order)は毎回このつながりで組み直すので、いったん違う位置に置いた塊も、
+   * あとで前後とのつながりが見えれば正しい位置へ移る。
+   */
+  var nextOf = new Map(), prevOf = new Map();
+  var chainOf = new Map();   // blockKey → つながりの塊(鎖)の番号。relink で付け直す
+  function link(a, b) {
+    if (a === b || nextOf.get(a) === b) return;
+    var oldB = nextOf.get(a);
+    if (oldB !== undefined && prevOf.get(oldB) === a) prevOf.delete(oldB);
+    var oldA = prevOf.get(b);
+    if (oldA !== undefined && nextOf.get(oldA) === b) nextOf.delete(oldA);
+    nextOf.set(a, b);
+    prevOf.set(b, a);
+  }
+  /** 隣どうしか。番号(data-index)があれば差が小さいときだけ(間に文字の無い行がはさまることがある) */
+  function adjacent(a, b) {
+    if (a.idx === null || b.idx === null) return true;
+    var d = b.idx - a.idx;
+    return d > 0 && d <= 3;
+  }
+  /** 鎖ごとにまとめ直す。鎖どうしの前後は、これまでの並びで先に出てくる順 */
+  function relink() {
+    var out = [];
+    chainOf = new Map();
+    for (var i = 0, c = 0; i < order.length; i++) {
+      if (chainOf.has(order[i])) continue;
+      var h = order[i];
+      for (var s = 0; prevOf.has(h) && s < order.length; s++) h = prevOf.get(h);
+      if (chainOf.has(h)) h = order[i];   // 輪になっていたときの保険
+      for (var k = h; k !== undefined && !chainOf.has(k); k = nextOf.get(k)) { chainOf.set(k, c); out.push(k); }
+      c++;
+    }
+    order = out;
+  }
+
   /** 見えている並びを、これまでの並び(order)に継ぎ足す */
   function merge(vis) {
     var pos = function (k) { return order.indexOf(k); };
     var anchors = 0;
     for (var a = 0; a < vis.length; a++) if (blocks.has(vis[a].key)) anchors++;
     if (!anchors && order.length) {
-      // 重なりが無い: 番号(data-index)があれば番号の順の位置へ、無ければスクロールの向きで前後を決める
+      // 重なりが無い(間を飛ばした): ひとまず動いた向きの端に置く。間が読めてつながれば正しい位置へ並び直る。
+      // data-index は古い分を読み込むたびに振り直されるので、覚えておいた番号とは比べない(比べて途中に差し込むと順番が崩れた)
       var keys = vis.map(function (v) { return v.key; });
-      var lastIdx = vis[vis.length - 1].idx;
-      if (vis[0].idx !== null && lastIdx !== null) {
-        var at2 = order.length;
-        for (var q = 0; q < order.length; q++) {
-          var bi = blocks.get(order[q]).idx;
-          if (bi !== null && bi > lastIdx) { at2 = q; break; }
-        }
-        order.splice.apply(order, [at2, 0].concat(keys));
-      } else {
-        order = scrollDir < 0 ? keys.concat(order) : order.concat(keys);
-      }
+      order = scrollDir < 0 ? keys.concat(order) : order.concat(keys);
     } else {
       var lastPos = -1, pending = [];
       for (var i = 0; i < vis.length; i++) {
@@ -265,7 +294,9 @@
     for (var j = 0; j < vis.length; j++) {
       var v = vis[j];
       blocks.set(v.key, { items: v.items, idx: v.idx, local: v.local, sig: v.sig });
+      if (j > 0 && adjacent(vis[j - 1], v)) link(vis[j - 1].key, v.key);
     }
+    relink();
     return anchors > 0;
   }
 
@@ -276,6 +307,7 @@
    */
   var elIds = typeof WeakMap === 'function' ? new WeakMap() : null;
   var seqN = 0, cursor = 0;
+  var seqVisIds = [];   // 最後に見えていた塊に付けたid(前に見えていた所と重なったかを確かめるのに使う)
   function mergeSeq(vis) {
     var newId = function (v) {
       var id = 's' + (++seqN);
@@ -284,16 +316,31 @@
       return id;
     };
     vis.forEach(function (v) { var id = elIds && elIds.get(v.el); v.eid = id && blocks.has(id) ? id : null; });
-    if (!order.length) { order = vis.map(newId); cursor = 0; return true; }
+    if (!order.length) { seqVisIds = vis.map(newId); order = seqVisIds.slice(); cursor = 0; return true; }
 
     // 直前に重ねた位置の近くで、見えている並びとの最長共通部分列(LCS)をとる。
     // 途中に塊が増えた/減った(インフォボックスを開いた等)場合も、前後の並びで位置が決まる。
     var L = vis.length;
-    var pairs = lcsPairs(vis, Math.max(0, cursor - L * 2), Math.min(order.length, cursor + L * 3));
-    if (!pairs.length) pairs = lcsPairs(vis, 0, order.length);
+    // 内容だけで合わせた対応は、隣の対応と位置のずれがほぼ同じものだけ使う
+    // (「うん」のような短い発言が、離れた場所の同じ発言に合ってしまうため)。同じDOM要素で合ったものはそのまま使う
+    var textLen = function (v) { return v.items.reduce(function (n, x) { return n + x.body.length; }, 0); };
+    var near = function (p, q) {
+      if (!q) return false;
+      var di = p[0] - q[0], dg = p[1] - q[1];
+      if (di * dg <= 0) return false;
+      if (dg === di) return true;
+      // 間で塊が増えた/減った(インフォボックスを開いた等)ずれは、ある程度長い発言のときだけ許す
+      return Math.abs(dg - di) <= 2 && textLen(vis[p[0]]) >= 12;
+    };
+    var solid = function (ps) {
+      if (L === 1) return ps;
+      return ps.filter(function (p, n) { return vis[p[0]].eid || near(p, ps[n - 1]) || near(p, ps[n + 1]); });
+    };
+    var pairs = solid(lcsPairs(vis, Math.max(0, cursor - L * 2), Math.min(order.length, cursor + L * 3)));
+    if (!pairs.length) pairs = solid(lcsPairs(vis, 0, order.length));
     if (!pairs.length) {
       // 重なりが無い(間を飛ばした): スクロールの向きで前後を決める
-      var ids = vis.map(newId);
+      var ids = seqVisIds = vis.map(newId);
       if (scrollDir < 0) { order = ids.concat(order); cursor = 0; } else { cursor = order.length; order = order.concat(ids); }
       return false;
     }
@@ -319,6 +366,7 @@
       order.splice.apply(order, [ins.at, 0].concat(ins.ids));
     });
     cursor = Math.max(0, order.indexOf(visIds[0]));
+    seqVisIds = visIds;
     return true;
   }
   /** vis と order[lo..hi) の対応(LCS)。返り値 [[visの番号, orderの番号], ...] */
@@ -347,27 +395,49 @@
   }
 
   var visNow = 0;
+  // 最後の読み取りで見えていた塊のキー(キーの無い画面では mergeSeq が付けたid)、キーの無い画面か、前回までと重なりがあったか
+  var visKeys = [], visSeq = false, lastLinked = true;
   // 前回までと重なりが見つからなかった(=間を読み飛ばしたかもしれない)回数。書き出し後に知らせる
   var gapEvents = 0;
   /** 読み取って継ぎ足す。前回までと重なりがあれば true。quiet のときは読み飛ばしとして数えない */
   function scan(quiet) {
+    // 向きは継ぎ足す前に決める(重なりが無いとき、どちらの端に置くかに使う)
+    var t = scroller();
+    if (t) {
+      // 「下からの距離」で見る。古い分を上に足しても変わらないので、読み込みを動いたと取り違えない
+      var fb = fromBottom(t);
+      if (lastFromBottom !== null && Math.abs(fb - lastFromBottom) > 1) scrollDir = fb > lastFromBottom ? -1 : 1;
+      lastFromBottom = fb;
+    }
+    if (moveDir) scrollDir = moveDir;
     var vis = visibleBlocks();
     visNow = vis.length;
     var hadOrder = order.length > 0;
     var linked = !hadOrder;
+    var keyed = vis.length > 0 && vis.every(function (v) { return v.key; });
     if (vis.length) {
-      var keyed = vis.every(function (v) { return v.key; });
       linked = (keyed ? merge(vis) : mergeSeq(vis)) || linked;
       if (!linked && hadOrder && quiet !== true) gapEvents++;
     }
-    var t = scroller();
-    if (t) {
-      if (lastScrollTop !== null && t.scrollTop !== lastScrollTop) scrollDir = t.scrollTop < lastScrollTop ? -1 : 1;
-      lastScrollTop = t.scrollTop;
-      if (atBottom(t)) sawBottom = true;
-    }
+    visKeys = !vis.length ? [] : keyed ? vis.map(function (v) { return v.key; }) : seqVisIds.slice();
+    visSeq = vis.length > 0 && !keyed;
+    lastLinked = linked || !vis.length;
+    if (t && atBottom(t)) sawBottom = true;
     updatePanel();
-    return linked || !vis.length;
+    return lastLinked;
+  }
+  /** いま見えている所の目印(動かす前に取っておき、動かした後につながったかを確かめる) */
+  function snap() { return { keys: visKeys.slice(), fb: lastFromBottom, seq: visSeq }; }
+  /**
+   * 前に見えていた所と、いま見えている所がつながったか。
+   * キーのある画面は鎖が同じか(間の画面を通してつながっていればよい)、キーの無い画面は前に見えていた塊がいまも見えているか。
+   */
+  function joined(prev) {
+    if (!prev.keys.length || !visKeys.length) return lastLinked;
+    if (prev.seq || visSeq) return visKeys.some(function (k) { return prev.keys.indexOf(k) >= 0; });
+    var seen = {};
+    prev.keys.forEach(function (k) { if (chainOf.has(k)) seen[chainOf.get(k)] = true; });
+    return visKeys.some(function (k) { return seen[chainOf.get(k)] === true; });
   }
 
   /* ------------------------------------------------------------ スクロール */
@@ -389,8 +459,9 @@
    */
   var reversed = function (t) { return t.scrollTop < 0 || getComputedStyle(t).flexDirection === 'column-reverse'; };
   var fromTop = function (t) { return reversed(t) ? t.scrollHeight - t.clientHeight + t.scrollTop : t.scrollTop; };
+  var fromBottom = function (t) { return t.scrollHeight - t.clientHeight - fromTop(t); };
   var atTop = function (t) { return fromTop(t) <= 2; };
-  var atBottom = function (t) { return t.scrollHeight - t.clientHeight - fromTop(t) <= 8; };
+  var atBottom = function (t) { return fromBottom(t) <= 8; };
   var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
 
   var runId = 0;
@@ -401,29 +472,49 @@
     var f = function (e) { return e.getAttribute('data-key') || (e.textContent || '').slice(0, 40); };
     return els.length + '|' + f(els[0]) + '|' + f(els[els.length - 1]);
   }
-  /**
-   * スクロールして、画面が描き直されるのを待ってから読み取る。
-   * 前回と重なりが無ければ(=速すぎて間を飛ばした)、半分戻って間を埋める。
-   */
-  async function stepBy(t, dy, my) {
-    var before = domSig();
-    t.scrollTop = t.scrollTop + dy;   // 端を越える分はブラウザが止める(下から積む画面では上がマイナス)
-    for (var w = 0; w < 20 && my === runId; w++) {
+  /** 画面が描き直されるのを待つ(塊の顔ぶれが変わるまで。変わらなくても ticks×80ms で先へ) */
+  async function settle(before, my, ticks) {
+    for (var w = 0; w < (ticks || 20) && my === runId; w++) {
       await sleep(80);
       if (domSig() !== before) break;
     }
     await sleep(60);
-    if (scan(true)) return;
-    // 重なりが無かった: 戻りながら細かく読み直す
+  }
+  /**
+   * スクロールして、画面が描き直されるのを待ってから読み取る。
+   * 前に見えていた所とつながらなければ(=速すぎたり、古い分の読み込みで画面が跳んだりして間を飛ばした)、戻って間を埋める。
+   */
+  async function stepBy(t, dy, my) {
+    var prev = snap(), before = domSig();
+    moveDir = dy < 0 ? -1 : 1;
+    t.scrollTop = t.scrollTop + dy;   // 端を越える分はブラウザが止める(下から積む画面では上がマイナス)
+    await settle(before, my);
+    scan(true);
+    if (!joined(prev)) await fillGap(t, prev, my);
+    moveDir = 0;
+  }
+  /**
+   * 間を飛ばしたとき: 来た方へ少しずつ戻りながら読み直し、前に見えていた所とつながったら元の位置へ戻る。
+   * 戻る幅は初めは細かく(1/4ずつ)、つながらなければ1歩ずつ。前に見えていた所を1画面ぶん過ぎてもだめならあきらめる。
+   * (古い分の読み込みが続けて起きると、何十行も跳ぶことがあるので、回数ではなく位置で区切る)
+   */
+  async function fillGap(t, prev, my) {
+    var dir = moveDir || scrollDir || -1;   // 進んでいた向き。戻るのはその逆
+    var step = Math.max(80, Math.round(t.clientHeight * 0.45));
     var back = t.scrollTop, filled = false;
-    for (var k = 1; k <= 3 && my === runId; k++) {
-      t.scrollTop = back - dy * k / 4;
-      await sleep(200);
-      if (scan(true)) { filled = true; break; }
+    for (var k = 1; k <= (prev.fb === null ? 15 : 3000) && my === runId; k++) {
+      var before = domSig(), was = t.scrollTop;
+      t.scrollTop = back - dir * step * (k <= 3 ? k / 4 : k - 3);
+      if (Math.abs(t.scrollTop - was) < 1) break;   // 端まで戻った
+      await settle(before, my, 8);
+      scan(true);
+      if (joined(prev)) { filled = true; break; }
+      if (prev.fb !== null && dir * (fromBottom(t) - prev.fb) > t.clientHeight) break;
     }
-    if (!filled) gapEvents++;
+    if (!filled && my === runId) gapEvents++;
+    var b2 = domSig();
     t.scrollTop = back;
-    await sleep(150);
+    await settle(b2, my);
     scan(true);
   }
   /** 少しずつ下ろして、最新まで読み込む(最後の1画面を取りこぼさないため) */
@@ -452,9 +543,13 @@
     scan();
     while (my === runId) {
       if (atTop(t)) {
-        var h0 = t.scrollHeight;
+        var h0 = t.scrollHeight, prev = snap();
         await sleep(1200);   // 古い発言の読み込みを待つ
-        scan();
+        // 読み込んだはずみで画面が跳んで、間を飛ばすことがある → つながるまで戻って読み直す
+        moveDir = -1;
+        scan(true);
+        if (!joined(prev)) await fillGap(t, prev, my);
+        moveDir = 0;
         if (t.scrollHeight === h0 && atTop(t)) { if (++still >= 3) break; } else still = 0;
         continue;
       }
@@ -738,8 +833,12 @@
 
   window.__talklog = {
     ver: VER, open: open, close: close, scan: scan, collect: collect, buildHtml: buildHtml,
-    // 動作確認用: 集めた塊の数と、読み飛ばしたかもしれない回数
-    stats: function () { return { blocks: order.length, gaps: gapEvents, keys: order.slice() }; }
+    // 動作確認用: 集めた塊の数、読み飛ばしたかもしれない回数、つながりの塊(鎖)の数(1なら途中の切れ目なし。キーのある画面だけ)
+    stats: function () {
+      var chains = {};
+      chainOf.forEach(function (c) { chains[c] = true; });
+      return { blocks: order.length, gaps: gapEvents, chains: Object.keys(chains).length, keys: order.slice() };
+    }
   };
 
   if (window.__talklogAuto) {

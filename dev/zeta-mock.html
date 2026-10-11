@@ -10,6 +10,8 @@
   見えている範囲だけ描く仮想リストと、上端での古い発言の読み込みを再現する。
   ?mobile を付けると data-index / data-key の無い画面になる。
   スクロール欄は実際の zeta と同じ「下から積む」(column-reverse)。?normal でふつうの向きになる。
+  data-index は実際の zeta と同じく「読み込み済みのうち最も古い行 = 0」で、古い分を読み込むたびに振り直す。
+  ?jump を付けると、古い分を読み込んだはずみに画面が上へ跳ぶ(間を読み飛ばす状況。?jump=1500 のように幅も指定可)。
 -->
 <style>
   body { margin: 0; font: 15px/1.6 system-ui, sans-serif; background: #f4f2f7; }
@@ -32,6 +34,8 @@
 <script>
 (function () {
   const MOBILE = location.search.includes('mobile');
+  const jumpQ = new URLSearchParams(location.search).get('jump');
+  const JUMP = jumpQ === null ? 0 : (parseInt(jumpQ, 10) || 1000);
   const N = 150, H = 150;
   const CHAR = '黒羽 蓮', CHAR2 = '白石 澪', ME = '水瀬 遥';
   // ---- 会話データ ----
@@ -138,7 +142,9 @@
     for (let i = a; i < b; i++) {
       const m = msgs[i];
       if (!cache.has(m.id)) cache.set(m.id, build(m, i));
-      nodes.push(cache.get(m.id));
+      const node = cache.get(m.id);
+      if (!MOBILE) node.setAttribute('data-index', String(i - loadedStart));
+      nodes.push(node);
     }
     for (const k of [...cache.keys()]) { const idx = msgs.findIndex((m) => m.id === k); if (idx < a || idx >= b) cache.delete(k); }
     box.replaceChildren(topPad, ...nodes, botPad);
@@ -155,6 +161,7 @@
         render();
         // 下から積む欄は下端基準なので、上に足しても見た目の位置はそのまま。上から積む欄だけ足した分ずらす
         if (!REVERSE) list.scrollTop += add * H;
+        if (JUMP) list.scrollTop -= JUMP;
         loadingOlder = false;
         render();
       }, 500);
