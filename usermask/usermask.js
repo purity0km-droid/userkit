@@ -854,9 +854,9 @@
       selPanel.append(
         h('h2', '囲み'),
         h('p.side-hint', cur.masks.length
-          ? `この画像の囲み: ${cur.masks.length}か所。「選ぶ」でタップすると、動かしたり隠し方を変えたりできます。`
-          : '隠したいところを囲んでください。「動かす」を選ぶと画像をスクロールできます(2本指でも動かせます)。'),
-        cur.masks.some((x) => x.auto) && h('p.side-hint.auto-note', '点線の枠は、登録から自動で見つけた囲みです。違っていたら選んで削除してください。'),
+          ? `この画像の囲み: ${cur.masks.length}か所。「選ぶ」で囲みをタップすると、動かしたり隠し方を変えたりできます。`
+          : '隠したいところを囲んでください。「動かす」を選ぶと画像をスクロールできます。2本指でも動かせます。'),
+        cur.masks.some((x) => x.auto) && h('p.side-hint.auto-note', '点線の枠は登録した名前やアイコンから自動で見つけた囲みです。違っていたら選んで削除してください。'),
         cur.masks.length > 0 && h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: async () => {
           if (await U.confirmDialog({ title: '囲みをすべて消す', message: 'この画像の囲みをすべて消しますか?', okLabel: '消す', danger: true })) {
             pushHistory(); cur.masks = []; selectedId = null; changed(); refreshSide();
@@ -878,7 +878,7 @@
       h('div.sel-opts',
         h('label.check', selFit, '文字にぴったり'),
         m.style === 'black' && selColor),
-      h('p.side-hint', '「選ぶ」でドラッグすると動かせます。矢印キーで1px(Shiftで10px)ずつ動きます。'),
+      h('p.side-hint', '「選ぶ」で囲みをドラッグすると動かせます。矢印キーでは1pxずつ、Shiftを押しながらだと10pxずつ動きます。'),
       h('div.btn-row',
         h('button.btn.btn-primary.btn-sm', { type: 'button', onclick: registerSelected }, icon('star'), 'この部分を登録'),
         h('button.btn.btn-outline.btn-sm.btn-danger-o', { type: 'button', onclick: deleteSelected }, icon('trash'), '削除')));

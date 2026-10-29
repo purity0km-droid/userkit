@@ -75,7 +75,7 @@
     const bio = h('textarea', { id: 'f-bio', rows: 5, placeholder: '生い立ち、相手との関係、秘密など', value: draft.bio });
 
     const form = h('form.modal-body', { novalidate: true },
-      h('p.modal-lead', '必須なのは名前だけ。画像は保存後に「画像」から追加できます。'),
+      h('p.modal-lead', '必須なのは名前だけです。画像は保存したあとに「画像」から追加できます。'),
       h('div.grid-2',
         h('div.field', h('label', { for: 'f-name' }, '名前', h('b.req', '必須')), name),
         h('div.field', h('label', { for: 'f-plot' }, 'プロット名', h('small', '物語・トークの設定')), plot, plotList),
@@ -166,7 +166,7 @@
         results.append(h('div.empty',
           h('div.empty-icon', icon('bubble', 34)),
           h('h3', 'userを登録してみよう'),
-          h('p', 'まずは名前とプロット名だけでOK。設定はあとから追加できます。'),
+          h('p', 'まずは名前とプロット名だけで大丈夫です。設定はあとから追加できます。'),
           h('button.btn.btn-primary', { type: 'button', onclick: () => openUserForm(null, afterSave) }, icon('plus'), 'userを追加')));
       } else if (!hit.length) {
         results.append(h('div.empty.small', h('p', '条件に合うuserが見つかりません。')));
@@ -194,7 +194,7 @@
     app.replaceChildren(
       h('nav.crumbs', { 'aria-label': 'パンくず' }, h('span', '現在地'), h('strong', 'user一覧')),
       h('div.page-head',
-        h('div', h('h1', 'user一覧'), h('p.lead', 'プロットごとに、プロフィールをまとめられます。')),
+        h('div', h('h1', 'user一覧'), h('p.lead', 'プロットごとにプロフィールをまとめられます。')),
         h('button.btn.btn-primary', { type: 'button', onclick: () => openUserForm(null, afterSave) }, icon('plus'), 'userを追加')),
       h('div.panel.filters',
         h('div.field', h('label', { for: 'q' }, 'userを探す'), q),

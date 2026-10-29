@@ -35,6 +35,8 @@ body {
   font: 400 15px/1.7 var(--font); letter-spacing: .01em;
 }
 h1, h2, h3, p { margin: 0; }
+/* 見出しと短い説明は、日本語の文節の切れ目で折り返す(対応していないブラウザではふつうに折り返す) */
+h1, h2, h3, .lead { word-break: auto-phrase; text-wrap: pretty; }
 a { color: inherit; text-decoration: none; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -91,6 +93,7 @@ button { cursor: pointer; }
 
 .kit-footer { display: flex; flex-direction: column; gap: 4px; margin-top: 28px; padding: 24px 20px 40px; border-top: 1px solid var(--line); text-align: center; font-size: 12px; color: var(--muted); }
 .kit-footer-nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 20px; margin-bottom: 6px; font-size: 13px; font-weight: 700; color: var(--text); }
+.kit-footer-nav a { display: inline-flex; align-items: center; gap: 4px; }
 .kit-footer a:hover { color: var(--primary-dark); text-decoration: underline; text-underline-offset: 3px; }
 
 /* ---------- ページ見出し ---------- */
@@ -101,14 +104,14 @@ h1 { font-size: 24px; line-height: 1.35; font-weight: 700; color: var(--heading)
 .crumbs a { text-decoration: underline; text-underline-offset: 3px; }
 .crumbs strong { color: var(--text); }
 
-/* ---------- 更新履歴の項目(トップの「最近の更新」と changelog/) ---------- */
-.ch-item { display: flex; align-items: baseline; gap: 10px; }
-.ch-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; flex: none; }
-.ch-tag { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; line-height: 20px; white-space: nowrap;
-  background: color-mix(in srgb, var(--tint) 11%, #fff); color: color-mix(in srgb, var(--tint) 78%, #1d1a26); }
-a.ch-tag:hover { background: color-mix(in srgb, var(--tint) 20%, #fff); }
-.ch-tag.all { background: #efeef3; color: var(--muted); }
-.ch-text { min-width: 0; }
+/* ---------- 更新履歴のツールの名前(トップの「最近の更新」と changelog/)。色の点・名前・id ---------- */
+.ch-who { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 0 6px; line-height: 1.5; }
+.ch-who b { font-size: 13.5px; font-weight: 700; color: color-mix(in srgb, var(--tint) 80%, #1d1a26); }
+.ch-who b::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--tint); vertical-align: 2px; }
+.ch-who small { font-size: 11.5px; color: var(--muted); }
+a.ch-who:hover b { text-decoration: underline; text-underline-offset: 3px; }
+.ch-who.all b { color: var(--text); }
+.ch-who.all b::before { background: none; box-shadow: inset 0 0 0 1.5px var(--muted); }
 
 /* ---------- ボタン ---------- */
 .btn {

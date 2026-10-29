@@ -1,4 +1,4 @@
-/* userkit 共通エディタの部品 (userpair / userline) */
+/* userkit 共通エディタの部品 (userpair / userline / usersns) */
 .ed-app { max-width: 1100px; margin: 0 auto; padding: 14px 16px 8px; }
 .ed-toolbar {
   position: sticky; top: calc(var(--kitbar-h) + 8px); z-index: 20;
@@ -6,7 +6,35 @@
   background: rgba(255, 255, 255, .95); backdrop-filter: blur(6px); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
 }
 .ed-toolbar .spacer { flex: 1; }
-.ed-tip { font-size: 12px; color: var(--muted); margin: -6px 2px 12px; }
+/* 自動保存の状態。保存済みは控えめに、保存できないときだけ目立たせる */
+.ed-status { display: inline-flex; align-items: center; gap: 5px; padding: 0 4px; font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+.ed-status .icon { color: var(--ok); }
+.ed-status[data-state="saving"] .icon { color: var(--muted); }
+.ed-status[data-state="error"] { color: var(--danger); font-weight: 700; }
+.ed-status[data-state="error"] .icon { color: var(--danger); }
+/* 「ファイル」のメニュー */
+.ed-pop.right .ed-pop-body { left: auto; right: 0; }
+.ed-menu { display: flex; flex-direction: column; gap: 2px; width: 290px; margin: -4px; }
+.ed-menu-item { display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px; border: 0; border-radius: 9px; background: none; text-align: left; }
+.ed-menu-item:hover { background: var(--soft); }
+.ed-menu-item .icon { margin-top: 2px; color: var(--primary-dark); }
+.ed-menu-item span { display: flex; flex-direction: column; line-height: 1.45; }
+.ed-menu-item b { font-size: 13.5px; }
+.ed-menu-item small { font-size: 11.5px; color: var(--muted); }
+.ed-menu-item.danger { margin-top: 4px; border-top: 1px solid var(--line); border-radius: 0 0 9px 9px; }
+.ed-menu-item.danger .icon, .ed-menu-item.danger b { color: var(--danger); }
+.ed-menu-item.danger:hover { background: #fdf0f3; }
+/* 折りたためる「使い方」 */
+.ed-help { margin: -4px 0 14px; font-size: 13px; color: var(--muted); }
+.ed-help summary { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 8px; border-radius: 8px; list-style: none; cursor: pointer; font-weight: 700; color: var(--primary-dark); }
+.ed-help summary::-webkit-details-marker { display: none; }
+.ed-help summary:hover { background: var(--soft); }
+.ed-help summary .icon:last-child { transition: transform .2s; }
+.ed-help[open] summary .icon:last-child { transform: rotate(180deg); }
+.ed-help ul { columns: 2 340px; column-gap: 32px; margin: 6px 0 0; padding: 12px 18px 12px 32px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; line-height: 1.65; }
+.ed-help li { break-inside: avoid; margin-bottom: 4px; }
+.ed-help li::marker { color: var(--line-strong); }
 .ed-stage { width: 100%; }
 .ed-zoom { width: max-content; margin: 0 auto; }
 
@@ -98,6 +126,8 @@ input.pal-hex { width: 6.8em; height: 30px; padding: 4px 8px; font-size: 12px; }
   .ed-app { padding: 10px 8px 6px; }
   .ed-toolbar { top: calc(var(--kitbar-h) + 4px); gap: 6px; padding: 6px; }
   .ed-toolbar .btn-sm { padding: 0 10px; }
+  .ed-status span { display: none; }   /* 狭い画面では印だけ(言葉は title) */
+  .ed-menu { width: min(290px, calc(100vw - 40px)); }
   /* テーマのパネルは幅があるので、ツールバーの左端を基準に出して画面からはみ出さないようにする */
   .ed-pop:has(.theme-pop) { position: static; }
   .ed-pop-body:has(.theme-pop) { left: 6px; width: min(320px, calc(100% - 12px)); }

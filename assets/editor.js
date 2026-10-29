@@ -1,8 +1,8 @@
-/* userkit 共通エディタ (userpair / userline で使う)
+/* userkit 共通エディタ (userpair / userline / usersns で使う)
  *  - その場で書ける文字 (contenteditable)
  *  - 画像の枠 (クリック・ドラッグ・貼り付けで追加 / ホイール・ピンチで拡大 / ドラッグで位置合わせ)
  *  - 増やせる項目のリスト
- *  - 自動保存 (IndexedDB) / JSONの保存・読み込み / PNG書き出し / userprof からの読み込み
+ *  - 自動保存 (IndexedDB。ツールバーに状態) / ファイル(JSON)の保存・読み込み / PNG書き出し / userprof からの読み込み / 使い方(Ed.help)
  *  シートは決まった幅で組み、画面が狭いときは全体を縮小して見せる(書き出す画像の見た目を端末で変えないため)。
  */
 (function () {
@@ -45,11 +45,25 @@
 
     ed.get = (p) => getIn(ed.state, p);
     ed.set = (p, v, o) => { setIn(ed.state, p, v); ed.dirty(); if (o && o.rerender) ed.rerender(); };
-    ed.dirty = () => { clearTimeout(saveTimer); saveTimer = setTimeout(ed.save, 400); };
+    ed.dirty = () => { clearTimeout(saveTimer); saveTimer = setTimeout(ed.save, 400); setStatus('saving'); };
     ed.save = async () => {
-      try { await store.set(cfg.app, { v: cfg.version, state: ed.state, at: Date.now() }); }
-      catch (e) { U.toast('ブラウザに保存できませんでした(容量をご確認ください)', 'error'); }
+      try { await store.set(cfg.app, { v: cfg.version, state: ed.state, at: Date.now() }); setStatus('saved'); }
+      catch (e) { setStatus('error'); U.toast('ブラウザに保存できませんでした。容量をご確認ください', 'error'); }
     };
+    /* 自動保存の状態(ツールバーに置く)。保存している間・保存した・保存できない の 3 つ */
+    const STATUS = {
+      saving: ['refresh', '保存しています…'],
+      saved: ['check', 'この端末に保存済み'],
+      error: ['close', '保存できません']
+    };
+    ed.statusEl = h('span.ed-status', { role: 'status', 'aria-live': 'polite' });
+    function setStatus(k) {
+      const [ic, label] = STATUS[k];
+      ed.statusEl.dataset.state = k;
+      ed.statusEl.title = k === 'saved' ? '入力した内容はこのブラウザに自動で保存されています' : label;
+      ed.statusEl.replaceChildren(icon(ic, 15), h('span', label));
+    }
+    setStatus('saved');
     ed.load = async () => {
       try {
         const r = await store.get(cfg.app);
@@ -305,7 +319,7 @@
       U.toast('読み込みました');
     };
     ed.reset = async () => {
-      if (!(await U.confirmDialog({ title: 'すべて消す', message: '入力した内容と画像をすべて消して、最初の状態に戻しますか?(先に「保存」しておくと安心です)', okLabel: '消す', danger: true }))) return;
+      if (!(await U.confirmDialog({ title: '最初に戻す', message: '先に「ファイル」の「ファイルに保存」で控えを取っておくと安心です。入力した内容と画像をすべて消して、最初の状態に戻しますか?', okLabel: '消す', danger: true }))) return;
       ed.state = cfg.defaults();
       await ed.save();
       ed.rerender();
@@ -326,6 +340,24 @@
       });
       return b;
     };
+    /**
+     * 「ファイル」のメニュー: ファイルに保存(JSON)・ファイルから読み込む・最初に戻す。
+     * o.reset = 最初に戻す処理(省略時は ed.reset)、o.resetLabel・o.resetHint で言葉を変えられる
+     */
+    ed.fileMenu = (o) => {
+      o = o || {};
+      const inp = h('input', { type: 'file', accept: '.json,application/json', hidden: true });
+      inp.addEventListener('change', () => { const f = inp.files[0]; inp.value = ''; if (f) ed.loadJson(f); });
+      const item = (ic, label, hint, onclick, cls) => h('button.ed-menu-item' + (cls || ''), { type: 'button', onclick },
+        icon(ic), h('span', h('b', label), h('small', hint)));
+      const box = ed.popover('ファイル', 'file', (close) => h('div.ed-menu',
+        item('save', 'ファイルに保存', '入力した内容を .json ファイルに書き出します。控えを取るときや、別の端末に移すときに使います', () => { close(); ed.saveJson(); }),
+        item('upload', 'ファイルから読み込む', '書き出した .json ファイルを開いて、続きから作ります', () => { close(); inp.click(); }),
+        item('trash', o.resetLabel || '最初に戻す', o.resetHint || '入力した内容と画像をすべて消します', () => { close(); (o.reset || ed.reset)(); }, '.danger')));
+      box.classList.add('right');
+      box.append(inp);
+      return box;
+    };
     /** ボタンの下に開く小さなパネル */
     ed.popover = (label, iconName, build) => {
       const box = h('details.ed-pop', h('summary.btn.btn-outline.btn-sm', icon(iconName), label), h('div.ed-pop-body'));
@@ -345,8 +377,8 @@
       h2iPromise = new Promise((resolve, reject) => {
         const s = document.createElement('script');
         s.src = H2I_URL;
-        s.onload = () => (window.htmlToImage ? resolve(window.htmlToImage) : reject(new Error('画像化の部品を読み込めませんでした')));
-        s.onerror = () => { h2iPromise = null; reject(new Error('画像化の部品を読み込めませんでした。通信できる状態で、もう一度お試しください')); };
+        s.onload = () => (window.htmlToImage ? resolve(window.htmlToImage) : reject(new Error('画像を作る部品を読み込めませんでした')));
+        s.onerror = () => { h2iPromise = null; reject(new Error('画像を作る部品を読み込めませんでした。通信できる状態で、もう一度お試しください')); };
         document.head.append(s);
       });
     }
@@ -379,7 +411,7 @@
   function pickUserprof() {
     const users = readUserprofUsers();
     if (!users.length) {
-      U.toast('userprof に user が見つかりません(同じ端末・同じブラウザで登録してください)', 'error');
+      U.toast('userprof に user が見つかりません。同じ端末・同じブラウザで登録してください', 'error');
       return Promise.resolve(null);
     }
     return new Promise((resolve) => {
@@ -516,7 +548,7 @@
       const box = h('div.theme-pop',
         h('div.theme-grid', themeBtns),
         h('div.pal-head', h('b', '色を自分で決める'), resetAll),
-        h('p.hint', 'カラーコード(#RRGGBB)を入れるか、色の丸を押して選びます(画像からスポイトも可)。決めた色はテーマより優先されます。'),
+        h('p.hint', 'カラーコード(#RRGGBB)を入れるか、色の丸を押して選びます。色の丸を押すと、画像からスポイトで拾うこともできます。決めた色はテーマより優先されます。'),
         h('div.pal-list', rows.map((r) => r.row)));
       sync();
       return box;
@@ -532,5 +564,20 @@
       })));
   }
 
-  window.Ed = { create, pickUserprof, pickColor, getIn, setIn, THEMES, themeColors, themeVars, themePicker, showPicker };
+  /**
+   * 折りたためる「使い方」。lines は文の配列。はじめて開いたときだけ開いておき、
+   * 閉じたらこの端末では閉じたままにする(localStorage の userkit:help:<app>)
+   */
+  function help(app, lines) {
+    const key = 'userkit:help:' + app;
+    let closed = false;
+    try { closed = localStorage.getItem(key) === 'closed'; } catch (e) { /* 使えない環境 */ }
+    const box = h('details.ed-help', { open: !closed },
+      h('summary', icon('help', 16), h('span', '使い方'), icon('down', 15)),
+      h('ul', lines.map((t) => h('li', t))));
+    box.addEventListener('toggle', () => { try { localStorage.setItem(key, box.open ? 'open' : 'closed'); } catch (e) { /* 使えない環境 */ } });
+    return box;
+  }
+
+  window.Ed = { create, pickUserprof, pickColor, getIn, setIn, THEMES, themeColors, themeVars, themePicker, showPicker, help };
 })();

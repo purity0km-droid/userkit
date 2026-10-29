@@ -18,7 +18,7 @@
     <section class="log-hero">
       <div>
         <h1>zetaのトークを、<br>吹き出しのまま手元に保存</h1>
-        <p class="lead">zeta(Web版)のトーク画面で動かすと、読み込まれた発言を集めて、1つのHTMLファイルに書き出します。ファイルはブラウザで開くだけで読めます。無料・登録不要。</p>
+        <p class="lead">zeta(Web版)のトーク画面で動かすと、読み込まれた発言を集めて、1つのHTMLファイルに書き出します。ファイルはブラウザで開くだけで読めます。無料で、登録もいりません。</p>
         <p class="privacy"><span data-icon="eye" data-icon-size="16"></span>読み取った内容はあなたの端末の中だけで扱い、どこにも送信しません。</p>
       </div>
       <div class="sample" aria-label="書き出したファイルの見本">
@@ -37,7 +37,7 @@
       </div>
 
       <div class="dev" data-dev-panel="pc">
-        <p class="hint">Chrome・Edge・Safari・Firefox など。ブックマークバーを表示しておいてください。</p>
+        <p class="hint">Chrome・Edge・Safari・Firefox などで使えます。ブックマークバーを表示しておいてください。</p>
         <ol class="howto">
           <li>下の <b>「talklogで保存」</b> ボタンを、ブックマークバーへドラッグして置きます。
             <div class="bm-row"><a class="bm-link" id="bm-drag" href="#" title="ブックマークバーへドラッグしてください"><span data-icon="bubble" data-icon-size="16"></span>talklogで保存</a><span class="hint">← ドラッグ</span></div>
@@ -47,12 +47,12 @@
       </div>
 
       <div class="dev" data-dev-panel="ios" hidden>
-        <p class="hint">Safari で使います。どちらか一方の方法でOKです。</p>
+        <p class="hint">Safari で使います。方法はどちらか一方で構いません。</p>
         <h3>方法A: ブックマークで使う(アプリ不要)</h3>
         <ol class="howto">
           <li><button type="button" class="btn btn-outline btn-sm" data-copy="bm"><span data-icon="copy"></span>ブックマーク用の文字列をコピー</button></li>
           <li>Safari で今のページを開いたまま、共有ボタン →「ブックマークを追加」で保存します。</li>
-          <li>ブックマーク一覧で今のブックマークを長押し →「編集」。名前を「talklogで保存」にし、アドレス欄を消して、コピーした文字列を貼り付けて保存します。</li>
+          <li>ブックマーク一覧で今のブックマークを長押しして、「編集」を選びます。名前を「talklogで保存」にし、アドレス欄を消して、コピーした文字列を貼り付けて保存します。</li>
         </ol>
         <h3>方法B: アプリ「Userscripts」で使う(ボタンが出て便利)</h3>
         <ol class="howto">
@@ -66,7 +66,7 @@
         <p class="hint">Chrome で使います。</p>
         <ol class="howto">
           <li><button type="button" class="btn btn-outline btn-sm" data-copy="bm"><span data-icon="copy"></span>ブックマーク用の文字列をコピー</button></li>
-          <li>今のページをブックマークに追加し、ブックマークを編集。名前を「talklogで保存」に、URLをコピーした文字列に置き換えて保存します。</li>
+          <li>今のページをブックマークに追加して、そのブックマークを編集します。名前を「talklogで保存」にし、URLをコピーした文字列に置き換えて保存します。</li>
           <li>使うときは、zeta のトーク画面でアドレスバーに <b>talklogで保存</b> と入力し、候補に出たブックマーク(★)をタップします。</li>
         </ol>
         <p class="hint">Firefox(Android) に拡張機能「Violentmonkey」を入れて、<a href="talklog.user.js">talklog.user.js</a> をインストールする方法もあります(トーク画面にボタンが出ます)。</p>
@@ -74,7 +74,7 @@
 
       <details class="fold">
         <summary>短い版で動かないとき(全部入り版)</summary>
-        <p class="hint">上のブックマークは、毎回このサイトから本体を読み込みます。zeta 側の設定で外部の読み込みが止められて動かない場合は、本体を丸ごと入れた長い版を試してください(更新は自動では入りません)。</p>
+        <p class="hint">上のブックマークは毎回このサイトから本体を読み込みます。zeta 側の設定で外部の読み込みが止められて動かない場合は、本体を丸ごと入れた全部入り版を試してください。全部入り版には更新が自動では入りません。</p>
         <button type="button" class="btn btn-outline btn-sm" data-copy="full"><span data-icon="copy"></span>全部入り版をコピー</button>
       </details>
       <p class="hint warn-note">貼り付けたあと、先頭の <code>javascript:</code> が消えていないか確かめてください。ブラウザが自動で取り除くことがあります。消えていたら手で打ち足してください。</p>
@@ -93,7 +93,7 @@
       </div>
       <ul class="limits">
         <li>集められるのは、画面に読み込まれた発言だけです。上まで遡らないと、遡ったところから先しか入りません。</li>
-        <li>発言の日時、画像・ボイス・スタンプは入りません(文字だけです)。</li>
+        <li>入るのは文字だけで、発言の日時、画像・ボイス・スタンプは入りません。</li>
         <li>再生成した候補は、そのとき表示しているものだけが入ります。</li>
         <li>zeta の画面の作りが変わると、動かなくなることがあります。</li>
       </ul>

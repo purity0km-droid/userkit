@@ -120,7 +120,7 @@
       copyBtn(() => Store.text.timeline(u), '年表をコピー'),
       h('button.btn.btn-primary.btn-sm', { type: 'button', onclick: () => edit(null) }, icon('plus'), '追加')));
     if (!u.timeline.length) {
-      wrap.append(emptyBox('生い立ちや出来事を、時系列で書き留められます。',
+      wrap.append(emptyBox('生い立ちや出来事を時系列で書き留められます。',
         h('button.btn.btn-primary', { type: 'button', onclick: () => edit(null) }, icon('plus'), '年表を追加')));
       return wrap;
     }

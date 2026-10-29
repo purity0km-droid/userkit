@@ -34,7 +34,13 @@
 
   const app = document.getElementById('app');
   const toolbar = h('div.ed-toolbar');
-  const tip = h('p.ed-tip', '文字は押してそのまま書けます。画像の枠はクリック・ドラッグ・貼り付け(Ctrl+V)で追加、ホイールや2本指で拡大、ドラッグで位置を合わせられます。カラーの丸を押すと、入れた画像からスポイトで色を取れます。内容はこのブラウザに自動で保存されます。');
+  const tip = Ed.help('userpair', [
+    '文字は押してそのまま書けます。',
+    '画像の枠にはクリック・ドラッグ・貼り付け（Ctrl+V）で画像を入れます。ホイールや2本指で拡大し、ドラッグで位置を合わせます。',
+    'カラーの丸を押すと、入れた画像からスポイトで色を拾えます。',
+    '内容はこのブラウザに自動で保存されます。控えは「ファイル」から .json ファイルとして書き出せます。',
+    '「画像で保存」は Ctrl+S（Mac は ⌘S）でもできます。'
+  ]);
   app.append(toolbar, tip);
 
   const ed = Ed.create({ app: 'userpair', version: 1, width: 880, defaults, migrate, render, mount: app });
@@ -154,9 +160,8 @@
         ['colors', 'カラー'], ['sd', 'SD画像'], ['full', '全身画像'], ['relation', '2人の関係(矢印)'], ['foot', 'ひとこと']]),
       imp,
       h('span.spacer'),
-      h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: ed.saveJson, title: '入力内容をファイルに保存' }, icon('save'), '保存'),
-      ed.fileButton('読み込み', ed.loadJson),
-      h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => ed.reset().then(renderToolbar) }, icon('trash'), 'クリア'),
+      ed.statusEl,
+      ed.fileMenu({ reset: () => ed.reset().then(renderToolbar) }),
       ed.exportButton(() => `userpair_${U.safeName(ed.state.people.map((p) => p.name).filter(Boolean).join('_') || ed.state.title, 'sheet')}.png`));
   }
 

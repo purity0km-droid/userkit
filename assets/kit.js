@@ -86,7 +86,8 @@
     book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5M8 7h7"/>',
     phone: '<rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/>',
     card: '<rect x="5" y="2.5" width="14" height="19" rx="2"/><circle cx="14.5" cy="7" r="2"/><path d="M8 13h8M8 16.5h5"/>',
-    clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'
+    clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+    help: '<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2-2.5 3.6M12 16.8h.01"/>'
   };
   function icon(name, size) {
     const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -301,26 +302,26 @@
   /* ---------- ツール一覧 / 共通バー ---------- */
   // 目的ごとのまとまり。tint はそのまとまりのツールの目印の色(アイコンの台・メニューの印・更新履歴の札)
   const GROUPS = [
-    { id: 'note', label: '書きためる', desc: 'userの設定を、あとから見返せる形で手元に残す', tint: '#6d5dfc' },
-    { id: 'make', label: '画像にする', desc: 'プロフィールや2人の関係を、1枚の画像や短い動画に', tint: '#d0507a' },
+    { id: 'note', label: '書きためる', desc: 'userの設定をあとから見返せる形で手元に残す', tint: '#6d5dfc' },
+    { id: 'make', label: '画像にする', desc: 'プロフィールや2人の関係を1枚の画像や短い動画にする', tint: '#d0507a' },
     { id: 'keep', label: '隠す・残す', desc: 'スクショの名前を隠し、トークを手元に保存する', tint: '#138a7e' }
   ];
   // 並びはメニュー・トップの順。out はできあがる物(トップの札)
   const TOOLS = [
     { id: 'userprof', group: 'note', label: 'プロフィール帳', icon: 'book', out: ['ブラウザに保存', 'テキスト'],
-      desc: 'userのプロフィール・年表・設定メモ・画像を、プロットごとにまとめて保存。zetaのユーザープロフィール(1000字)の保存と字数調整も。' },
+      desc: 'userのプロフィール・年表・設定メモ・画像を、プロットごとにまとめて保存します。zetaのユーザープロフィール(1000字)の保存と字数の調整もできます。' },
     { id: 'userpair', group: 'make', label: 'ペアプロフィール', icon: 'pair', out: ['PNG'],
-      desc: '2人(または1人)のキャラシートを作って、画像で保存。userprofのプロフィールも読み込めます。' },
+      desc: '2人(または1人)のキャラシートを作って、画像で保存します。userprofのプロフィールも読み込めます。' },
     { id: 'userline', group: 'make', label: 'タイムラインペアカード', icon: 'timeline', out: ['PNG'],
-      desc: 'プロフィール・年表・まとめ・関係を1枚に。縦長のタイムライン風カードを画像で保存。' },
+      desc: 'プロフィール・年表・まとめ・関係を1枚に載せた、縦長のタイムライン風カードを作って画像で保存します。' },
     { id: 'usersns', group: 'make', label: 'SNS風画面', icon: 'phone', out: ['PNG'],
-      desc: 'セットログ風のVlog画面(2〜4人)、インスタ風の投稿・ストーリー、LINE風のトーク、Twitter風のプロフィール・リプ画面を、切り替えて作って画像で保存。' },
+      desc: 'セットログ風のVlog画面(2〜4人)、インスタ風の投稿・ストーリー、LINE風のトーク、Twitter風のプロフィール・リプ画面を切り替えて作り、画像で保存します。' },
     { id: 'usercard', group: 'make', label: 'ホロカード', icon: 'card', out: ['PNG', 'MP4'],
-      desc: 'userのプロフィールを、ホロ箔や単色の箔押しのトレカ風カードに。画像と短い動画で保存。userprofのプロフィールも読み込めます。' },
+      desc: 'userのプロフィールをホロ箔や単色の箔押しのトレカ風カードにして、画像と短い動画で保存します。userprofのプロフィールも読み込めます。' },
     { id: 'usermask', group: 'keep', label: '名前・アイコン隠し', icon: 'mask', out: ['PNG'],
-      desc: 'スクショのユーザー名やアイコンを、なぞるだけで隠す。登録した名前は次の画像から自動で見つけます。' },
+      desc: 'スクショのユーザー名やアイコンを、なぞるだけで隠します。登録した名前は次の画像から自動で見つけます。' },
     { id: 'talklog', group: 'keep', label: 'トーク保存', icon: 'bubble', out: ['HTML', 'テキスト'],
-      desc: 'zetaのトークを、吹き出しのまま読めるHTMLファイルとして手元に保存。書き出したログの閲覧も。' }
+      desc: 'zetaのトークを、吹き出しのまま読めるHTMLファイルにして手元に保存します。書き出したログを開いて読むこともできます。' }
   ];
   const toolUrl = (id) => new URL(id ? id + '/' : './', BASE).href;
   const groupOf = (toolId) => GROUPS.find((g) => g.id === (TOOLS.find((t) => t.id === toolId) || {}).group);
@@ -354,14 +355,12 @@
     return bar;
   }
 
-  /** 共通の足もと。o.repo が true のときだけ GitHub のリポジトリへのリンクを出す(トップだけ) */
+  /** 共通の足もと。トップ以外(o.top でない)では、ツール一覧へ戻るリンクを出す */
   function footer(extra, o) {
     return h('footer.kit-footer',
       extra && h('p', extra),
-      h('nav.kit-footer-nav', { 'aria-label': 'userkit の案内' },
-        h('a', { href: toolUrl('') }, 'ツール一覧'),
-        h('a', { href: toolUrl('changelog') }, '更新履歴'),
-        o && o.repo && h('a', { href: 'https://github.com/purity0km-droid/userkit', target: '_blank', rel: 'noopener' }, 'GitHub')),
+      !(o && o.top) && h('nav.kit-footer-nav', { 'aria-label': 'userkit の案内' },
+        h('a', { href: toolUrl('') }, icon('left', 15), 'ツール一覧へ戻る')),
       h('p', 'AIチャット「zeta」向けの非公式ファンメイドツールです。zeta公式とは関係ありません。'),
       h('p', '入力した内容や画像は、この端末のブラウザの中だけで処理・保存されます。どこにも送信しません。'));
   }

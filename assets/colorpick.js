@@ -141,7 +141,7 @@
 
       const apply = () => { ok = true; ctl.close(); };
       const body = h('div.modal-body.cp-body',
-        h('p.modal-lead', '画像の上を押す(なぞる)と、その場所の色を取れます。'),
+        h('p.modal-lead', '画像の上を押すかなぞると、その場所の色を取れます。'),
         srcs, stage,
         h('div.cp-row',
           h('span.cp-chips', { title: '前の色 → 新しい色' }, h('i.cp-chip.old', { style: { '--c': before } }), icon('arrow', 14), chipNew),

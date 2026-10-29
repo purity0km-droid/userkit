@@ -306,7 +306,7 @@
 
     // ① 元の文章 (字数制限なし・丸ごと保存)
     const srcTa = h('textarea.zeta-ta', { id: 'z-source', rows: 10, value: z.source,
-      placeholder: 'zetaのユーザープロフィールや、長い設定をそのまま貼り付けて保存できます(字数制限なし)' });
+      placeholder: 'zetaのユーザープロフィールや長い設定を、そのまま貼り付けて保存できます。字数の制限はありません' });
     const srcCount = counter(srcTa, true);
     srcTa.addEventListener('input', () => { z.source = srcTa.value; save(); });
     const fromFields = async () => {
@@ -371,7 +371,7 @@
 
     return h('div.zeta',
       h('div.sec-head', h('h2', 'zetaプロフ')),
-      h('p.zeta-lead', `zetaのユーザープロフィールは${LIMIT}字まで(改行も1字)。長い設定は「元の文章」に丸ごと保存しておき、${LIMIT}字に収めた版を下で作れます。入力した内容は自動で保存されます。`),
+      h('p.zeta-lead', `zetaのユーザープロフィールは改行も1字と数えて${LIMIT}字までです。長い設定は「元の文章」に丸ごと保存しておき、${LIMIT}字に収めた版を下で作れます。入力した内容は自動で保存されます。`),
 
       h('section.zeta-box',
         h('div.zeta-box-head',

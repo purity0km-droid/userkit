@@ -236,7 +236,13 @@
   /* ---------------------------------------------------------------- 画面の骨組み */
   const app = document.getElementById('app');
   const toolbar = h('div.ed-toolbar');
-  const tip = h('p.ed-tip', '文字は押してそのまま書けます。画像はクリック・ドラッグ・貼り付け(Ctrl+V)で入れ、ホイールや2本指で拡大、ドラッグで位置を合わせられます。人数や表示は設定の欄(画面の右、スマホでは下)で切り替えます。内容はこのブラウザに自動で保存されます。');
+  const tip = Ed.help('usersns', [
+    '文字は押してそのまま書けます。',
+    '画像はクリック・ドラッグ・貼り付け（Ctrl+V）で入れます。ホイールや2本指で拡大し、ドラッグで位置を合わせます。',
+    '人数や表示は設定の欄（画面の右、スマホでは下）で切り替えます。',
+    '内容はこのブラウザに自動で保存されます。控えは「ファイル」から .json ファイルとして書き出せます。',
+    '「画像で保存」は Ctrl+S（Mac は ⌘S）でもできます。'
+  ]);
   const left = h('div.sns-left');
   const side = h('aside.sns-side.panel', { 'aria-label': '設定' });
   app.append(toolbar, tip, h('div.sns-work', left, side));
@@ -760,11 +766,11 @@
     return [
       sec('人数',
         segOf([[2, '2人'], [3, '3人'], [4, '4人']], v.count, (n) => ed.set('vlog.count', n, { rerender: true }), '人数'),
-        h('p.hint', '縦長の画面を人数分に上下で分けます。画像のないコマは、撮っていない時間のように黒い画面になります。')),
+        h('p.hint', '縦長の画面を人数分に上下で分けます。画像のないコマは撮っていない時間のように黒い画面になります。')),
       sec('時刻',
         time,
         segOf([['center', '中央'], ['right', '右']], v.timePos, (x) => ed.set('vlog.timePos', x, { rerender: true }), '時刻の位置'),
-        h('p.hint', 'ここに入れると、すべてのコマの時刻をそろえます(コマごとに画面の上で書き換えることもできます)。グループのログは中央、1人のログは右に出ます。')),
+        h('p.hint', 'ここに時刻を入れると、すべてのコマの時刻をそろえます。コマごとに画面の上で書き換えることもできます。時刻は、グループのログでは中央、1人のログでは右に出ます。')),
       sec('表示',
         checkOf('vlog.show.name', '名前'),
         checkOf('vlog.show.caption', 'キャプション'),
@@ -785,7 +791,7 @@
       sec('写真',
         segOf([['square', '正方形'], ['portrait', '縦長 4:5'], ['landscape', '横長']], p.ratio, (r) => ed.set('post.ratio', r, { rerender: true }), '写真の形'),
         h('div.sns-row', numOf('post.pages', '枚数', 1, 10), numOf('post.page', '何枚目', 1, 10)),
-        h('p.hint', '2枚以上にすると、右上の「1/3」と写真の下の点が出ます。')),
+        h('p.hint', '枚数を2枚以上にすると、右上の「1/3」と写真の下の点が出ます。')),
       sec('タグ付け',
         h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: addTag }, icon('plus'), 'タグを追加'),
         checkOf('post.show.tags', '写真の上にタグを出す'),
@@ -836,7 +842,7 @@
     return [
       sec('スタンプを追加',
         h('div.sns-add', Object.entries(STICKERS).map(([type, d]) => h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: () => addSticker(type) }, icon('plus'), d.label))),
-        h('p.hint', 'スタンプは画面の上でドラッグして動かし、押して文字を書き換えます。選んだスタンプはホイールでも大きさを変えられます(Deleteキーで削除)。')),
+        h('p.hint', 'スタンプは画面の上でドラッグして動かし、押して文字を書き換えます。選んだスタンプはホイールでも大きさを変えられ、Deleteキーで削除できます。')),
       st && sec(`選んだスタンプ(${(STICKERS[st.type] || STICKERS.text).label})`, ...stickerControls(st)),
       sec('上のバー',
         h('div.sns-row', numOf('story.segs', '枚数', 1, 10), numOf('story.cur', '何枚目', 1, 10)),
@@ -945,7 +951,7 @@
     if (!isCenter(m)) {
       out.push(lab('種類'), segOf([['text', '文字'], ['image', '写真'], ['stamp', 'スタンプ']], m.kind, (v) => set('kind', v), '種類'));
       if (m.kind === 'image') out.push(segOf([['square', '正方形'], ['wide', '横長'], ['tall', '縦長']], m.ratio, (v) => set('ratio', v), '写真の形'));
-      if (m.kind === 'stamp') out.push(h('p.hint', 'スタンプは背景が透明な画像(PNG)を入れると、吹き出しなしで表示されます。'));
+      if (m.kind === 'stamp') out.push(h('p.hint', 'スタンプに背景が透明な画像(PNG)を入れると、吹き出しなしで表示されます。'));
       if (m.from === 'me') out.push(checkProp(m, 'read', '既読を付ける'));
     }
     out.push(itemTools('line.msgs', () => removeMsg(m.id)));
@@ -961,7 +967,7 @@
           h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: () => addMsg('me') }, icon('plus'), '自分'),
           h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: () => addMsg('date') }, icon('plus'), '日付'),
           h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: () => addMsg('sys') }, icon('plus'), 'お知らせ')),
-        h('p.hint', '選んでいるメッセージのすぐ下に入ります(選んでいなければいちばん下)。メッセージは押すと選べて、文字はそのまま書き換えられます。続けて同じ人が送ると、アイコンとしっぽは最初の1つだけに付きます。')),
+        h('p.hint', '追加したメッセージは選んでいるメッセージのすぐ下に入ります。選んでいなければ、いちばん下に入ります。メッセージは押すと選べて、文字はそのまま書き換えられます。続けて同じ人が送ると、アイコンとしっぽは最初の1つだけに付きます。')),
       m && sec('選んだメッセージ', ...lineMsgControls(l, m)),
       sec('トーク',
         segOf([[false, '1対1'], [true, 'グループ']], !!l.group, (v) => { l.group = v; ed.dirty(); ed.rerender(); }, 'トークの種類'),
@@ -975,7 +981,7 @@
           h('div.sns-acc-f', mirrorField(`line.people.${i}.name`, '名前', l.group ? `メンバー${i + 1}` : '名前')),
           l.group && l.people.length > 1 && h('button.sns-acc-x', { type: 'button', title: 'このメンバーを消す', 'aria-label': 'このメンバーを消す', onclick: () => removePerson(p) }, icon('trash', 14))))),
         l.group && h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: () => { l.people.push(newPerson()); ed.set('line.people', l.people, { rerender: true }); } }, icon('plus'), 'メンバーを追加'),
-        h('p.hint', l.group ? 'グループでは、吹き出しの上に名前が出ます。' : '相手の名前は、トークの名前とは別です(グループにしたときに吹き出しの上に出ます)。')),
+        h('p.hint', l.group ? 'グループでは、吹き出しの上に名前が出ます。' : '相手の名前はトークの名前とは別で、グループにしたときに吹き出しの上に出ます。')),
       sec('背景と色',
         h('div.sns-sw.sns-bg', { role: 'group', 'aria-label': '背景の色' },
           LINE_BGS.map(([c, name]) => h('button', {
@@ -987,11 +993,11 @@
           (l.me || LINE_ME).toLowerCase() !== LINE_ME && h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => ed.set('line.me', LINE_ME, { rerender: true }) }, '緑に戻す')),
         h('div.sns-bgimg',
           h('div.sns-bgimg-slot', ed.image('line.bgImage', { ratio: W / SCREEN_H, compact: true, label: '背景の画像', max: 1600, onChange: () => ed.rerender() })),
-          h('p.hint', '背景の画像(押して選ぶ・ドラッグ・貼り付け)。画面いっぱいに広げて表示します。' + (dark ? '' : '暗い画像のときは、背景の色を「ダーク」にすると文字が白になります。'))),
+          h('p.hint', '背景の画像は押して選ぶか、ドラッグ・貼り付けで入れます。画面いっぱいに広げて表示します。' + (dark ? '' : '暗い画像のときは、背景の色を「ダーク」にすると文字が白になります。'))),
         h('p.hint', '背景の色を暗くすると、相手の吹き出しや上下の帯も暗い画面(ダークモード)用になります。')),
       sec('表示',
         segOf([['screen', 'スマホ1画面'], ['auto', '内容に合わせる']], l.height, (v) => ed.set('line.height', v, { rerender: true }), '画面の高さ'),
-        h('p.hint', l.height === 'screen' ? '1画面に入りきらないときは、古いメッセージが上に隠れます(全部見たいときは「内容に合わせる」)。' : '縦に長い画像になります。'),
+        h('p.hint', l.height === 'screen' ? '1画面に入りきらないときは、古いメッセージが上に隠れます。全部見せるときは「内容に合わせる」にします。' : '縦に長い画像になります。'),
         checkOf('line.show.bar', 'ステータスバー'),
         checkOf('line.show.head', '上の名前の帯'),
         checkOf('line.show.input', '下の入力欄'),
@@ -1028,7 +1034,7 @@
             checkProp(a, 'locked', '鍵'))),
         x.accounts.length > 1 && h('button.sns-acc-x', { type: 'button', title: 'このアカウントを消す', 'aria-label': 'このアカウントを消す', onclick: () => removeAccount(a) }, icon('trash', 14))))),
       h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: () => { x.accounts.push(newAccount()); ed.set('x.accounts', x.accounts, { rerender: true }); } }, icon('plus'), 'アカウントを追加'),
-      h('p.hint', '名前・@ユーザー名・アイコンは、プロフィールとリプの画面で共通です。バッジの「青」は認証済み、「金」は企業などのマーク。「鍵」は非公開アカウント(名前の横に鍵)。'));
+      h('p.hint', '名前・@ユーザー名・アイコンはプロフィールとリプの画面で共通です。バッジの「青」は認証済み、「金」は企業などのマークです。「鍵」にすると非公開アカウントになり、名前の横に鍵が付きます。'));
   }
   function sideXLook(where) {
     const x = ed.state.x, s = ed.state[where];
@@ -1040,7 +1046,7 @@
       lab('画面の高さ'),
       segOf([['auto', '内容に合わせる'], ['screen', 'スマホ1画面']], s.height, (v) => ed.set(`${where}.height`, v, { rerender: true }), '画面の高さ'),
       checkOf('x.views', '表示回数(棒グラフのマーク)'),
-      h('p.hint', '色・言葉・表示回数は、プロフィールとリプの画面で共通です。'));
+      h('p.hint', '色・言葉・表示回数はプロフィールとリプの画面で共通です。'));
   }
   /** 選んだポストの設定 */
   function sideXPost(where, p) {
@@ -1106,12 +1112,12 @@
           checkOf('xprof.show.joined', '利用開始')),
         lab('下に出すもの'),
         segOf([['posts', `${W_.title}の一覧`], ['locked', '非公開(フォロー前に見た画面)']], pr.view, (v) => ed.set('xprof.view', v, { rerender: true }), '下に出すもの'),
-        h('p.hint', '名前・自己紹介・場所などは画面の上で押して書き換えます(空の項目は画像に出ません)。ヘッダー画像は押して選びます。タブは押すと選んだ表示になります。')),
+        h('p.hint', '名前・自己紹介・場所などは画面の上で押して書き換えます。空の項目は画像に出ません。ヘッダー画像は押して選びます。タブは押すと選んだ表示になります。')),
       pr.view !== 'locked' && sec(`${W_.title}を追加`,
         h('div.sns-add',
           h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: () => addPost('xprof', a.id) }, icon('plus'), W_.title),
           h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: () => addPost('xprof', (other || a).id, { label: 'repost' }) }, icon('plus'), W_.repost)),
-        h('p.hint', `${W_.title}は押すと選べます。いいね等の数は、マークの横を押して書き換えます(空なら数を出しません)。`)),
+        h('p.hint', `${W_.title}は押すと選べます。いいね等の数はマークの横を押して書き換えます。空にすると数を出しません。`)),
       p && sideXPost('xprof', p),
       sideAccounts(),
       sideXLook('xprof'),
@@ -1120,7 +1126,7 @@
         checkOf('xprof.show.nav', '下のメニュー'),
         pr.show.nav && fieldOf('xprof.notif', '通知の数', '空なら出さない'),
         pr.show.nav && fieldOf('xprof.dm', x.words === 'tweet' ? 'DMの数' : 'チャットの数', '空なら出さない'),
-        pr.show.nav && h('p.hint', `下のメニューのベル(通知)と${x.words === 'tweet' ? '封筒(DM)' : '吹き出し(チャット)'}の右上に、青い丸で出ます(例: 3、20+)。メッセージのマークは、言葉を「ポスト」にすると吹き出し、「ツイート」にすると封筒になります。`),
+        pr.show.nav && h('p.hint', `書いた数は下のメニューのベル(通知)と${x.words === 'tweet' ? '封筒(DM)' : '吹き出し(チャット)'}の右上に青い丸で出ます(例: 3、20+)。メッセージのマークは、言葉を「ポスト」にすると吹き出し、「ツイート」にすると封筒になります。`),
         pr.show.nav && checkOf('xprof.show.fab', '投稿ボタン(右下の丸)'))
     ].filter(Boolean);
   }
@@ -1130,12 +1136,12 @@
     return [
       sec(`${W_.title}を追加`,
         h('div.sns-add', x.accounts.map((a, i) => h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: () => addPost('xthread', a.id) }, icon('plus'), accTag(i)))),
-        h('p.hint', `選んでいる${W_.title}のすぐ下に入ります。大きく表示する${W_.title}(やり取りの元)より上は、さかのぼったリプとして線でつながります。下は返信で、「下のポストと線でつなぐ」でやり取りの線を付けられます。`)),
+        h('p.hint', `追加した${W_.title}は選んでいる${W_.title}のすぐ下に入ります。大きく表示する${W_.title}(やり取りの元)より上は、さかのぼったリプとして線でつながります。下は返信で、「下のポストと線でつなぐ」でやり取りの線を付けられます。`)),
       p && sideXPost('xthread', p),
       sec('数の出し方',
         segOf([['icons', 'マークの横'], ['row', '文字で並べる']], t.stats, (v) => ed.set('xthread.stats', v, { rerender: true }), '数の出し方'),
         h('p.hint', t.stats === 'row'
-          ? `大きいポストの数を「12 件の${W_.repost}」のように並べます(以前の表示)。数は押して書き換え、空にすると出ません。`
+          ? `大きいポストの数を、以前の表示と同じく「12 件の${W_.repost}」のように並べます。数は押して書き換え、空にすると出ません。`
           : '数はマークの横を押して書き換えます。空にすると数を出しません。')),
       sideAccounts(),
       sideXLook('xthread'),
@@ -1195,7 +1201,7 @@
     const name = MODES.find(([id]) => id === m)[1];
     const isX = m === 'xprof' || m === 'xthread';
     const note = isX ? '(ほかの画面はそのままです。アカウントの名前・アイコンは2つのTwitterの画面で共通なので残します)' : '(ほかの画面はそのままです)';
-    if (!(await U.confirmDialog({ title: 'クリア', message: `「${name}」の画面の入力と画像を消して、最初の状態に戻しますか?${note}`, okLabel: '消す', danger: true }))) return;
+    if (!(await U.confirmDialog({ title: 'この画面を最初に戻す', message: `「${name}」の画面の入力と画像を消して、最初の状態に戻しますか?${note}`, okLabel: '消す', danger: true }))) return;
     ed.state[m] = defaults()[m];
     if (m === 'xprof') ed.state.xprof.acc = ed.state.x.accounts[0].id;
     selected = null;
@@ -1216,9 +1222,8 @@
     modeSeg,
     imp,
     h('span.spacer'),
-    h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: ed.saveJson, title: '3つの画面の入力内容をまとめてファイルに保存' }, icon('save'), '保存'),
-    ed.fileButton('読み込み', ed.loadJson),
-    h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: clearMode, title: 'いま開いている画面だけを最初の状態に戻す' }, icon('trash'), 'クリア'),
+    ed.statusEl,
+    ed.fileMenu({ reset: clearMode, resetLabel: 'この画面を最初に戻す', resetHint: 'いま開いている画面の内容と画像だけを消します' }),
     ed.exportButton(fileName));
 
   /* ---------------------------------------------------------------- 選ぶ・やめる */

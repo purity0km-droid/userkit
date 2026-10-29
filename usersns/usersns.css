@@ -54,6 +54,12 @@ body.sns-dragging, body.sns-dragging * { user-select: none !important; -webkit-u
   .sns-work { grid-template-columns: minmax(0, 1fr); }
   .sns-side { position: static; max-height: none; overflow: visible; }
 }
+/* スマホでは画面の切り替えを 1 行にして横にすべらせる(貼りつくツールバーを低くする) */
+@media (max-width: 760px) {
+  .sns-modes { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .sns-modes::-webkit-scrollbar { display: none; }
+  .sns-modes button { flex: none; padding: 7px 12px; }
+}
 
 /* ---------- 画面の共通 ---------- */
 .sns-sheet {

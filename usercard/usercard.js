@@ -11,9 +11,9 @@ const FW = 12, R = 16, RING = 3, ART_R = 4;
 const H2I_URL = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/dist/html-to-image.js';
 
 const LAYOUTS = {
-  std: { stats: 5, desc: 'トレカの定番の形（63×88mm と同じ縦横比）。名前・大きな絵・プロットと相手・5 つまでの項目・テキスト欄。' },
-  prof: { stats: 7, desc: 'プロフィール帳ふう（縦）。小さめの絵の右に名前とプロット、下に 7 つまでの項目・好きなもの・嫌いなもの・テキスト欄。' },
-  wide: { stats: 5, desc: '横長（88×63mm）。左に縦長の絵、右に名前・5 つまでの項目・テキスト欄。' }
+  std: { stats: 5, desc: 'トレカの定番の形です（63×88mm と同じ縦横比）。名前・大きな絵・プロットと相手・5 つまでの項目・テキスト欄を載せます。' },
+  prof: { stats: 7, desc: '縦長のプロフィール帳ふうです。小さめの絵の右に名前とプロット、下に 7 つまでの項目・好きなもの・嫌いなもの・テキスト欄を載せます。' },
+  wide: { stats: 5, desc: '横長です（88×63mm）。左に縦長の絵、右に名前・5 つまでの項目・テキスト欄を載せます。' }
 };
 const STAT_KEYS = ['age', 'birthday', 'gender', 'height', 'occupation', 'hair', 'eyes'];
 const LIST_KEYS = ['likes', 'dislikes'];
@@ -63,7 +63,7 @@ function dirty() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
     try { await store.set('usercard', { v: 1, state, at: Date.now() }); }
-    catch (e) { U.toast('ブラウザに保存できませんでした(容量をご確認ください)', 'error'); }
+    catch (e) { U.toast('ブラウザに保存できませんでした。容量をご確認ください', 'error'); }
   }, 400);
 }
 async function loadSaved() {
@@ -546,8 +546,8 @@ function loadH2I() {
     h2iPromise = new Promise((resolve, reject) => {
       const s = document.createElement('script');
       s.src = H2I_URL;
-      s.onload = () => (window.htmlToImage ? resolve(window.htmlToImage) : reject(new Error('画像化の部品を読み込めませんでした')));
-      s.onerror = () => { h2iPromise = null; reject(new Error('画像化の部品を読み込めませんでした。通信できる状態で、もう一度お試しください')); };
+      s.onload = () => (window.htmlToImage ? resolve(window.htmlToImage) : reject(new Error('画像を作る部品を読み込めませんでした')));
+      s.onerror = () => { h2iPromise = null; reject(new Error('画像を作る部品を読み込めませんでした。通信できる状態で、もう一度お試しください')); };
       document.head.append(s);
     });
   }
@@ -895,7 +895,7 @@ function muxMp4(chunks, avcC, w, ht, fps) {
 function updateSizeNote() {
   if (!geo) return;
   const png = state.shape === 'tilt' ? stageSize(geo, EXPORT_SCALE) : { ow: geo.W * EXPORT_SCALE, oh: geo.H * EXPORT_SCALE }, mp4 = stageSize(geo, VIDEO_SCALE);
-  $('sizeNote').textContent = `${png.ow} × ${png.oh} px の PNG。角度を固定していればその角度、していなければ平らなまま書き出します。`;
+  $('sizeNote').textContent = `${png.ow} × ${png.oh} px の PNG です。角度を固定していればその角度で、固定していなければ平らなまま書き出します。`;
   $('videoNote').textContent = `${mp4.ow} × ${mp4.oh} px・${VIDEO_SEC} 秒で 1 周（${VIDEO_FPS} コマ/秒）・MP4（音なし）。形は上の「まっすぐ／傾けたまま」に合わせ、どちらも暗い台の上に置きます。作るのに数秒〜十数秒かかります。`;
 }
 /** 書き出した物を見せて、保存するか選んでもらう */

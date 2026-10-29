@@ -20,6 +20,10 @@
 .hc-sec+.hc-sec{padding-top:18px;border-top:1px solid var(--line)}
 .hc-sec h2{font-size:14px;color:var(--heading)}
 .hc-row{display:flex;flex-wrap:wrap;gap:8px}
+/* 保存のボタン。設定の欄の下に貼りつける(パネルの余白の分だけ外へ広げ、下の角はパネルと同じ丸み) */
+.hc-actions{position:sticky;bottom:0;z-index:2;display:flex;flex-wrap:wrap;gap:8px;margin:0 -20px -20px;padding:14px 20px 16px;
+  background:rgba(255,255,255,.96);backdrop-filter:blur(6px);border-top:1px solid var(--line);border-radius:0 0 var(--radius) var(--radius)}
+.hc-actions .btn{flex:1 1 140px}
 .hc-checks{display:flex;flex-wrap:wrap;gap:6px 14px}
 .hc-color{display:flex;align-items:center;gap:10px}
 .hc-color input{width:44px;height:32px;padding:0;border:1px solid var(--line-strong);border-radius:8px;background:none}

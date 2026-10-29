@@ -33,7 +33,13 @@
 
   const app = document.getElementById('app');
   const toolbar = h('div.ed-toolbar');
-  const tip = h('p.ed-tip', '文字は押してそのまま書けます。画像の枠はクリック・ドラッグ・貼り付け(Ctrl+V)で追加、ホイールや2本指で拡大、ドラッグで位置を合わせられます。人物は4人まで増やせます。内容はこのブラウザに自動で保存されます。');
+  const tip = Ed.help('userline', [
+    '文字は押してそのまま書けます。',
+    '画像の枠にはクリック・ドラッグ・貼り付け（Ctrl+V）で画像を入れます。ホイールや2本指で拡大し、ドラッグで位置を合わせます。',
+    '人物は4人まで増やせます。',
+    '内容はこのブラウザに自動で保存されます。控えは「ファイル」から .json ファイルとして書き出せます。',
+    '「画像で保存」は Ctrl+S（Mac は ⌘S）でもできます。'
+  ]);
   app.append(toolbar, tip);
 
   const ed = Ed.create({ app: 'userline', version: 1, width: 760, defaults, migrate, render, mount: app });
@@ -131,9 +137,8 @@
       Ed.showPicker(ed, 'show', [['profile', 'PROFILE'], ['timeline', 'TIMELINE'], ['banner', 'TIMELINEの画像'], ['summary', 'SUMMARY'], ['relation', 'RELATION'], ['foot', '下の一文']]),
       imp,
       h('span.spacer'),
-      h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: ed.saveJson, title: '入力内容をファイルに保存' }, icon('save'), '保存'),
-      ed.fileButton('読み込み', ed.loadJson),
-      h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => ed.reset().then(renderToolbar) }, icon('trash'), 'クリア'),
+      ed.statusEl,
+      ed.fileMenu({ reset: () => ed.reset().then(renderToolbar) }),
       ed.exportButton(() => `userline_${U.safeName(ed.state.title || ed.state.people.map((p) => p.name).filter(Boolean).join('_'), 'card')}.png`));
   }
 
