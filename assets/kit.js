@@ -84,7 +84,9 @@
     arrow: '<path d="M4 12h16m0 0-5-5m5 5-5 5"/>',
     swap: '<path d="M4 8h14m0 0-4-4m4 4-4 4M20 16H6m0 0 4-4m-4 4 4 4"/>',
     book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5M8 7h7"/>',
-    phone: '<rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/>'
+    phone: '<rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/>',
+    card: '<rect x="5" y="2.5" width="14" height="19" rx="2"/><circle cx="14.5" cy="7" r="2"/><path d="M8 13h8M8 16.5h5"/>',
+    clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'
   };
   function icon(name, size) {
     const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -297,55 +299,76 @@
   }
 
   /* ---------- ツール一覧 / 共通バー ---------- */
+  // 目的ごとのまとまり。tint はそのまとまりのツールの目印の色(アイコンの台・メニューの印・更新履歴の札)
+  const GROUPS = [
+    { id: 'note', label: '書きためる', desc: 'userの設定を、あとから見返せる形で手元に残す', tint: '#6d5dfc' },
+    { id: 'make', label: '画像にする', desc: 'プロフィールや2人の関係を、1枚の画像や短い動画に', tint: '#d0507a' },
+    { id: 'keep', label: '隠す・残す', desc: 'スクショの名前を隠し、トークを手元に保存する', tint: '#138a7e' }
+  ];
+  // 並びはメニュー・トップの順。out はできあがる物(トップの札)
   const TOOLS = [
-    { id: 'userprof', label: 'プロフィール帳', icon: 'book',
+    { id: 'userprof', group: 'note', label: 'プロフィール帳', icon: 'book', out: ['ブラウザに保存', 'テキスト'],
       desc: 'userのプロフィール・年表・設定メモ・画像を、プロットごとにまとめて保存。zetaのユーザープロフィール(1000字)の保存と字数調整も。' },
-    { id: 'usermask', label: '名前・アイコン隠し', icon: 'mask',
-      desc: 'スクショのユーザー名やアイコンを、なぞるだけで隠す。登録した名前は次の画像から自動で見つけます。' },
-    { id: 'talklog', label: 'トーク保存', icon: 'bubble',
-      desc: 'zetaのトークを、吹き出しのまま読めるHTMLファイルとして手元に保存。書き出したログの閲覧も。' },
-    { id: 'userpair', label: 'ペアプロフィール', icon: 'pair',
+    { id: 'userpair', group: 'make', label: 'ペアプロフィール', icon: 'pair', out: ['PNG'],
       desc: '2人(または1人)のキャラシートを作って、画像で保存。userprofのプロフィールも読み込めます。' },
-    { id: 'userline', label: 'タイムラインペアカード', icon: 'timeline',
+    { id: 'userline', group: 'make', label: 'タイムラインペアカード', icon: 'timeline', out: ['PNG'],
       desc: 'プロフィール・年表・まとめ・関係を1枚に。縦長のタイムライン風カードを画像で保存。' },
-    { id: 'usersns', label: 'SNS風画面', icon: 'phone',
-      desc: 'セットログ風のVlog画面(2〜4人)、インスタ風の投稿・ストーリー、LINE風のトーク、Twitter風のプロフィール・リプ画面を、切り替えて作って画像で保存。' }
+    { id: 'usersns', group: 'make', label: 'SNS風画面', icon: 'phone', out: ['PNG'],
+      desc: 'セットログ風のVlog画面(2〜4人)、インスタ風の投稿・ストーリー、LINE風のトーク、Twitter風のプロフィール・リプ画面を、切り替えて作って画像で保存。' },
+    { id: 'usercard', group: 'make', label: 'ホロカード', icon: 'card', out: ['PNG', 'MP4'],
+      desc: 'userのプロフィールを、ホロ箔や単色の箔押しのトレカ風カードに。画像と短い動画で保存。userprofのプロフィールも読み込めます。' },
+    { id: 'usermask', group: 'keep', label: '名前・アイコン隠し', icon: 'mask', out: ['PNG'],
+      desc: 'スクショのユーザー名やアイコンを、なぞるだけで隠す。登録した名前は次の画像から自動で見つけます。' },
+    { id: 'talklog', group: 'keep', label: 'トーク保存', icon: 'bubble', out: ['HTML', 'テキスト'],
+      desc: 'zetaのトークを、吹き出しのまま読めるHTMLファイルとして手元に保存。書き出したログの閲覧も。' }
   ];
   const toolUrl = (id) => new URL(id ? id + '/' : './', BASE).href;
+  const groupOf = (toolId) => GROUPS.find((g) => g.id === (TOOLS.find((t) => t.id === toolId) || {}).group);
+  /** ツールの目印の色(ツールでなければメインの色) */
+  const tintOf = (toolId) => (groupOf(toolId) || GROUPS[0]).tint;
 
   function mountBar(currentId) {
     const cur = TOOLS.find((t) => t.id === currentId);
+    const link = (t) => h('a' + (t.id === currentId ? '.current' : ''), {
+      href: toolUrl(t.id), 'aria-current': t.id === currentId ? 'page' : null, style: { '--tint': tintOf(t.id) }
+    }, h('span.kit-menu-ic', icon(t.icon)), h('span', h('b', t.id), h('small', t.label)));
     const menu = h('details.kit-menu',
       h('summary', { 'aria-label': 'ツールを切り替える' }, icon('menu'), h('span', 'ツール')),
       h('nav.kit-menu-list', { 'aria-label': 'userkit のツール' },
-        h('a', { href: toolUrl('') }, icon('sparkle'), h('span', h('b', 'userkit'), h('small', 'ツール一覧'))),
-        TOOLS.map((t) => h('a' + (t.id === currentId ? '.current' : ''), {
-          href: toolUrl(t.id), 'aria-current': t.id === currentId ? 'page' : null
-        }, icon(t.icon), h('span', h('b', t.id), h('small', t.label))))));
+        GROUPS.map((g) => h('div.kit-menu-grp', h('p.kit-menu-label', { style: { '--tint': g.tint } }, g.label),
+          TOOLS.filter((t) => t.group === g.id).map(link))),
+        h('div.kit-menu-foot',
+          h('a', { href: toolUrl('') }, icon('sparkle', 16), 'ツール一覧'),
+          h('a', { href: toolUrl('changelog') }, icon('clock', 16), '更新履歴'))));
     document.addEventListener('click', (e) => { if (menu.open && !menu.contains(e.target)) menu.open = false; });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && menu.open) { menu.open = false; menu.querySelector('summary').focus(); } });
     const bar = h('header.kitbar',
       h('a.kit-brand', { href: toolUrl(''), 'aria-label': 'userkit トップへ' },
         h('span.kit-mark', icon('bubble', 18)), h('span.kit-word', 'user', h('b', 'kit'))),
-      cur && h('span.kit-sep', '/'),
-      cur && h('span.kit-tool', h('b', cur.id), h('small', cur.label)),
+      cur && h('span.kit-tool', { style: { '--tint': tintOf(cur.id) } }, h('b', cur.id), h('small', cur.label)),
+      currentId === 'changelog' && h('span.kit-tool', h('b', '更新履歴')),
       h('span.kit-spacer'),
+      currentId !== 'changelog' && h('a.kit-link', { href: toolUrl('changelog') }, icon('clock', 16), h('span', '更新履歴')),
       menu);
     document.body.prepend(bar);
     return bar;
   }
 
-  function footer(extra) {
+  /** 共通の足もと。o.repo が true のときだけ GitHub のリポジトリへのリンクを出す(トップだけ) */
+  function footer(extra, o) {
     return h('footer.kit-footer',
       extra && h('p', extra),
+      h('nav.kit-footer-nav', { 'aria-label': 'userkit の案内' },
+        h('a', { href: toolUrl('') }, 'ツール一覧'),
+        h('a', { href: toolUrl('changelog') }, '更新履歴'),
+        o && o.repo && h('a', { href: 'https://github.com/purity0km-droid/userkit', target: '_blank', rel: 'noopener' }, 'GitHub')),
       h('p', 'AIチャット「zeta」向けの非公式ファンメイドツールです。zeta公式とは関係ありません。'),
-      h('p', '入力した内容や画像は、この端末のブラウザの中だけで処理・保存されます。どこにも送信しません。'),
-      h('p', h('a', { href: toolUrl('') }, 'userkit'), ' ・ ',
-        h('a', { href: 'https://github.com/purity0km-droid/userkit', target: '_blank', rel: 'noopener' }, 'GitHub')));
+      h('p', '入力した内容や画像は、この端末のブラウザの中だけで処理・保存されます。どこにも送信しません。'));
   }
 
   window.U = {
     h, append, icon, hydrateIcons, toast, copyText, openDialog, confirmDialog, uid, norm, fmtDate, stamp, safeName,
     download, downloadBlob, saveImage, loadImage, fileToDataUrl, imageFromPaste, kv, isTouch
   };
-  window.Kit = { TOOLS, BASE, toolUrl, mountBar, footer };
+  window.Kit = { GROUPS, TOOLS, BASE, toolUrl, groupOf, tintOf, mountBar, footer };
 })();

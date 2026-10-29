@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>usercard — ホロカードメーカー</title>
+  <meta name="description" content="userのプロフィールを、ホロ箔や単色箔のトレーディングカード風の画像(PNG)と短い動画(MP4)にするツール。userprofに保存したプロフィールも読み込めます。">
+  <meta name="theme-color" content="#6d5dfc">
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/kit.css">
+  <link rel="stylesheet" href="../assets/editor.css">
+  <link rel="stylesheet" href="usercard.css">
+</head>
+<body>
+<main class="hc-app">
+  <div class="page-head">
+    <div>
+      <h1>ホロカード</h1>
+      <p class="lead">user のプロフィールを、トレーディングカード風の画像にします。箔をかけるのは縁取りとマークだけで、文字にはかけません。どこにも送らず、このブラウザの中だけで作ります。</p>
+    </div>
+  </div>
+  <div class="hc-work">
+    <section class="hc-stage css-mode" id="stage" aria-label="カードの見え方">
+      <canvas id="gl"></canvas>
+      <div class="hc-holder" id="holder"><div class="hc-card" id="card"></div></div>
+      <p class="hc-pin" id="pinNote" hidden>角度を固定中</p>
+      <p class="hc-mode" id="mode"></p>
+    </section>
+
+    <aside class="hc-side panel">
+      <section class="hc-sec">
+        <h2>割り付け</h2>
+        <div class="seg" id="layoutSeg" role="group" aria-label="割り付け">
+          <button type="button" data-layout="std">スタンダード</button>
+          <button type="button" data-layout="prof">プロフィール帳</button>
+          <button type="button" data-layout="wide">横長</button>
+        </div>
+        <p class="hint" id="layoutDesc"></p>
+      </section>
+
+      <section class="hc-sec">
+        <h2>中身</h2>
+        <div class="hc-row">
+          <button type="button" class="btn btn-outline btn-sm" id="fromProf">userprof から読み込む</button>
+          <button type="button" class="btn btn-outline btn-sm" id="pickImg">画像を選ぶ</button>
+          <input type="file" accept="image/*" id="imgFile" hidden>
+          <button type="button" class="btn btn-ghost btn-sm" id="resetSample">見本に戻す</button>
+        </div>
+        <div class="grid-2">
+          <div class="field"><label for="fName">名前</label><input type="text" id="fName" data-k="name"></div>
+          <div class="field"><label for="fSub">読み・英字</label><input type="text" id="fSub" data-k="sub"></div>
+          <div class="field"><label for="fNo">番号</label><input type="text" id="fNo" data-k="no"></div>
+          <div class="field"><label for="fEmb">マークの字 <small>空なら名前の1字目</small></label><input type="text" id="fEmb" data-k="emb" maxlength="3"></div>
+        </div>
+        <div class="field"><label for="fBirth">生年月日 <small>userprof には無いので、ここに書く</small></label><input type="text" id="fBirth" data-k="birthday" placeholder="例: 2009年4月18日・4月18日"></div>
+        <div class="field"><label for="fText">テキスト欄 <small>空なら出さない</small></label><textarea id="fText" data-k="text" rows="3"></textarea></div>
+        <div class="field"><span class="label">載せる項目</span><div class="hc-checks" id="checks"></div></div>
+        <div class="grid-2">
+          <div class="field"><label for="fPosY">絵の位置（上下）</label><input type="range" id="fPosY" data-k="posY" min="0" max="100"></div>
+          <div class="field"><label for="fZoom">絵の大きさ</label><input type="range" id="fZoom" data-k="zoom" min="100" max="250"></div>
+        </div>
+        <div class="field"><span class="label">目印の色</span><span class="hc-color"><input type="color" id="fColor" data-k="color" aria-label="目印の色"><small class="hint">項目名・帯・マークの線の色。userprof の目印の色を使います</small></span></div>
+      </section>
+
+      <section class="hc-sec">
+        <h2>箔</h2>
+        <div class="field"><span class="label">箔の種類</span>
+          <div class="seg" id="foilKindSeg" role="group" aria-label="箔の種類">
+            <button type="button" data-foil="holo">ホロ箔</button>
+            <button type="button" data-foil="mono">単色箔押し（艶あり）</button>
+          </div>
+        </div>
+        <div class="field" id="foilColorField" hidden><span class="label">箔の色</span>
+          <span class="hc-color"><input type="color" id="fFoil" data-k="foilColor" aria-label="箔の色"><span class="hc-swatches" id="foilSwatches"></span></span>
+        </div>
+        <div class="field"><span class="label">箔をかける所</span>
+          <div class="seg" id="foilSeg" role="group" aria-label="箔をかける所">
+            <button type="button" data-art="0">縁とマーク</button>
+            <button type="button" data-art="1">縁とマークと絵</button>
+          </div>
+        </div>
+        <p class="hint" id="foilHint"></p>
+      </section>
+
+      <section class="hc-sec">
+        <h2>角度</h2>
+        <p class="hint">カードを押すと、その角度で止まります（もう一度押すと戻ります）。スマホは指でなぞって、離した角度で止まります。</p>
+        <div class="grid-2">
+          <div class="field"><label for="tiltU">左右 <small id="tiltUv">0</small></label><input type="range" id="tiltU" min="-100" max="100" value="0"></div>
+          <div class="field"><label for="tiltV">上下 <small id="tiltVv">0</small></label><input type="range" id="tiltV" min="-100" max="100" value="0"></div>
+        </div>
+        <div class="hc-row"><button type="button" class="btn btn-ghost btn-sm" id="unpin">固定を外す</button></div>
+      </section>
+
+      <section class="hc-sec">
+        <h2>書き出し</h2>
+        <div class="seg" id="shapeSeg" role="group" aria-label="書き出す形">
+          <button type="button" data-shape="flat">まっすぐ（角は透明）</button>
+          <button type="button" data-shape="tilt">傾けたまま（背景つき）</button>
+        </div>
+        <p class="hint" id="sizeNote"></p>
+        <div class="hc-row"><button type="button" class="btn btn-primary" id="exportBtn">PNG で保存</button></div>
+        <div class="field"><span class="label">短い動画の動き</span>
+          <div class="seg" id="motionSeg" role="group" aria-label="短い動画の動き">
+            <button type="button" data-motion="sway">左右にゆらす</button>
+            <button type="button" data-motion="circle">ぐるりと回す</button>
+          </div>
+        </div>
+        <p class="hint" id="videoNote"></p>
+        <div class="hc-row"><button type="button" class="btn btn-outline" id="videoBtn">短い動画で保存</button></div>
+      </section>
+    </aside>
+  </div>
+</main>
+<div id="exportHost" aria-hidden="true"></div>
+
+<script src="../assets/kit.js"></script>
+<script src="../assets/colorpick.js"></script>
+<script src="../assets/editor.js"></script>
+<script src="../userprof/js/store.js"></script>
+<script src="usercard.js"></script>
+</body>
+</html>

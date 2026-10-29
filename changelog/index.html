@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>更新履歴 — userkit</title>
+  <meta name="description" content="userkit(zetaのuser向け非公式ツール集)のすべてのツールの更新履歴。">
+  <meta name="theme-color" content="#6d5dfc">
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/kit.css">
+  <style>
+    .logs { max-width: 880px; margin: 0 auto; padding: 32px 20px 0; }
+    /* ツールで絞り込む札。狭い画面では横にすべらせる */
+    .ch-filter { display: flex; gap: 6px; margin: 4px 0 26px; padding-bottom: 4px; overflow-x: auto; scrollbar-width: thin; }
+    .ch-filter button { flex: none; height: 32px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); font-size: 12.5px; font-weight: 700; color: var(--muted); }
+    .ch-filter button:hover { color: var(--text); background: var(--soft); }
+    .ch-filter button[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: #fff; }
+    /* 1 日ずつ。左に日付、右に項目 */
+    .ch-day { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 20px; padding: 18px 0; border-top: 1px solid var(--line); }
+    .ch-day h2 { font-size: 14px; line-height: 1.7; color: var(--muted); }
+    .ch-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+    .ch-list .ch-item { font-size: 14.5px; }
+    .ch-list .ch-tags { min-width: 84px; }  /* 札の幅をそろえて、文の頭を縦にそろえる */
+    .ch-none { padding: 30px 0; color: var(--muted); border-top: 1px solid var(--line); }
+    @media (max-width: 600px) {
+      .logs { padding: 22px 16px 0; }
+      .ch-day { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+      .ch-list .ch-item { flex-direction: column; gap: 4px; }
+      .ch-list .ch-tags { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <main class="logs">
+    <div class="page-head">
+      <div>
+        <h1>更新履歴</h1>
+        <p class="lead">userkit のすべてのツールの更新を、新しい順にまとめています。</p>
+      </div>
+    </div>
+    <div class="ch-filter" id="filter" role="group" aria-label="ツールで絞り込む"></div>
+    <div id="days"></div>
+  </main>
+
+  <script src="../assets/kit.js"></script>
+  <script src="../assets/changelog.js"></script>
+  <script>
+    (function () {
+      const { h } = U;
+      const filter = document.getElementById('filter'), days = document.getElementById('days');
+      // 札: すべて / 全体(userkit) / 履歴のあるツール(Kit.TOOLS の並び)
+      const used = new Set(Kit.CHANGELOG.flatMap((e) => e[1]));
+      const keys = [['', 'すべて'], ['userkit', 'userkit 全体'], ...Kit.TOOLS.filter((t) => used.has(t.id)).map((t) => [t.id, t.id])];
+      let cur = keys.some(([k]) => k === location.hash.slice(1)) ? location.hash.slice(1) : '';
+      filter.append(...keys.map(([k, label]) => h('button', { type: 'button', 'data-k': k }, label)));
+      filter.addEventListener('click', (e) => {
+        const b = e.target.closest('button');
+        if (!b) return;
+        cur = b.dataset.k;
+        history.replaceState(null, '', cur ? '#' + cur : location.pathname);
+        render();
+      });
+      function render() {
+        for (const b of filter.children) b.setAttribute('aria-pressed', String(b.dataset.k === cur));
+        const list = Kit.CHANGELOG.filter((e) => !cur || (cur === 'userkit' ? !e[1].length : e[1].includes(cur)));
+        days.replaceChildren(...(list.length ? Kit.changeDays(list).map(([d, items]) => h('section.ch-day',
+          h('h2', h('time', { datetime: d }, Kit.fmtDay(d))),
+          h('ul.ch-list', items.map(Kit.changeItem)))) : [h('p.ch-none', 'この絞り込みでは、まだ更新がありません。')]));
+      }
+      Kit.mountBar('changelog');
+      render();
+      const on = filter.querySelector('[aria-pressed="true"]');
+      if (on) filter.scrollLeft = on.offsetLeft - filter.offsetLeft - 16;  // #talklog などで開いたとき、選んだ札を見える所に
+      document.body.append(Kit.footer());
+    })();
+  </script>
+</body>
+</html>

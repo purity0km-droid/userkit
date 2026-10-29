@@ -1,0 +1,132 @@
+/* usercard — ホロカード（トレカ風の書き出し）。カードの見た目は ToolsHub のショップカードの箔を流用 */
+
+/* ===== ページ（作業画面） */
+.hc-app{max-width:1180px;margin:0 auto;padding:22px 16px 8px}
+.hc-app .page-head{margin-bottom:0}
+.hc-app .lead{max-width:70ch}
+.hc-work{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:18px;align-items:start;margin-top:16px}
+.hc-stage{position:sticky;top:calc(var(--kitbar-h) + 12px);height:clamp(480px,calc(100vh - var(--kitbar-h) - 40px),700px);border-radius:16px;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 42%,#30263f,#0b0a12 75%);touch-action:none;user-select:none;-webkit-user-select:none}
+.hc-stage.over{cursor:pointer}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:none}
+.hic-mode #gl{display:block}
+.hc-holder{position:absolute;left:50%;top:50%;transform:translate(-50%,calc(-50% - 8px)) scale(var(--fit,1));perspective:2200px}
+.hic-mode .hc-holder{display:none}
+.hic-mode .hc-face,.hic-mode .hc-emb{pointer-events:none}
+.hc-mode{position:absolute;left:14px;bottom:10px;margin:0;font-size:11px;color:rgba(255,255,255,.5)}
+.hc-pin{position:absolute;right:12px;top:10px;margin:0;padding:3px 10px;border-radius:999px;font-size:11.5px;color:#fff;background:rgba(255,255,255,.14)}
+.hc-side{display:flex;flex-direction:column;gap:20px}
+.hc-sec{display:flex;flex-direction:column;gap:10px}
+.hc-sec+.hc-sec{padding-top:18px;border-top:1px solid var(--line)}
+.hc-sec h2{font-size:14px;color:var(--heading)}
+.hc-row{display:flex;flex-wrap:wrap;gap:8px}
+.hc-checks{display:flex;flex-wrap:wrap;gap:6px 14px}
+.hc-color{display:flex;align-items:center;gap:10px}
+.hc-color input{width:44px;height:32px;padding:0;border:1px solid var(--line-strong);border-radius:8px;background:none}
+.hc-side .seg{flex-wrap:wrap}
+.hc-swatches{display:flex;flex-wrap:wrap;gap:6px}
+.hc-swatch{width:28px;height:28px;padding:0;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px var(--line-strong);cursor:pointer}
+.hc-swatch[aria-pressed=true]{box-shadow:0 0 0 2px var(--primary)}
+.hc-out{display:block;max-width:100%;max-height:62vh;margin:0 auto;border-radius:6px;
+  background:repeating-conic-gradient(#e9e6f3 0 25%,#fff 0 50%) 0 0/18px 18px}
+#exportHost{position:fixed;left:-10000px;top:0;pointer-events:none}
+@media(max-width:920px){
+  .hc-work{grid-template-columns:minmax(0,1fr)}
+  .hc-stage{position:relative;top:0;height:min(600px,calc((100vw - 32px) * 1.42 + 40px))}
+}
+
+/* ===== カード（HTML-in-Canvas・CSS だけ・書き出しで共通の見た目）。字は端末の字体だけ（書き出しと同じにするため） */
+.hc-face{--card-font:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic","Meiryo",system-ui,sans-serif;
+  --en-font:"Segoe UI","Helvetica Neue",Arial,sans-serif;--fw:12px;--r:16px;--ring:3px;--art-r:4px;
+  position:relative;width:360px;height:504px;padding:var(--fw);border-radius:var(--r);background:var(--frame);
+  color:#1f1b2b;font:400 12px/1.6 var(--card-font);letter-spacing:.02em;text-align:left}
+.hc-face[data-layout=wide]{width:504px;height:360px}
+.hc-panel{position:relative;display:flex;flex-direction:column;gap:6px;height:100%;padding:12px 14px 10px;border-radius:calc(var(--r) - var(--fw));background:#fdfcff;overflow:hidden}
+.hc-head{min-width:0;padding-right:62px}
+.hc-sub{margin:0;font:700 9.5px/1.3 var(--en-font);letter-spacing:.22em;text-transform:uppercase;color:var(--mark-dk)}
+.hc-name{margin:1px 0 0;font:700 21px/1.3 var(--card-font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hc-artbox{position:relative;flex:none;padding:var(--ring);border-radius:calc(var(--art-r) + var(--ring));background:var(--frame)}
+.hc-art{position:relative;height:180px;overflow:hidden;border-radius:var(--art-r);background:var(--mark-soft)}
+.hc-art img{display:block;width:100%;height:100%;object-fit:cover;object-position:50% var(--py,50%);transform:scale(var(--zoom,1));transform-origin:50% var(--py,50%)}
+.hc-art.empty{display:grid;place-items:center;background:linear-gradient(160deg,var(--mark-soft),var(--frame))}
+.hc-art.empty span{font:800 64px/1 var(--card-font);color:var(--mark);opacity:.35}
+.hc-type{display:flex;align-items:center;gap:8px;min-width:0;margin:2px 0 0;font-size:11.5px;font-weight:700;color:var(--mark-dk);white-space:nowrap;overflow:hidden}
+.hc-bar{flex:none;width:3px;height:13px;border-radius:2px;background:var(--mark)}
+.hc-plot{overflow:hidden;text-overflow:ellipsis}
+.hc-face small{margin-right:5px;font-size:10px;font-weight:700;color:#8a8499}
+.hc-stats{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-auto-flow:row dense;gap:0 12px;margin:0}  /* 2 列にまたがる項目の後ろの空きを詰める */
+.hc-stats div{display:flex;align-items:baseline;gap:6px;min-width:0;padding:2px 0;border-bottom:1px solid #eeebf4}
+.hc-stats div.wide{grid-column:1/-1}
+.hc-stats dt{flex:none;font-size:10px;font-weight:700;color:#8a8499}
+.hc-stats dd{margin:0;font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hc-text{flex:1 1 auto;min-height:0;overflow:hidden;padding:7px 10px;border-radius:4px;background:var(--mark-soft)}
+.hc-text p{margin:0;font-size:11.5px;line-height:1.75;color:#2b2638;white-space:pre-line;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:var(--clamp,99);overflow:hidden}
+.hc-gap{flex:1 1 auto}
+.hc-line{margin:0;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hc-foot{display:flex;justify-content:space-between;gap:8px;margin:0;font:700 8.5px/1 var(--en-font);letter-spacing:.16em;text-transform:uppercase;color:#9a94a8}
+/* マークの置き場所は、CSS だけのときに縁・絵の縁へ重ねる虹色（z-index 3）より上に */
+.hc-emb-slot{position:absolute;z-index:4;top:10px;right:10px;width:58px;height:58px;border-radius:50%;background:#fdfcff;box-shadow:0 2px 8px rgba(30,20,60,.28)}
+/* スタンダード: 余った高さは絵が使う（文が長いと絵が縮み、最小より縮むときは文を行の切れ目で切る） */
+.hc-face[data-layout=std] .hc-emb-slot{top:30px}
+.hc-face[data-layout=std] .hc-artbox{display:flex;flex:1 1 0;min-height:150px}
+.hc-face[data-layout=std] .hc-art{flex:1;height:auto}
+.hc-face[data-layout=std] .hc-text{flex:0 1 auto}
+/* プロフィール帳: 小さめの絵の右に名前、下に項目の表・好きなもの・テキスト欄 */
+.hc-top{display:grid;grid-template-columns:124px minmax(0,1fr);gap:12px;align-items:start}
+.hc-face[data-layout=prof] .hc-art{height:150px}
+.hc-top-r{display:flex;flex-direction:column;gap:4px;min-width:0;padding-top:2px}
+.hc-top-r .hc-head{margin-bottom:6px;padding-bottom:8px;border-bottom:2px solid var(--mark)}
+.hc-top-r .hc-name{white-space:normal;line-height:1.25}
+.hc-kv{margin:0;font-size:11.5px;line-height:1.5}
+.hc-kv small{display:block;margin:0}
+.hc-face[data-layout=prof] .hc-stats{margin-top:2px}
+.hc-chiprow{display:flex;align-items:flex-start;gap:6px}
+.hc-chiprow small{flex:none;padding-top:2px}
+.hc-chips{display:flex;flex-wrap:wrap;gap:4px;max-height:42px;overflow:hidden}
+.hc-chip{padding:0 8px;border-radius:999px;background:var(--mark-soft);font-size:10.5px;line-height:19px}
+/* テキスト欄は罫線のメモ欄（余った高さはここ） */
+.hc-face[data-layout=prof] .hc-text{border:1px solid var(--mark-line);background:#fdfcff repeating-linear-gradient(transparent 0 19.125px,var(--mark-line) 19.125px 20.125px) content-box}
+/* 横長: 左に縦長の絵、右に文字 */
+.hc-face[data-layout=wide] .hc-panel{flex-direction:row;gap:14px}
+.hc-face[data-layout=wide] .hc-artbox{display:flex;width:172px}
+.hc-face[data-layout=wide] .hc-art{flex:1;height:auto}
+.hc-col{display:flex;flex-direction:column;gap:6px;flex:1;min-width:0}
+.hc-face[data-layout=wide] .hc-text{flex:0 1 auto}  /* 余った高さは項目とテキスト欄の間の余白に */
+/* マーク（箔）。書き出しと HTML-in-Canvas ではカードとは別に描いて重ねる */
+.hc-emb{position:relative;width:58px;height:58px;border-radius:50%;color:var(--emb)}
+.hc-emb-slot>.hc-emb{position:absolute;inset:0}
+.hc-emb-ring{position:absolute;inset:0;border:2px solid var(--emb);border-radius:50%}
+.hc-emb-ring.in{inset:5px;border-width:1px}
+.hc-emb-ch{position:absolute;inset:0;display:grid;place-items:center;font:800 24px/1 "Hiragino Sans","Yu Gothic UI","Meiryo",system-ui,sans-serif}
+
+/* ===== CSS だけのとき: 縁・絵の縁・マークに虹色を重ね、ポインタで傾ける（文字の上には重ねない） */
+.hc-card{--u:.5;--v:.5;--hv:0;--band:50;--hx:.5;--hy:.5;
+  --rainbow:repeating-linear-gradient(125deg,#f3b0d4 0,#b2caf6 36px,#bdeebb 72px,#f6dda8 108px,#d2b3f6 144px,#f3b0d4 180px);
+  --rainbow-deep:repeating-linear-gradient(125deg,#c9478f 0,#4f78dc 14px,#2f9e70 28px,#c9902a 42px,#8a4fd0 56px,#c9478f 70px);
+  --sheen:linear-gradient(115deg,transparent calc(var(--band) * 1% - 22%),rgba(255,255,255,.7) calc(var(--band) * 1%),transparent calc(var(--band) * 1% + 22%));
+  --lines:repeating-linear-gradient(115deg,rgba(255,255,255,.22) 0 1px,transparent 1px 3px);
+  /* 虹（箔の濃淡）の層はカードより十分大きくして、ずらしても敷き詰めの継ぎ目が出ないように */
+  --rb-size:1200px 1200px;--rb-pos:calc(var(--hx) * 240px - 400px) calc(var(--hy) * 240px - 400px);
+  transform:rotateX(calc(var(--tx,0) * 1rad)) rotateY(calc(var(--ty,0) * 1rad)) translateZ(calc(var(--lift,0) * 1px))}
+.css-mode .hc-face{box-shadow:0 30px 50px -22px rgba(0,0,0,.75)}
+.css-mode .hc-face::after,.css-mode .hc-artbox::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;border-radius:inherit;opacity:.92;
+  background-image:var(--sheen),var(--lines),var(--rainbow);background-size:auto,auto,var(--rb-size);background-position:0 0,0 0,var(--rb-pos);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
+.css-mode .hc-face::after{padding:var(--fw);
+  background-image:radial-gradient(circle at calc(var(--u) * 100%) calc(var(--v) * 100%),rgba(255,255,255,calc(var(--hv) * .6)),transparent 40%),var(--sheen),var(--lines),var(--rainbow);
+  background-size:auto,auto,auto,var(--rb-size);background-position:0 0,0 0,0 0,var(--rb-pos)}
+.css-mode .hc-artbox::after{padding:var(--ring)}
+.css-mode .hc-emb-ring{border-color:transparent;background-image:var(--sheen),var(--rainbow-deep);background-size:auto,var(--rb-size);
+  background-position:0 0,var(--rb-pos);background-origin:border-box;background-clip:border-box;
+  -webkit-mask:linear-gradient(#000 0 0) padding-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) padding-box,linear-gradient(#000 0 0);mask-composite:exclude}
+.css-mode .hc-emb-ch{background-image:var(--rainbow-deep);background-size:var(--rb-size);background-position:var(--rb-pos);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.css-mode.art-holo .hc-art::after{content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:soft-light;opacity:.75;
+  background-image:var(--sheen),var(--lines),var(--rainbow);background-size:auto,auto,var(--rb-size);background-position:0 0,0 0,var(--rb-pos)}
+/* 単色箔押し（艶あり）: 虹の代わりに箔の色の濃淡。細い筋は無し、縁は箔で覆う。マークは白い円の上で読めるよう濃いめ。絵には色を付けず艶だけ */
+.foil-mono .hc-card{--rainbow:repeating-linear-gradient(115deg,var(--foil-dk) 0,var(--foil-lt) 70px,var(--foil) 120px,var(--foil-lt) 170px,var(--foil-dk) 240px);
+  --rainbow-deep:repeating-linear-gradient(115deg,var(--foil-xdk) 0,var(--foil) 30px,var(--foil-dk) 60px);--lines:linear-gradient(transparent,transparent)}
+.foil-mono.css-mode .hc-face::after,.foil-mono.css-mode .hc-artbox::after{opacity:1}
+.foil-mono.css-mode.art-holo .hc-art::after{background-image:var(--sheen);opacity:.45}

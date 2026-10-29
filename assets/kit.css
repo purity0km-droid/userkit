@@ -1,23 +1,30 @@
-/* userkit 共通スタイル — 配色は pair-canvas に合わせる */
+/* userkit 共通スタイル — 配色のメインは pair-canvas に合わせる。どのツールもこの変数と部品を使う */
 :root {
-  --bg: #f5f7fb;
+  /* 面と線(メインの色を薄めた物) */
+  --bg: #f6f6fa;
   --surface: #ffffff;
   --soft: #f3f1ff;          /* メイン色 6% 相当(白の上) */
   --soft-2: #e9e6ff;        /* メイン色 12% 相当 */
-  --line: #e6e3fa;          /* メイン色 14% 相当の線 */
-  --line-strong: #cdc6fd;   /* メイン色 30% 相当の線 */
-  --text: #2c2c2c;
-  --muted: #6b6478;
+  --line: #e6e3f2;          /* 区切りの細い線 */
+  --line-strong: #cdc6fd;   /* 入力欄・ボタンの線 */
+  /* 文字 */
+  --text: #26232f;
+  --muted: #67617a;
+  --heading: #4c3ce0;
+  /* 色 */
   --primary: #6d5dfc;
   --primary-dark: #5b51c9;
-  --heading: #4c3ce0;
   --primary-ink: #ffffff;
   --danger: #c4425a;
   --ok: #3f8f64;
+  --tint: var(--primary);   /* ツールの目印の色(Kit.tintOf)。要素ごとに上書きする */
+  /* 形 */
+  --radius-sm: 8px;
   --radius: 12px;
+  --radius-lg: 18px;
   --shadow: 0 1px 2px rgba(60, 50, 140, .05), 0 6px 18px rgba(60, 50, 140, .06);
+  --shadow-float: 0 16px 40px rgba(40, 20, 70, .18);
   --font: "Noto Sans JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
-  --serif: "Playfair Display", "Times New Roman", "Yu Mincho", serif;
   --kitbar-h: 56px;
 }
 
@@ -39,48 +46,69 @@ button { cursor: pointer; }
 /* ---------- 共通バー ---------- */
 .kitbar {
   position: sticky; top: 0; z-index: 50; height: var(--kitbar-h);
-  display: flex; align-items: center; gap: 10px; padding: 0 20px;
+  display: flex; align-items: center; gap: 12px; padding: 0 20px;
   background: rgba(255, 255, 255, .92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
 }
-.kit-brand { display: inline-flex; align-items: center; gap: 8px; }
+.kit-brand { display: inline-flex; align-items: center; gap: 8px; flex: none; }
 .kit-mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--primary); color: #fff; }
-.kit-word { font: 700 22px/1 var(--serif); letter-spacing: .01em; color: #2c2c2c; }
+.kit-word { font: 700 20px/1 var(--font); letter-spacing: -.01em; color: var(--text); }
 .kit-word b { color: var(--primary); font-weight: 700; }
-.kit-sep { color: var(--line-strong); font-size: 20px; }
-.kit-tool { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; }
-.kit-tool b { font: 700 18px/1 var(--serif); color: var(--primary-dark); }
+/* いまのツール。左の細い線で区切り、目印の色の点を付ける */
+.kit-tool { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; padding-left: 12px; border-left: 1px solid var(--line); }
+.kit-tool b { font: 700 15px/1 var(--font); color: var(--text); white-space: nowrap; }
+.kit-tool b::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: var(--tint); vertical-align: 1px; }
 .kit-tool small { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kit-spacer { flex: 1; }
+.kit-link { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 12px; border-radius: 10px; font-size: 13px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.kit-link:hover { background: var(--soft); color: var(--text); }
 .kit-menu { position: relative; }
 .kit-menu summary {
   list-style: none; display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px;
   border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); font-size: 13px; font-weight: 700; cursor: pointer;
 }
 .kit-menu summary::-webkit-details-marker { display: none; }
-.kit-menu summary:hover { background: var(--soft); }
+.kit-menu summary:hover, .kit-menu[open] summary { background: var(--soft); }
 .kit-menu-list {
-  position: absolute; right: 0; top: calc(100% + 8px); width: 280px; padding: 8px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 40px rgba(40, 20, 70, .18);
-  display: flex; flex-direction: column; gap: 2px;
+  position: absolute; right: 0; top: calc(100% + 8px); width: 320px; max-height: calc(100vh - var(--kitbar-h) - 24px); overflow-y: auto; padding: 8px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-float);
+  display: flex; flex-direction: column; gap: 4px;
 }
-.kit-menu-list a { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 10px; }
+.kit-menu-grp { display: flex; flex-direction: column; gap: 2px; }
+.kit-menu-grp + .kit-menu-grp { padding-top: 4px; border-top: 1px solid var(--line); }
+.kit-menu-label { display: flex; align-items: center; gap: 8px; padding: 6px 12px 2px; font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.kit-menu-label::before { content: ""; width: 3px; height: 12px; border-radius: 2px; background: var(--tint); }
+.kit-menu-list a { display: flex; align-items: center; gap: 12px; padding: 7px 10px; border-radius: 10px; }
 .kit-menu-list a:hover { background: var(--soft); }
-.kit-menu-list a.current { background: var(--soft); box-shadow: inset 3px 0 0 var(--primary); }
-.kit-menu-list a .icon { color: var(--primary); }
+.kit-menu-list a.current { background: var(--soft); box-shadow: inset 3px 0 0 var(--tint); }
+.kit-menu-ic { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; flex: none;
+  background: color-mix(in srgb, var(--tint) 11%, #fff); color: var(--tint); }
 .kit-menu-list span { display: flex; flex-direction: column; line-height: 1.35; }
-.kit-menu-list b { font: 700 15px/1.3 var(--serif); }
+.kit-menu-list b { font: 700 14.5px/1.3 var(--font); }
 .kit-menu-list small { font-size: 12px; color: var(--muted); }
+.kit-menu-foot { display: flex; gap: 4px; margin-top: 2px; padding-top: 6px; border-top: 1px solid var(--line); }
+.kit-menu-foot a { flex: 1; justify-content: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.kit-menu-foot a:hover { color: var(--text); }
 
-.kit-footer { padding: 28px 20px 40px; text-align: center; font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
-.kit-footer a { text-decoration: underline; text-underline-offset: 3px; }
+.kit-footer { display: flex; flex-direction: column; gap: 4px; margin-top: 28px; padding: 24px 20px 40px; border-top: 1px solid var(--line); text-align: center; font-size: 12px; color: var(--muted); }
+.kit-footer-nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 20px; margin-bottom: 6px; font-size: 13px; font-weight: 700; color: var(--text); }
+.kit-footer a:hover { color: var(--primary-dark); text-decoration: underline; text-underline-offset: 3px; }
 
 /* ---------- ページ見出し ---------- */
 .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
-h1 { font-size: 24px; line-height: 1.3; font-weight: 700; color: var(--heading); }
+h1 { font-size: 24px; line-height: 1.35; font-weight: 700; color: var(--heading); }
 .lead { color: var(--muted); font-size: 13.5px; margin-top: 4px; }
 .crumbs { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 18px; }
 .crumbs a { text-decoration: underline; text-underline-offset: 3px; }
 .crumbs strong { color: var(--text); }
+
+/* ---------- 更新履歴の項目(トップの「最近の更新」と changelog/) ---------- */
+.ch-item { display: flex; align-items: baseline; gap: 10px; }
+.ch-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; flex: none; }
+.ch-tag { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; line-height: 20px; white-space: nowrap;
+  background: color-mix(in srgb, var(--tint) 11%, #fff); color: color-mix(in srgb, var(--tint) 78%, #1d1a26); }
+a.ch-tag:hover { background: color-mix(in srgb, var(--tint) 20%, #fff); }
+.ch-tag.all { background: #efeef3; color: var(--muted); }
+.ch-text { min-width: 0; }
 
 /* ---------- ボタン ---------- */
 .btn {
@@ -176,11 +204,13 @@ dialog.modal::backdrop { background: rgba(30, 28, 50, .5); backdrop-filter: blur
 @media (max-width: 760px) {
   :root { --kitbar-h: 52px; }
   .kitbar { padding: 0 12px; gap: 8px; }
-  .kit-word { font-size: 19px; }
+  .kit-word { font-size: 18px; }
   .kit-mark { width: 26px; height: 26px; }
-  .kit-tool small { display: none; }
+  .kit-tool { padding-left: 9px; }
+  .kit-tool small, .kit-link { display: none; }
   .kit-menu summary span { display: none; }
   .kit-menu summary { padding: 0 10px; }
+  .kit-menu-list { position: fixed; left: 12px; right: 12px; top: calc(var(--kitbar-h) + 6px); width: auto; }
   .grid-2 { grid-template-columns: 1fr; }
   .modal-body { padding: 16px 16px 0; }
   .modal-head { padding: 14px 16px; }

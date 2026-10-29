@@ -7,12 +7,15 @@ AIチャット「zeta」で使う、自分のキャラクター（user）のた�
 
 | ツール | できること |
 |---|---|
-| [userprof](https://purity0km-droid.github.io/userkit/userprof/) | userのプロフィール・年表・設定メモ・画像を、プロットごとにまとめて保存。zetaのユーザープロフィール(1000字)を丸ごと保存して、字数を数えながら1000字に収める道具も |
-| [usermask](https://purity0km-droid.github.io/userkit/usermask/) | スクショのユーザー名・アイコンを、なぞるだけで隠す。登録した名前・アイコンは次の画像から自動で見つける |
-| [talklog](https://purity0km-droid.github.io/userkit/talklog/) | zeta（Web版）のトークを、吹き出しのまま読めるHTMLファイルに保存。書き出したログの閲覧・テキスト化も |
-| [userpair](https://purity0km-droid.github.io/userkit/userpair/) | 2人（または1人）のキャラシートを作って画像で保存 |
-| [userline](https://purity0km-droid.github.io/userkit/userline/) | プロフィール・年表・まとめ・関係を1枚にしたタイムライン風ペアカードを画像で保存 |
-| [usersns](https://purity0km-droid.github.io/userkit/usersns/) | セットログ風のVlog画面(2〜4人)・インスタ風の投稿(タグ付け)・ストーリー・LINE風のトーク・Twitter風のプロフィールとリプ画面を、1つの画面で切り替えて作って画像で保存 |
+| userprof | userのプロフィール・年表・設定メモ・画像を、プロットごとにまとめて保存。zetaのユーザープロフィール(1000字)を丸ごと保存して、字数を数えながら1000字に収める道具も |
+| userpair | 2人（または1人）のキャラシートを作って画像で保存 |
+| userline | プロフィール・年表・まとめ・関係を1枚にしたタイムライン風ペアカードを画像で保存 |
+| usersns | セットログ風のVlog画面(2〜4人)・インスタ風の投稿(タグ付け)・ストーリー・LINE風のトーク・Twitter風のプロフィールとリプ画面を、1つの画面で切り替えて作って画像で保存 |
+| usercard | userのプロフィールを、ホロ箔や単色の箔押しのトレカ風カードにして、画像（PNG）と短い動画（MP4）で保存 |
+| usermask | スクショのユーザー名・アイコンを、なぞるだけで隠す。登録した名前・アイコンは次の画像から自動で見つける |
+| talklog | zeta（Web版）のトークを、吹き出しのまま読めるHTMLファイルに保存。書き出したログの閲覧・テキスト化も |
+
+各ツールへは、サイトのトップから開けます。更新履歴は、サイトの「更新履歴」のページにまとめています。
 
 ## 注意
 
@@ -41,7 +44,7 @@ python -m http.server 5175
 
 → http://127.0.0.1:5175/
 
-- `assets/` … 共通の部品（kit.js / kit.css：共通バー・ダイアログなど、editor.js / editor.css：userpair・userline・usersns の編集部品）
+- `assets/` … 共通の部品（kit.js / kit.css：ツールの一覧・共通バー・ダイアログなど、changelog.js：更新履歴、editor.js / editor.css：userpair・userline・usersns の編集部品）
 - `dev/zeta-mock.html` … talklog の収集スクリプトを確かめるための模擬トーク画面（zeta の画面ではありません）
 
-PNG書き出し（userpair / userline / usersns）には [html-to-image](https://github.com/bubkoo/html-to-image)（MIT）を CDN から読み込んで使っています。
+PNG書き出し（userpair / userline / usersns / usercard）には [html-to-image](https://github.com/bubkoo/html-to-image)（MIT）を CDN から読み込んで使っています。
