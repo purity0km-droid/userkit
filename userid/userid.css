@@ -1,0 +1,314 @@
+/* userid — ID カードメーカー(見本)。作業台はカッティングマット、カードは HTML と SVG */
+
+/* ===== ページ(作業画面) */
+.uid-app{max-width:1240px;margin:0 auto;padding:22px 16px 8px}
+.uid-app .page-head{margin-bottom:0}
+.uid-app .lead{max-width:72ch}
+.uid-work{display:grid;grid-template-columns:minmax(0,1fr) 410px;gap:18px;align-items:start;margin-top:16px}
+
+/* 作業台: 方眼と 45° の線のカッティングマット。ドラッグでカードを傾ける */
+.uid-stage{--mat:#3c5a52;position:sticky;top:calc(var(--kitbar-h) + 12px);height:clamp(540px,calc(100vh - var(--kitbar-h) - 40px),920px);
+  display:flex;flex-direction:column;border-radius:16px;overflow:hidden;background-color:var(--mat);
+  background-image:
+    linear-gradient(rgba(255,255,255,.12) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.12) 1px,transparent 1px),
+    linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px),
+    linear-gradient(135deg,transparent calc(50% - .5px),rgba(255,255,255,.09) 50%,transparent calc(50% + .5px));
+  background-size:50px 50px,50px 50px,10px 10px,10px 10px,100% 100%;background-position:-1px -1px;
+  touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab}
+.uid-stage.is-tilting{cursor:grabbing}
+.uid-tools{position:relative;z-index:3;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px 14px}
+.uid-tools .seg{background:rgba(0,0,0,.22);border-color:rgba(255,255,255,.14)}
+.uid-tools .seg button{color:rgba(255,255,255,.78)}
+.uid-tools .seg button:hover{color:#fff}
+.uid-tools .seg button[aria-pressed="true"]{background:#fff;color:#24342f}
+.uid-tbtn{border:1px solid rgba(255,255,255,.28);background:rgba(0,0,0,.18);color:#fff;border-radius:999px;padding:7px 14px;font-size:13px;font-weight:700}
+.uid-tbtn:hover{background:rgba(0,0,0,.32)}
+.uid-mount{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:0 10px 30px}
+.uid-mount .ed-stage{width:100%}
+.uid-tip{position:absolute;left:14px;right:14px;bottom:9px;margin:0;font-size:11.5px;color:rgba(255,255,255,.66);text-align:center;pointer-events:none}
+.uid-over{margin:0;padding:8px 12px;border-radius:10px;background:#fff0f2;border:1px solid #f3c3cc;color:#a3283f;font-size:12.5px;font-weight:700}
+.uid-stage .uid-over{position:absolute;z-index:3;left:50%;top:60px;transform:translateX(-50%);width:max-content;max-width:calc(100% - 28px)}
+
+/* ===== シート(1 枚 / 両面) */
+.uid-sheet{position:relative;margin:0 auto}
+.uid-sheet.one .uid-place{position:absolute;left:50%;top:var(--top);transform:translateX(-50%);perspective:1700px}
+.uid-tilt{position:relative;width:100%;height:100%;transform-style:preserve-3d}
+/* 影は立体の外に置く(立体の中だと、回ったカードの奥の半分に影が重なる) */
+.uid-shadow{position:absolute;inset:5% 5% -1%;border-radius:22px;background:rgba(10,20,16,.5);filter:blur(18px);transform:translate(var(--sx,0px),var(--sy,14px))}
+.uid-flip{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .85s cubic-bezier(.3,.9,.25,1)}
+.uid-flip.flipped{transform:rotateY(180deg)}
+.uid-sheet.both{display:flex;align-items:center;justify-content:center;gap:44px}
+.uid-sheet.both.col{flex-direction:column;gap:30px}
+.uid-cell{margin:0;display:flex;flex-direction:column;align-items:center;gap:10px}
+.uid-cell figcaption{font-size:12px;font-weight:700;letter-spacing:.4em;color:rgba(255,255,255,.78)}
+.uid-sheet.both .id-face{box-shadow:0 16px 34px -16px rgba(0,0,0,.65),0 0 0 .5px rgba(0,0,0,.2)}
+.uid-sheet.both .id-face.back{transform:none}
+.uid-noback{margin:0;color:rgba(255,255,255,.72);font-size:13px}
+
+/* 寸法の線(実寸のめやす) */
+.uid-dim{position:absolute;left:0;top:calc(100% + 20px);height:1px;background:rgba(255,255,255,.5);pointer-events:none}
+.uid-dim::before,.uid-dim::after{content:"";position:absolute;top:-5px;width:1px;height:11px;background:rgba(255,255,255,.6)}
+.uid-dim::before{left:0}
+.uid-dim::after{right:0}
+.uid-dim span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:0 8px;background:var(--mat);font:500 10.5px/1 "IBM Plex Mono",monospace;letter-spacing:.06em;color:rgba(255,255,255,.8);white-space:nowrap}
+.uid-dim.v{left:calc(100% + 24px);top:0;width:1px;height:auto}
+.uid-dim.v::before,.uid-dim.v::after{left:-5px;width:11px;height:1px}
+.uid-dim.v::before{top:0}
+.uid-dim.v::after{top:auto;bottom:0}
+.uid-dim.v span{writing-mode:vertical-rl;padding:8px 0}
+
+/* 吊り方(画面で見るときの飾り) */
+.uid-hold{position:absolute;left:50%;top:0;width:70px;transform:translateX(-50%);pointer-events:none}
+.uid-strap{position:absolute;left:50%;top:0;bottom:26px;width:26px;transform:translateX(-50%);display:flex;justify-content:center;overflow:hidden;
+  background:var(--c);box-shadow:inset 3px 0 0 rgba(255,255,255,.14),inset -3px 0 0 rgba(0,0,0,.2),0 3px 8px rgba(0,0,0,.25)}
+.uid-strap span{writing-mode:vertical-rl;padding-top:8px;font:600 8.5px/1 "IBM Plex Mono",monospace;letter-spacing:.32em;color:var(--c-ink);opacity:.82;white-space:nowrap}
+.uid-clasp{position:absolute;left:50%;bottom:6px;width:18px;height:26px;transform:translateX(-50%);border-radius:5px 5px 8px 8px;
+  background:linear-gradient(90deg,#8d939b,#eef1f4 45%,#868c94);box-shadow:0 2px 5px rgba(0,0,0,.4)}
+.uid-clasp::after{content:"";position:absolute;left:50%;bottom:-11px;width:12px;height:15px;transform:translateX(-50%);border:2.5px solid #cdd2d8;border-top:0;border-radius:0 0 8px 8px}
+.uid-reel{position:absolute;left:50%;top:10px;width:58px;height:58px;transform:translateX(-50%);border-radius:50%;
+  background:radial-gradient(circle at 34% 30%,rgba(255,255,255,.5),transparent 42%),var(--c);box-shadow:inset 0 0 0 4px rgba(255,255,255,.2),0 5px 12px rgba(0,0,0,.38)}
+.uid-reel::after{content:"";position:absolute;inset:19px;border-radius:50%;background:rgba(255,255,255,.88);box-shadow:inset 0 1px 3px rgba(0,0,0,.3)}
+.uid-cord{position:absolute;left:50%;top:66px;bottom:30px;width:2px;transform:translateX(-50%);background:#dfe2e6}
+
+/* ===== カード(表と裏) */
+.id-card{position:relative;width:340px;height:540px;transform-style:preserve-3d;font-family:var(--f-main);color:var(--ink);-webkit-font-smoothing:antialiased;cursor:default}
+.id-card.o-h{width:540px;height:340px}
+.id-face{position:absolute;inset:0;border-radius:14px;overflow:hidden;background:var(--paper);backface-visibility:hidden;-webkit-backface-visibility:hidden;box-shadow:0 0 0 .5px rgba(0,0,0,.18)}
+.id-face::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(255,255,255,.3);pointer-events:none}
+.id-face.back{transform:rotateY(180deg)}
+.id-bg{position:absolute;inset:0;width:100%;height:100%;opacity:.16;pointer-events:none}
+.id-wm{position:absolute;width:64%;height:auto;aspect-ratio:1;right:-13%;bottom:-9%;opacity:.07;pointer-events:none}
+.o-h .id-wm{width:44%}
+.pos-right .front .id-wm{right:auto;left:-10%}
+.id-face.back .id-wm{width:66%;left:17%;right:auto;top:24%;bottom:auto;opacity:.06}
+.o-h .id-face.back .id-wm{width:44%;left:28%;top:18%}
+.id-hole{position:absolute;left:50%;top:11px;width:44px;height:9px;transform:translateX(-50%);border-radius:5px;background:var(--mat,#3c5a52);box-shadow:inset 0 1px 2px rgba(0,0,0,.5);z-index:3}
+
+/* 表の組み方(写真の位置 × 向き) */
+.id-in{position:relative;z-index:1;height:100%;display:grid;padding:18px;gap:12px 14px}
+.has-hole .id-in{padding-top:30px}
+/* --phw = 写真の幅。入りきらないときは fit-2 で小さくする */
+.id-card{--phw:118px}
+.id-card.o-h{--phw:148px}
+.id-card .fit-2{--phw:94px}
+.id-card.o-h .fit-2{--phw:118px}
+.front .id-in{grid-template-columns:var(--phw) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;grid-template-areas:"head head" "photo who" "items items" "note note"}
+.pos-right .front .id-in{grid-template-columns:minmax(0,1fr) var(--phw);grid-template-areas:"head head" "who photo" "items items" "note note"}
+.pos-center .front .id-in{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto minmax(0,1fr) auto;grid-template-areas:"head" "photo" "who" "items" "note"}
+.pos-center .front .id-photo{width:calc(var(--phw) + 6px);justify-self:center}
+.pos-center .front .id-who{text-align:center}
+.o-h .front .id-in,.o-h.pos-center .front .id-in{grid-template-columns:var(--phw) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;grid-template-areas:"head head" "photo who" "photo items" "note note"}
+.o-h.pos-right .front .id-in{grid-template-columns:minmax(0,1fr) var(--phw);grid-template-areas:"head head" "who photo" "items photo" "note note"}
+.fit-2 .id-in{gap:9px 12px}
+.fit-2 .id-name{font-size:21px}
+.o-h.pos-center .front .id-photo{width:auto;justify-self:stretch}
+.o-h.pos-center .front .id-who{text-align:left}
+.back .id-in{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"head" "items" "note"}
+
+.id-head{grid-area:head;display:flex;align-items:center;gap:10px;min-width:0}
+.id-emb{flex:none;width:40px;height:40px}
+.id-emb svg,.id-emb img{display:block;width:100%;height:100%;object-fit:contain}
+.id-head-t{min-width:0;display:flex;flex-direction:column;gap:2px}
+.id-org{font-size:12.5px;font-weight:700;line-height:1.3;letter-spacing:.03em}
+.id-title{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px 9px;line-height:1.25}
+.id-title b{font-size:15px;letter-spacing:.14em}
+.id-title small{font:500 8.5px/1.2 "IBM Plex Mono",monospace;letter-spacing:.16em;color:var(--sub)}
+
+.ph-rect{--ph-r:3px}
+.ph-round{--ph-r:12px}
+.ph-circle{--ph-r:50%}
+.id-photo{grid-area:photo;position:relative;align-self:start;min-width:0}
+.id-sil{position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;background:var(--tint);border-radius:var(--ph-r)}
+.id-sil svg{width:74%;fill:var(--acc);opacity:.3}
+.id-photo .ed-img{--img-r:var(--ph-r);--img-bg:transparent;--ph:var(--sub)}
+.id-photo .ed-img-ph{opacity:0;background:color-mix(in srgb,var(--paper) 70%,transparent);transition:opacity .15s}
+.id-photo:hover .ed-img-ph,.id-photo .ed-img:focus-visible .ed-img-ph{opacity:1}
+.id-who{grid-area:who;align-self:end;min-width:0}
+.o-h .id-who{align-self:start}
+.id-name{font-size:24px;font-weight:700;line-height:1.2;letter-spacing:.06em;overflow-wrap:anywhere}
+.id-sub{margin-top:4px;font:500 9.5px/1.3 "IBM Plex Mono",monospace;letter-spacing:.2em;color:var(--sub)}
+
+/* 項目。--k は入りきらないときに字を縮める割合(JS で測って決める) */
+.id-items{--k:1;grid-area:items;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:calc(var(--k) * 10px)}
+.id-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:calc(var(--k) * 9px) 14px;align-content:start}
+.id-foot{margin-top:auto;display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 14px}
+.id-foot .id-it{flex:1 1 auto}
+.id-it{min-width:0}
+.id-it.wide{grid-column:1/-1}
+.id-lb{margin-bottom:2px;font-size:calc(var(--k) * 8.5px);font-weight:700;line-height:1.3;letter-spacing:.08em;color:var(--acc)}
+.id-v{font-size:calc(var(--k) * 12.5px);font-weight:500;line-height:1.45;overflow-wrap:anywhere}
+p.id-v{margin:0;font-size:calc(var(--k) * 11.5px);font-weight:400;line-height:1.6;white-space:pre-wrap}
+.id-v.mono{font-family:"IBM Plex Mono",monospace;letter-spacing:.06em}
+.id-v.sign{padding:0 2px 1px;border-bottom:1px solid var(--rule);font-family:"Klee One",cursive;font-weight:600;font-size:calc(var(--k) * 17px);line-height:1.3}
+.id-tags{display:flex;flex-wrap:wrap;gap:4px}
+.id-tags span{padding:0 8px;border:1px solid var(--acc);border-radius:999px;font-size:calc(var(--k) * 10.5px);line-height:1.7;color:var(--acc)}
+.id-meter{display:flex;gap:3px;padding-top:4px}
+.id-meter i{flex:1;max-width:22px;height:6px;border-radius:2px;background:var(--rule)}
+.id-meter i.on{background:var(--acc)}
+.id-seal{width:calc(var(--k) * 46px);height:calc(var(--k) * 46px);font-family:"Shippori Mincho",serif}
+.id-seal svg{display:block;width:100%;height:100%;opacity:.88}
+.base-white .id-seal svg,.base-cream .id-seal svg{mix-blend-mode:multiply}
+/* 印は欄の下の線にかけて押す(下半分は線の下へはみ出すので、項目の並びの下に余白をとる) */
+.id-it.t-stamp{position:relative;display:flex;align-items:flex-end;min-height:calc(var(--k) * 28px);padding-right:calc(var(--k) * 54px);border-bottom:1px solid var(--rule)}
+.t-stamp .id-lb{margin:0 0 3px}
+.t-stamp .id-seal{position:absolute;right:calc(var(--k) * 6px);bottom:calc(var(--k) * -22px);z-index:1}
+.id-grid:has(.t-stamp){padding-bottom:calc(var(--k) * 22px)}
+.id-it.t-code{display:flex;align-items:center;gap:10px}
+.id-it.c-bar{flex-direction:column;align-items:stretch;gap:3px}
+.id-code{flex:none}
+.id-code svg{display:block;width:100%;height:100%}
+.c-bar .id-code{height:calc(var(--k) * 26px)}
+.c-ring .id-code{width:calc(var(--k) * 54px);height:calc(var(--k) * 54px)}
+.c-dots .id-code{width:calc(var(--k) * 48px);height:calc(var(--k) * 48px)}
+.id-code-t{min-width:0}
+.id-codev{font:500 calc(var(--k) * 9.5px)/1.3 "IBM Plex Mono",monospace;letter-spacing:.18em;color:var(--sub);overflow-wrap:anywhere}
+.c-bar .id-code-t{text-align:center}
+/* 詰めるとき(fit-1): バーコードは低くして番号を右に、段階は名前の右に並べて 1 行にする */
+.fit-1 .id-it.c-bar{flex-direction:row;align-items:center;gap:8px}
+.fit-1 .c-bar .id-code{flex:1 1 auto;min-width:0;height:calc(var(--k) * 17px)}
+.fit-1 .c-bar .id-code-t{flex:none;text-align:left}
+.fit-1 .id-it.t-meter{display:flex;align-items:center;gap:8px}
+.fit-1 .t-meter .id-lb{flex:none;margin:0}
+.fit-1 .t-meter .id-meter{flex:1;padding-top:0}
+.id-note{grid-area:note;margin:0;font-size:7.5px;line-height:1.55;letter-spacing:.02em;color:var(--sub)}
+.id-items.is-plain{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center}
+.id-big{width:112px;height:112px}
+.id-plain-t{display:flex;flex-direction:column;gap:5px;font-size:14px;font-weight:700;letter-spacing:.12em}
+.id-plain-t small{font:500 9px/1.2 "IBM Plex Mono",monospace;letter-spacing:.22em;color:var(--sub)}
+.id-items.is-over{box-shadow:inset 0 -16px 12px -12px rgba(220,40,70,.55)}
+
+/* ----- 装い: 帯 */
+.look-band .id-head{margin:-18px -18px 0;padding:14px 18px 12px;background:var(--c);color:var(--c-ink)}
+.look-band.has-hole .id-head{margin-top:-30px;padding-top:28px}
+.look-band .id-title small{color:inherit;opacity:.72}
+.look-band .id-face::before{content:"";position:absolute;left:0;right:0;bottom:0;height:7px;background:var(--c);z-index:2}
+.look-band .id-in{padding-bottom:22px}
+.look-band .id-bg{opacity:.12}
+
+/* ----- 装い: 罫(書類のような二重の枠と罫線) */
+.look-form .id-face::before{content:"";position:absolute;inset:7px;border:3px double var(--acc);border-radius:9px;opacity:.7;pointer-events:none;z-index:2}
+.look-form .id-in{padding:20px 22px}
+.look-form.has-hole .id-in{padding-top:32px}
+.look-form .id-head{justify-content:center;padding-bottom:8px;border-bottom:1px solid var(--acc)}
+.look-form .id-head-t{align-items:center;text-align:center}
+.look-form .id-title{justify-content:center}
+.look-form .id-title b{letter-spacing:.6em;margin-right:-.6em}
+/* 罫線は欄いっぱいに等間隔で引き、字は各段の線の上にそろえる(下が空きすぎないように) */
+.look-form .id-grid{flex:1 0 auto;grid-auto-rows:minmax(min-content,1fr);gap:0 14px}
+.look-form .id-grid>.id-it{display:flex;flex-wrap:wrap;align-items:baseline;align-content:flex-end;gap:0 8px;padding:calc(var(--k) * 5px) 0;border-bottom:1px solid var(--rule)}
+.look-form .id-grid>.id-it>.id-v{flex:1 1 0;min-width:0}
+.look-form .id-grid>.id-it>.id-meter{flex:1}
+.look-form .id-lb{flex:none;min-width:4.6em;margin:0;color:var(--sub)}
+.look-form .id-grid>.id-it.t-long,.look-form .id-grid>.id-it.t-tags{flex-direction:column;flex-wrap:nowrap;align-items:stretch;justify-content:flex-end}
+.look-form .id-grid>.id-it.t-long>.id-v{flex:none}
+.look-form .id-it.t-long .id-lb,.look-form .id-it.t-tags .id-lb{margin-bottom:3px}
+.look-form .id-grid>.id-it.t-stamp{flex-wrap:nowrap;align-items:flex-end}
+.look-form .id-photo{outline:1px solid var(--rule);outline-offset:3px;border-radius:var(--ph-r)}
+.look-form .id-name{letter-spacing:.16em}
+.look-form .id-bg{opacity:.11}
+
+/* ----- 装い: 透かし(大きなマークを薄く、名前を大きく) */
+.look-crest .id-head{padding-bottom:10px;border-bottom:1px solid color-mix(in srgb,var(--acc) 40%,transparent)}
+.look-crest .id-org{font-size:13.5px}
+.look-crest .id-title b{font-size:12.5px;letter-spacing:.32em;color:var(--acc)}
+.look-crest .id-name{font-size:28px;letter-spacing:.08em}
+.look-crest .id-who::after{content:"";display:block;width:34px;height:2px;margin-top:9px;background:var(--acc)}
+.look-crest.pos-center .front .id-who::after{margin-inline:auto}
+.look-crest .id-bg{opacity:.2}
+
+/* ----- 装い: 夜(暗い地・細い線・角の印・写真の角を落とす) */
+.look-night .id-head{padding-bottom:9px;border-bottom:1px solid color-mix(in srgb,var(--acc) 45%,transparent)}
+.look-night .id-title b{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:.22em}
+.look-night .id-org{letter-spacing:.08em}
+.look-night .id-lb{font-family:"IBM Plex Mono",monospace;letter-spacing:.14em;text-transform:uppercase}
+.look-night .id-name{letter-spacing:.1em}
+.look-night .id-photo{padding:1.5px;background:var(--acc);clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px))}
+.look-night .id-photo .id-sil{inset:1.5px}
+.look-night .id-photo .id-sil,.look-night .id-photo .ed-img{border-radius:0;clip-path:polygon(0 0,calc(100% - 15px) 0,100% 15px,100% 100%,15px 100%,0 calc(100% - 15px))}
+.look-night.ph-circle .id-photo,.look-night.ph-circle .id-photo .id-sil,.look-night.ph-circle .id-photo .ed-img{clip-path:none;border-radius:50%}
+.look-night .id-items .id-it{padding-left:8px;border-left:2px solid color-mix(in srgb,var(--acc) 55%,transparent)}
+.look-night .id-items .id-it.t-code{padding-left:0;border-left:0}
+.look-night .id-bg{opacity:.2}
+.id-corners i{position:absolute;z-index:2;width:14px;height:14px;border:0 solid var(--acc)}
+.id-corners i:nth-child(1){left:8px;top:8px;border-width:1.5px 0 0 1.5px}
+.id-corners i:nth-child(2){right:8px;top:8px;border-width:1.5px 1.5px 0 0}
+.id-corners i:nth-child(3){left:8px;bottom:8px;border-width:0 0 1.5px 1.5px}
+.id-corners i:nth-child(4){right:8px;bottom:8px;border-width:0 1.5px 1.5px 0}
+
+/* ----- 装い: やわらか(淡い地・丸い枠) */
+.look-soft .id-face{border-radius:22px}
+.look-soft .id-head{flex-direction:column;gap:4px;text-align:center}
+.look-soft .id-head-t{align-items:center}
+.look-soft .id-title{flex-direction:column;align-items:center;gap:3px}
+.look-soft .id-title b{font-size:19px;letter-spacing:.08em;color:var(--acc)}
+.look-soft .id-emb{width:30px;height:30px}
+/* 横型は高さが足りないので、見出しを横に並べる */
+.o-h.look-soft .id-head{flex-direction:row;gap:10px;text-align:left}
+.o-h.look-soft .id-head-t{align-items:flex-start}
+.o-h.look-soft .id-title{flex-direction:row;align-items:baseline;gap:2px 9px}
+.o-h.look-soft .id-title b{font-size:17px}
+.look-soft .id-grid{gap:calc(var(--k) * 7px) 8px}
+.look-soft .id-it{padding:calc(var(--k) * 6px) 10px;border-radius:12px;background:var(--paper2)}
+.look-soft .id-foot .id-it{padding:0;background:none}
+.look-soft .id-photo .id-sil,.look-soft .id-photo .ed-img{box-shadow:0 0 0 4px var(--paper2)}
+.look-soft .id-bg{opacity:.24}
+
+/* ===== 設定の欄 */
+.uid-side{display:flex;flex-direction:column;padding:0}
+.uid-side-top{position:sticky;top:var(--kitbar-h);z-index:4;display:flex;align-items:center;gap:8px;padding:10px 14px;
+  background:rgba(255,255,255,.95);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);border-radius:var(--radius) var(--radius) 0 0}
+.uid-side-top .kit-spacer{flex:1}
+.uid-side-body{display:flex;flex-direction:column;padding:2px 18px 18px}
+.uid-sec{display:flex;flex-direction:column;gap:10px;padding:16px 0}
+.uid-sec+.uid-sec{border-top:1px solid var(--line)}
+.uid-sec h2{font-size:14px;color:var(--heading)}
+.uid-sec h3{font-size:12px;letter-spacing:.2em;color:var(--muted)}
+.uid-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.uid-row>input[type=text]{flex:1;min-width:0}
+.uid-col{display:flex;flex-direction:column;gap:8px}
+.uid-side .seg{flex-wrap:wrap}
+.uid-presets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.uid-presets button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:9px 11px;border:1px solid var(--line-strong);border-radius:12px;background:var(--surface);text-align:left}
+.uid-presets button:hover{background:var(--soft)}
+.uid-presets b{font-size:13.5px}
+.uid-presets small{font-size:11px;line-height:1.4;color:var(--muted)}
+.uid-presets button[aria-pressed="true"]{border-color:var(--primary);background:var(--soft);box-shadow:0 0 0 2px rgba(109,93,252,.22)}
+.uid-group{display:flex;flex-direction:column;gap:8px}
+.uid-items{display:flex;flex-direction:column;gap:8px}
+.uid-it{display:flex;flex-direction:column;gap:7px;padding:9px 10px;border:1px solid var(--line);border-radius:12px;background:#fbfaff}
+.uid-it-top{display:flex;align-items:center;gap:4px}
+.uid-it-top input{flex:1;min-width:0;min-height:34px;padding:5px 10px;font-size:13px;font-weight:700}
+.uid-type{flex:none;padding:2px 6px;border-radius:6px;font-size:10.5px;font-weight:700;color:var(--primary-dark);background:var(--soft-2)}
+.uid-mini{flex:none;padding:4px 7px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);font-size:11.5px;font-weight:700;color:var(--muted)}
+.uid-mini:hover{color:var(--text)}
+.uid-mini[aria-pressed="true"]{border-color:var(--primary);background:var(--primary);color:#fff}
+.uid-it-top .btn-icon{min-height:30px;width:28px}
+.uid-it input[type=text],.uid-it textarea{min-height:38px;padding:7px 12px;font-size:13.5px}
+.uid-it input[type=range]{flex:1}
+.uid-it output{min-width:3.5em;font-size:12px;color:var(--muted)}
+.uid-add{min-height:40px;font-size:13px;font-weight:700;color:var(--primary-dark)}
+.uid-choices{display:grid;grid-template-columns:repeat(auto-fill,minmax(42px,1fr));gap:6px}
+.uid-choices button{display:grid;place-items:center;aspect-ratio:1;padding:6px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.uid-choices button:hover{background:var(--soft)}
+.uid-choices button svg{width:100%;height:100%}
+.uid-choices button span{font-size:11px;font-weight:700;color:var(--muted)}
+.uid-choices button[aria-pressed="true"]{border-color:var(--primary);background:var(--soft);box-shadow:0 0 0 2px rgba(109,93,252,.22)}
+.uid-swatches{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
+.uid-sw{width:28px;height:28px;padding:0;border:2px solid #fff;border-radius:50%;background:var(--sw);box-shadow:0 0 0 1px var(--line-strong)}
+.uid-sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--primary)}
+/* 保存のボタン。設定の欄の下に貼りつける(パネルの角に合わせる) */
+.uid-actions{position:sticky;bottom:0;z-index:4;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 16px 14px;
+  background:rgba(255,255,255,.96);backdrop-filter:blur(6px);border-top:1px solid var(--line);border-radius:0 0 var(--radius) var(--radius)}
+.uid-actions .btn{flex:1 1 150px}
+.uid-export-seg{flex:1 1 100%}
+/* 書き出しは画面の外に平らに組む */
+#exportHost{position:fixed;left:-10000px;top:0;pointer-events:none}
+.is-export .id-face.back{transform:none}
+
+@media(max-width:920px){
+  .uid-work{grid-template-columns:minmax(0,1fr)}
+  .uid-stage{position:relative;top:0;height:auto;touch-action:pan-y}
+  .uid-mount{padding-bottom:44px}
+}

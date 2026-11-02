@@ -86,6 +86,7 @@
     book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5M8 7h7"/>',
     phone: '<rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/>',
     card: '<rect x="5" y="2.5" width="14" height="19" rx="2"/><circle cx="14.5" cy="7" r="2"/><path d="M8 13h8M8 16.5h5"/>',
+    idcard: '<rect x="3" y="5.5" width="18" height="13" rx="2"/><circle cx="8.5" cy="10.5" r="2"/><path d="M5.6 15.5c.6-1.3 1.6-2 2.9-2s2.3.7 2.9 2M14 10h4.5M14 13.5h3"/>',
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
     help: '<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2-2.5 3.6M12 16.8h.01"/>'
   };
@@ -318,6 +319,8 @@
       desc: 'セットログ風のVlog画面(2〜4人)、インスタ風の投稿・ストーリー、LINE風のトーク、Twitter風のプロフィール・リプ画面を切り替えて作り、画像で保存します。' },
     { id: 'usercard', group: 'make', label: 'ホロカード', icon: 'card', out: ['PNG', 'MP4'],
       desc: 'userのプロフィールをホロ箔や単色の箔押しのトレカ風カードにして、画像と短い動画で保存します。userprofのプロフィールも読み込めます。' },
+    { id: 'userid', group: 'make', label: 'IDカード', icon: 'idcard', out: ['PNG'],
+      desc: 'userの社員証・学生証・自己紹介カードなどを、載せる項目を選んで作り、画像（PNG）で保存します。ひな形を選ぶと中身がひととおり入ります。' },
     { id: 'usermask', group: 'keep', label: '名前・アイコン隠し', icon: 'mask', out: ['PNG'],
       desc: 'スクショのユーザー名やアイコンを、なぞるだけで隠します。登録した名前は次の画像から自動で見つけます。' },
     { id: 'talklog', group: 'keep', label: 'トーク保存', icon: 'bubble', out: ['HTML', 'テキスト'],

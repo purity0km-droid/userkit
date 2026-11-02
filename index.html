@@ -203,6 +203,18 @@
           <path d="M42 48v-6c6-4 11-4 18-1s11 2 18-1v8z" fill="${INK}" opacity=".35"/>
           <circle cx="75" cy="18" r="5.6" fill="#fff" stroke="url(#thumbHolo)" stroke-width="2.4"/>
           ${bars(42, 53, [34, 28, 34, 22], 6)}`,
+        // 横型の ID カード: 色の帯・所属マーク・写真・項目・バーコード
+        userid: `
+          <rect x="14" y="17" width="92" height="58" rx="5" fill="#fff" stroke="currentColor" stroke-opacity=".35"/>
+          <path d="M14 22a5 5 0 0 1 5-5h82a5 5 0 0 1 5 5v8H14z" fill="currentColor"/>
+          <circle cx="22" cy="23.5" r="3.6" fill="#fff" opacity=".92"/>
+          <rect x="29" y="21.8" width="26" height="3.4" rx="1.7" fill="#fff" opacity=".92"/>
+          <rect x="20" y="35" width="22" height="29" rx="2" fill="currentColor" opacity=".22"/>
+          <circle cx="31" cy="45" r="5" fill="currentColor" opacity=".35"/>
+          <path d="M23 64c1.5-6 4.5-8.5 8-8.5s6.5 2.5 8 8.5z" fill="currentColor" opacity=".35"/>
+          <rect x="48" y="36" width="24" height="4.4" rx="2.2" fill="${INK}" opacity=".7"/>
+          ${bars(48, 46, [36, 28, 32], 6)}
+          <g fill="${INK}" opacity=".7"><rect x="78" y="62" width="1.2" height="8"/><rect x="80.6" y="62" width="2.4" height="8"/><rect x="84.4" y="62" width="1.2" height="8"/><rect x="87" y="62" width="3" height="8"/><rect x="91.4" y="62" width="1.2" height="8"/><rect x="94" y="62" width="2" height="8"/><rect x="97.4" y="62" width="1.2" height="8"/></g>`,
         // スクショの名前とアイコンを、黒塗りとモザイクで隠したところ
         usermask: `
           <rect x="15" y="9" width="90" height="72" rx="6" fill="#fff" stroke="currentColor" stroke-opacity=".3"/>

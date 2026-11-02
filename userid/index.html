@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>userid — IDカードメーカー</title>
+  <meta name="description" content="userの社員証・学生証・自己紹介カードなどを、載せる項目を選んで作るツール。ひな形を選ぶと中身がひととおり入ります。">
+  <meta name="theme-color" content="#6d5dfc">
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- カードの書体。どれも SIL Open Font License 1.1（2026-11-02 に google/fonts の OFL.txt で確認） -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Shippori+Mincho:wght@500;700&family=Zen+Maru+Gothic:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&family=Klee+One:wght@600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/kit.css">
+  <link rel="stylesheet" href="../assets/colorpick.css">
+  <link rel="stylesheet" href="../assets/editor.css">
+  <link rel="stylesheet" href="userid.css">
+</head>
+<body>
+<main class="uid-app">
+  <div class="page-head">
+    <div>
+      <h1>IDカード</h1>
+      <p class="lead">user の社員証や学生証、自己紹介のカードを作ります。載せる項目は自由に選べて、ひな形を選ぶと中身がひととおり入ります。どこにも送らず、このブラウザの中だけで作ります。</p>
+    </div>
+  </div>
+  <div class="uid-work">
+    <section class="uid-stage" id="stage" aria-label="カードの見え方">
+      <div class="uid-tools">
+        <div class="seg" id="viewSeg" role="group" aria-label="見え方">
+          <button type="button" data-view="one">1 枚で見る</button>
+          <button type="button" data-view="both">両面を並べる</button>
+        </div>
+        <button type="button" class="uid-tbtn" id="flipBtn">裏返す</button>
+        <button type="button" class="uid-tbtn" id="straightBtn">まっすぐに戻す</button>
+      </div>
+      <div class="uid-mount" id="mount"></div>
+      <p class="uid-over" id="overStage" hidden></p>
+      <p class="uid-tip" id="tip">カードのまわりをドラッグすると、カードが傾きます。写真はドラッグで位置を、ホイールで大きさを変えられます。</p>
+    </section>
+    <aside class="uid-side panel" id="side" aria-label="カードの設定"></aside>
+  </div>
+</main>
+<div id="exportHost" aria-hidden="true"></div>
+
+<script src="../assets/kit.js"></script>
+<script src="../assets/colorpick.js"></script>
+<script src="../assets/editor.js"></script>
+<script src="../userprof/js/store.js"></script>
+<script src="userid.js"></script>
+</body>
+</html>
