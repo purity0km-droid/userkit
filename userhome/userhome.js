@@ -19,9 +19,10 @@
     kitchen: ['キッチン', 'kitchen', 5, ['アイランドキッチン', 'キッチン', '台所', '厨房']],
     master: ['主寝室', 'bed', 10, ['主寝室', 'マスターベッドルーム']],
     bed: ['寝室', 'bed', 7, ['子ども部屋', '子供部屋', 'ベッドルーム', '寝室']],
+    room: ['洋室', 'living', 7, ['洋室', '居室']],
     study: ['書斎', 'study', 5, ['書斎', '仕事部屋', 'ワークスペース', 'アトリエ']],
     library: ['書庫', 'study', 5, ['書庫', '図書室']],
-    bath: ['浴室', 'wet', 3, ['バスルーム', '浴室', '風呂場', 'お風呂', '風呂']],
+    bath: ['浴室', 'wet', 3, ['ユニットバス', 'バスルーム', '浴室', '風呂場', 'お風呂', '風呂']],
     onsen: ['露天風呂', 'wet', 4, ['露天風呂', 'ジャグジー']],
     wash: ['洗面所', 'wet', 2, ['パウダールーム', '洗面所', '脱衣所', '洗面']],
     toilet: ['トイレ', 'wet', 1, ['トイレ', '化粧室', 'お手洗い']],
@@ -58,6 +59,7 @@
   const ATTRS = ['完全防音', '防音', '独立排水', '大理石', '猫足', '檜', 'ヒノキ', '吹き抜け', '天窓', '床暖房', '暖炉', 'ガラス張り', '鍵付き', '窓のない', '螺旋階段'];
   // 建物の種類 [見出し, 書き方, 足もとの広さ(ます目の幅, 奥行き)]。上から順に探す
   const BUILDINGS = [
+    ['ワンルーム', ['ワンルーム', '1R', '1K'], [4, 8]],
     ['タワーマンション', ['タワーマンション', 'タワマン'], [10, 8]],
     ['ペントハウス', ['ペントハウス'], [12, 9]],
     ['マンション一棟', ['マンション一棟', '一棟'], [9, 13]],
@@ -141,7 +143,7 @@
           const own = f.paren ? f.paren.split(/[、・,]/).map((x) => x.trim()).filter(Boolean) : [];
           // 様子の言葉は、括弧の中のものはその部屋に、区切りの中のものは最後の部屋に付ける
           const more = i === found.length - 1 ? attrs.filter((a) => !own.some((o) => o.includes(a))) : [];
-          rooms.push({ id: U.uid(), floor, name: f.label, type: f.type, tatami: ROOMS[f.type][2], attrs: own.concat(more), cand: false });
+          rooms.push({ id: U.uid(), floor, name: f.label, type: f.type, tatami: f.size || ROOMS[f.type][2], attrs: own.concat(more), cand: false });
         });
       });
     });
@@ -179,7 +181,10 @@
       while (i >= 0) {
         const before = rest.slice(Math.max(0, i - 4), i), pre = before.match(PREFIX_RE);
         const after = rest.slice(i + w.length), paren = after.match(/^\s*[（(]([^）)]{1,30})[）)]/);
-        out.push({ pos: i, type, label: (pre ? pre[1] : '') + w, paren: paren ? paren[1] : '' });
+        // 広さ: 「洋室7.5帖」「洋室（7.5帖）」のどちらでも拾い、括弧の中の様子からは外す
+        const sz = (paren ? paren[1] : after).match(paren ? /(\d+(?:\.\d+)?)\s*(?:帖|畳)/ : /^\s*(\d+(?:\.\d+)?)\s*(?:帖|畳)/);
+        const rest2 = paren ? paren[1].replace(/\s*\d+(?:\.\d+)?\s*(?:帖|畳)\s*/, '').replace(/^[、・,]|[、・,]$/g, '') : '';
+        out.push({ pos: i, type, label: (pre ? pre[1] : '') + w, paren: rest2, size: sz ? Number(sz[1]) : 0 });
         rest = rest.slice(0, i) + '□'.repeat(w.length) + rest.slice(i + w.length);
         i = rest.indexOf(w);
       }
@@ -240,13 +245,17 @@
   function slice(rect, items, pref) {
     if (!items.length) return [];
     const total = items.reduce((s, x) => s + x.weight, 0);
-    return split(rect, items, Object.assign({ scale: (rect.w * rect.h) / total, memo: new Map() }, pref)).out;
+    return split(rect, items, Object.assign({ scale: (rect.w * rect.h) / total, memo: new Map(), regW: rect.w }, pref)).out;
   }
   function leafCost(r, x, ctx) {
     const a = r.w * r.h, asp = Math.max(r.w / r.h, r.h / r.w);
     let c = (asp - 1) * a * 0.5 + Math.abs(a - x.weight * ctx.scale);
     // 幅が 1 ます(0.91 m)の部屋は通れるだけなので避ける(1 畳ほどのトイレなどはこの幅でよい)
-    if (Math.min(r.w, r.h) < 2) c += x.weight <= 1.5 ? 4 : 30;
+    if (Math.min(r.w, r.h) < 2) c += x.weight <= 1.5 || x.outdoor ? 4 : 30;
+    // バルコニーやテラスは、玄関の反対(上の端)に、幅いっぱいに
+    if (x.far) c += (r.y !== 0 ? a * 3 : 0) + (ctx.regW - r.w) * 3;
+    // 階段のない 1 階だけの住まいでは、水回りとキッチンを玄関の側(下の半分)に寄せる
+    if (x.wetNear && r.y + r.h / 2 < ctx.bottom / 2) c += a * 2;
     // 寝室や水回りなど、廊下から入る部屋は廊下に接していてほしい(クローゼットや浴室は奥でもよい)
     const onHall = (ctx.edgeX === undefined || r.x === ctx.edgeX || r.x + r.w === ctx.edgeX) && (ctx.edgeY === undefined || r.y === ctx.edgeY);
     if ((x.hall || x.south) && !onHall) c += x.south ? 60 : 25;
@@ -357,7 +366,12 @@
         if (v.core === 'left') { regions = [{ x: cw, y: 0, w: W - cw, h: D }]; pref.edgeX = cw; }
         else { regions = [{ x: 0, y: 0, w: W - cw, h: D }]; pref.edgeX = W - cw; }
       }
-      const items = list.map((r) => ({ id: r.id, weight: r.tatami || ROOMS[r.type][2], south: r.type === 'entry', hall: !INNER.has(r.type) }));
+      const hasEntry = list.some((r) => r.type === 'entry');
+      const items = list.map((r) => ({
+        id: r.id, weight: r.tatami || ROOMS[r.type][2], south: r.type === 'entry', hall: !INNER.has(r.type),
+        outdoor: r.type === 'terrace' || r.type === 'garden', far: hasEntry && (r.type === 'terrace' || r.type === 'garden'),
+        wetNear: hasEntry && !multi && (ROOMS[r.type][1] === 'wet' || r.type === 'kitchen')
+      }));
       // 屋上は書いた物を書いた広さのまま置き、残りを屋上の床(外)にする。屋内は部屋を少し広げてよい
       out.push(...fill(regions[0], items, pref, v.core === 'right', roof ? 'deck' : 'empty', roof ? 1 : 1.8));
       floors[key] = out;
@@ -366,11 +380,11 @@
   }
 
   /* ================================================================ 状態 */
-  // 見本の設定文(架空の家)。読み取りの例として、地下・屋上・3 階建て・様子の言葉・ペットを入れてある
-  const SAMPLE = '鎌倉市の海辺に建つ、三階建ての古い洋館を改装した家。灯と同居。地下にレコーディングスタジオ（完全防音）。1階に玄関、リビング、ダイニングキッチン、客間。2階に主寝室、バスルーム（猫足のバスタブ）、ウォークインクローゼット。3階は書斎と納戸。屋上にテラス。黒猫のノワールを飼っている。';
+  // 見本の設定文。だれの住まいとも読めないよう、よくあるワンルームにする(広さの書き方の例も兼ねる)
+  const SAMPLE = 'ワンルームのアパート。玄関（1帖）、キッチン（2帖）、ユニットバス（2帖）、洋室（7.5帖）、クローゼット（1帖）、バルコニー（2帖）。';
   function defaults() {
     const p = parseSetting(SAMPLE);
-    const s = { text: SAMPLE, bld: p.bld, rooms: p.rooms, plan: null, view: 'floor', floor: '1', style: 'flyer', unit: 'jo', north: 0, furn: false, memoFmt: 'md', memoRule: true, edited: false };
+    const s = { text: SAMPLE, bld: p.bld, rooms: p.rooms, plan: null, view: 'floor', floor: '1', style: 'flyer', unit: 'jo', north: 2, furn: false, memoFmt: 'md', memoRule: true, edited: false };
     s.plan = makePlan(s, 0);
     return s;
   }
@@ -559,9 +573,9 @@
   // 壁の厚み(ます目に対する割合)。外壁は約 18 cm、間仕切りは約 8 cm
   const WALL = { ext: 0.2, int: 0.09 };
   // 広さ(帖)を書く部屋。玄関・廊下・水回り・収納などは、物件の図面でも書かない
-  const SHOW_AREA = new Set(['living', 'dining', 'kitchen', 'master', 'bed', 'study', 'library', 'guest', 'washitsu', 'closet', 'storage', 'studio', 'sound', 'gym', 'theater', 'basement', 'pet']);
+  const SHOW_AREA = new Set(['room', 'living', 'dining', 'kitchen', 'master', 'bed', 'study', 'library', 'guest', 'washitsu', 'closet', 'storage', 'studio', 'sound', 'gym', 'theater', 'basement', 'pet']);
   // 物件チラシ風の略し方(名前がこの言葉そのもののときだけ)
-  const SHORT = { ウォークインクローゼット: 'WIC', ウォークイン: 'WIC', シューズインクローゼット: 'SIC', ダイニングキッチン: 'DK', リビングダイニング: 'LD' };
+  const SHORT = { ウォークインクローゼット: 'WIC', ウォークイン: 'WIC', シューズインクローゼット: 'SIC', ダイニングキッチン: 'DK', リビングダイニング: 'LD', キッチン: 'K', クローゼット: 'CL', ユニットバス: 'UB' };
   // 鉄筋コンクリートの建物(外壁の角と途中に柱を描く)
   const RC_RE = /マンション|ビル|ペントハウス/;
   const LDK = new Set(['living', 'dining', 'kitchen']);
@@ -582,7 +596,7 @@
    * 2 つのます目の境の壁。ext = 外壁、int = 間仕切り、rail = 屋上やテラスの手すり、step = 玄関の上がり框、'' = 壁なし
    * (同じ物の中・空きどうし・外どうし・LDK の部屋どうし・廊下と階段)
    */
-  function wallKind(a, b, key) {
+  function wallKind(a, b, key, oneRoom) {
     if (a === b) return '';
     const ta = typeOf(a), tb = typeOf(b);
     if (ta === 'out' || tb === 'out') {
@@ -595,7 +609,8 @@
     if (LDK.has(ta) && LDK.has(tb)) return '';
     const pair = (p, q) => (ta === p && tb === q) || (ta === q && tb === p);
     if (pair('hall', 'stairs')) return '';
-    if (pair('hall', 'entry')) return 'step';
+    if (pair('hall', 'entry') || pair('kitchen', 'entry') || (oneRoom && pair('room', 'entry'))) return 'step';
+    if (oneRoom && pair('room', 'kitchen')) return '';
     return 'int';
   }
   /** 物の外周の辺。e = 辺の名前(h<x>,<y> は横、v<x>,<y> は縦)、other = 向こうの物、into = 物の側(横なら +1 が下、縦なら +1 が右) */
@@ -618,12 +633,12 @@
   // ドアの種類(書いていない種類は開き戸)と、どこから入るか(上から順に探し、なければ隣のどれかの部屋)
   const DOOR_KIND = { closet: 'fold', bath: 'fold', storage: 'slide', washitsu: 'slide', pet: 'slide', cellar: 'swing' };
   const ACCESS = {
-    closet: ['master', 'bed', 'guest', 'hall'], bath: ['wash', 'master', 'bed', 'hall'], toilet: ['hall', 'wash', 'entry'],
+    closet: ['master', 'bed', 'guest', 'room', 'hall'], bath: ['wash', 'master', 'bed', 'hall', 'kitchen'], toilet: ['hall', 'wash', 'entry'],
     wash: ['hall', 'master', 'bed', 'living', 'dining', 'kitchen']
   };
   const ACCESS_DEFAULT = ['hall', 'living', 'dining', 'kitchen', 'entry'];
   // 窓: 2 = 大きい窓(辺の半分ほど)と、角の部屋ならもう 1 つ。1 = 小さい窓を 1 つ
-  const WINDOW = { living: 2, dining: 2, kitchen: 1, master: 2, bed: 2, study: 2, guest: 2, washitsu: 2, library: 1, gym: 2, bath: 1, wash: 1, toilet: 1, pet: 1 };
+  const WINDOW = { room: 2, living: 2, dining: 2, kitchen: 1, master: 2, bed: 2, study: 2, guest: 2, washitsu: 2, library: 1, gym: 2, bath: 1, wash: 1, toilet: 1, pet: 1 };
   /**
    * 1 つの階の壁と建具を決める。{ at, walls: Map(辺 → 壁), open: Map(辺 → 建具), real }。
    * 建具 { k: swing 開き戸・slide 引き戸・fold 折れ戸・window 窓・entrance 玄関ドア・evdoor・shutter・open, into, hinge }。
@@ -632,10 +647,16 @@
   function analyze(s, key) {
     const [W, D] = s.plan.foot, all = s.plan.floors[key] || [];
     const real = all.filter((it) => { const r = roomOf(it.id); return !(r && r.cand); });
-    const at = cellMap(real, W, D);
+    const at = cellMap(real, W, D), oneRoom = /ワンルーム/.test(s.bld.type || '');
     const walls = new Map(), open = new Map();
-    for (let y = 0; y <= D; y++) for (let x = 0; x < W; x++) { const k = wallKind(at(x, y - 1), at(x, y), key); if (k) walls.set(`h${x},${y}`, k); }
-    for (let x = 0; x <= W; x++) for (let y = 0; y < D; y++) { const k = wallKind(at(x - 1, y), at(x, y), key); if (k) walls.set(`v${x},${y}`, k); }
+    for (let y = 0; y <= D; y++) for (let x = 0; x < W; x++) { const k = wallKind(at(x, y - 1), at(x, y), key, oneRoom); if (k) walls.set(`h${x},${y}`, k); }
+    for (let x = 0; x <= W; x++) for (let y = 0; y < D; y++) { const k = wallKind(at(x - 1, y), at(x, y), key, oneRoom); if (k) walls.set(`v${x},${y}`, k); }
+    // 壁のない所や上がり框で、ほかの部屋・廊下・玄関とつながっているか(LDK の組の中どうしは数えない)
+    const linked = (it) => edgesOf(it, at).some((ed) => {
+      const t = typeOf(ed.other), wk = walls.get(ed.e);
+      if (t === 'out' || isVoid(t) || isOutdoor(t, key) || (LDK.has(typeOf(it)) && LDK.has(t))) return false;
+      return !wk || wk === 'step';
+    });
     const put = (ed, op) => { if (open.has(ed.e) || !walls.has(ed.e) || walls.get(ed.e) === 'step') return false; open.set(ed.e, op); return true; };
     // 物の辺を、向こうの物と向きごとにまとめた並び(test に合う物だけ)
     const runsOf = (it, test) => {
@@ -679,7 +700,7 @@
         const run = runsOf(it, (o) => o === undefined).sort((a, b) => (b[0].side === 'b') - (a[0].side === 'b'))[0];
         if (run) { const ed = mid(run); put(ed, { k: 'entrance', into: -ed.into, hinge: 0 }); }
         // 廊下に接していなければ(上がり框がなければ)、隣の部屋へのドア
-        if (!edgesOf(it, at).some((ed) => walls.get(ed.e) === 'step')) reach(it, ['living', 'dining', 'kitchen']);
+        if (!linked(it)) reach(it, ['living', 'dining', 'kitchen']);
         return;
       }
       if (isOutdoor(t, key)) {
@@ -692,7 +713,7 @@
         const run = runsOf(it, (o) => o === undefined).sort((a, b) => (b[0].side === 'b') - (a[0].side === 'b'))[0];
         if (run) { const n = Math.min(run.length, 3), a = Math.floor((run.length - n) / 2); run.slice(a, a + n).forEach((ed) => put(ed, { k: 'shutter' })); }
       }
-      reach(it, ACCESS[t] || ACCESS_DEFAULT);
+      if (!linked(it)) reach(it, ACCESS[t] || ACCESS_DEFAULT);
     });
     // LDK: 仕切りのない部屋どうしを 1 つの組にして、組ごとにドアを 1 つ
     const groups = [];
@@ -703,6 +724,7 @@
     });
     groups.forEach((gr) => {
       gr.sort((a, b) => b.w * b.h - a.w * a.h);
+      if (gr.some(linked)) return;
       for (const want of ['hall', 'entry']) if (gr.some((it) => reach(it, [want], true))) return;
       gr.some((it) => reach(it, []));
     });
@@ -974,6 +996,16 @@
         box(tx, m * 0.06, tl, td, m * 0.1);
         g.beginPath(); g.roundRect(tx + m * 0.08, m * 0.14, tl - m * 0.16, td - m * 0.16, m * 0.16); g.stroke();
         circle(tx + tl - m * 0.26, m * 0.06 + td / 2, m * 0.04, false);
+        // ユニットバス(3 点): 向かいの壁に便器と洗面台も
+        if (/ユニット/.test(name) && Dp > td + m * 0.9) {
+          const by = Dp - m * 0.04;
+          box(m * 0.12, by - m * 0.2, m * 0.4, m * 0.2, m * 0.03);
+          g.beginPath(); g.ellipse(m * 0.32, by - m * 0.2 - m * 0.24, m * 0.17, m * 0.23, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+          if (L > m * 1.3) {
+            box(L - m * 0.62, by - m * 0.42, m * 0.5, m * 0.42, m * 0.05);
+            g.beginPath(); g.ellipse(L - m * 0.37, by - m * 0.24, m * 0.14, m * 0.1, 0, 0, Math.PI * 2); g.stroke();
+          }
+        }
         return m * 0.12 + td;
       });
     } else if (t === 'onsen') {
@@ -1070,7 +1102,7 @@
       if (chairs) [-0.25, 0.25].forEach((k) => { box(cx + k * tw - cs / 2, cy - td / 2 - cs - m * 0.05, cs, cs, m * 0.06); box(cx + k * tw - cs / 2, cy + td / 2 + m * 0.05, cs, cs, m * 0.06); });
     };
     const fits = (L, Dp, a, b) => L > a && Dp > b;
-    if (t === 'master' || t === 'bed' || t === 'guest') {
+    if (t === 'master' || t === 'bed' || t === 'guest' || t === 'room') {
       place(backSide(it, A, 'long'), (L, Dp) => {
         const twin = t === 'guest' && L > m * 2.8, bw = t === 'master' ? m * 1.6 : m * 1.0, bl = m * 2.0;
         if (!fits(L, Dp, bw + m * 0.2, bl + m * 0.3)) return 0;
@@ -1304,7 +1336,8 @@
     g.textBaseline = 'alphabetic';
     g.fillStyle = ink;
     g.font = `700 ${size}px ${font}`;
-    const label = floorLabel(key);
+    // 1 階だけの住まい(ワンルームなど)は、階の名前を出さない
+    const label = floorKeys(s.bld).length > 1 ? floorLabel(key) : '';
     g.fillText(label, x, y);
     // 床面積と、その階の様子
     const area = floorArea(s, key), sub = [key === 'R' ? '' : `床面積 ${area.toFixed(1)}㎡（${(area / TSUBO).toFixed(1)}坪）`, ...attrs].filter(Boolean).join('　');
@@ -1328,7 +1361,7 @@
     const b = s.bld, keys = floorKeys(b).filter((k) => k !== 'R'), font = FONT[s.style];
     const title = `${b.place ? b.place + 'の' : ''}${b.note || ''}${b.type || '住まい'}`;
     const total = keys.reduce((sum, k) => sum + floorArea(s, k), 0);
-    const spec = [`地上${b.above}階${b.below ? `・地下${b.below}階` : ''}${b.roof ? '・屋上' : ''}`, `延床面積 ${total.toFixed(1)}㎡（${(total / TSUBO).toFixed(1)}坪）`].join('　');
+    const spec = [floorKeys(b).length > 1 ? `地上${b.above}階${b.below ? `・地下${b.below}階` : ''}${b.roof ? '・屋上' : ''}` : '', `延床面積 ${total.toFixed(1)}㎡（${(total / TSUBO).toFixed(1)}坪）`].join('　');
     g.save();
     g.textAlign = 'left';
     g.textBaseline = 'alphabetic';
@@ -1635,7 +1668,7 @@
         btn('階ごと', s.view === 'floor', () => setView('floor')),
         btn('全階', s.view === 'all', () => setView('all')),
         btn('断面', s.view === 'section', () => setView('section'), '階を上から重ねて、奥行きの真ん中で切った図')),
-      s.view === 'floor' ? h('div.uh-group', { role: 'group', 'aria-label': '階' },
+      s.view === 'floor' && keys.length > 1 ? h('div.uh-group', { role: 'group', 'aria-label': '階' },
         keys.map((k) => btn(floorLabel(k), s.floor === k, () => { ed.set('floor', k); selectItem(null); renderTools(); }))) : '',
       s.view === 'floor' ? h('div.uh-group', { role: 'group', 'aria-label': '直す物' },
         TOOLS.map(([id, label, title]) => btn(label, view.tool === id, () => setTool(id), title))) : '');
@@ -1690,7 +1723,7 @@
 
   /* ---------- 設定文 ---------- */
   function secText(s) {
-    const ta = h('textarea.uh-src', { rows: 7, 'aria-label': '住まいの設定文', placeholder: '住まいの設定を貼ります。例: 渋谷区の改装マンション一棟。地上 3 階・地下 1 階。2 階に主寝室…', oninput: (e) => { s.text = e.target.value; ed.dirty(); } });
+    const ta = h('textarea.uh-src', { rows: 7, 'aria-label': '住まいの設定文', placeholder: '住まいの設定を貼ります。例: 2 階建ての一軒家。1 階に玄関とリビング、2 階に寝室と書斎…', oninput: (e) => { s.text = e.target.value; ed.dirty(); } });
     ta.value = s.text || '';
     const read = async () => {
       if (s.edited && !(await U.confirmDialog({ title: '読み取り直す', message: '図で動かした部屋の位置、直したドアや窓、表で直した中身は消えて、設定文から作り直します。読み取り直しますか？', okLabel: '読み取り直す' }))) return;
@@ -1724,16 +1757,16 @@
         h('td', h('input', { type: 'text', value: r.name, 'aria-label': '部屋の名前', oninput: (e) => { r.name = e.target.value; touch(); renderMemo(); } })),
         h('td', type),
         h('td', h('input', { type: 'number', min: 1, max: 60, step: 0.5, value: r.tatami, 'aria-label': `${r.name}の畳数`, onchange: (e) => { r.tatami = clamp(Number(e.target.value) || 1, 1, 60); replan(); } })),
-        h('td', h('input', { type: 'text', value: (r.attrs || []).join('・'), placeholder: '大理石・防音など', 'aria-label': `${r.name}の様子`, oninput: (e) => { r.attrs = e.target.value.split(/[・、,]/).map((x) => x.trim()).filter(Boolean); ed.dirty(); renderMemo(); } })),
+        h('td', h('input', { type: 'text', value: (r.attrs || []).join('・'), placeholder: '床暖房・吹き抜けなど', 'aria-label': `${r.name}の様子`, oninput: (e) => { r.attrs = e.target.value.split(/[・、,]/).map((x) => x.trim()).filter(Boolean); ed.dirty(); renderMemo(); } })),
         h('td.uh-c', h('input', { type: 'checkbox', checked: !!r.cand, title: '候補(設定文に書いていない部屋)', 'aria-label': `${r.name}は候補`, onchange: (e) => { r.cand = e.target.checked; e.target.closest('tr').classList.toggle('is-cand', r.cand); touch(); renderMemo(); } })),
         h('td.uh-c', h('button.btn.btn-icon.btn-ghost.danger', { type: 'button', title: '外す', 'aria-label': `${r.name}を外す`, onclick: () => { s.rooms.splice(s.rooms.indexOf(r), 1); replan(); } }, icon('close', 14))));
     });
     return sec('読み取った結果',
-      h('div.grid-2', text('type', '建物', '一軒家・マンション一棟など'), text('place', '場所', '区・市など')),
+      h('div.grid-2', text('type', '建物', '一軒家・アパートなど'), text('place', '場所', '区・市など')),
       h('div.grid-2', num('above', '地上の階', 1, 12), num('below', '地下の階', 0, 4)),
       h('div.uh-row', check('roof', '屋上がある'), check('ev', 'エレベーターがある')),
-      field('建物の様子', h('input', { type: 'text', value: (b.features || []).join('・'), placeholder: '外壁に防犯カメラ 12 台など', oninput: (e) => { b.features = e.target.value.split(/[・、,]/).map((x) => x.trim()).filter(Boolean); ed.dirty(); renderMemo(); } })),
-      h('div.grid-2', text('people', '住む人', '〇〇と同居'), text('pets', 'ペット', '黒猫〇〇（雌）')),
+      field('建物の様子', h('input', { type: 'text', value: (b.features || []).join('・'), placeholder: '建物の外観など', oninput: (e) => { b.features = e.target.value.split(/[・、,]/).map((x) => x.trim()).filter(Boolean); ed.dirty(); renderMemo(); } })),
+      h('div.grid-2', text('people', '住む人', '〇〇と同居'), text('pets', 'ペット', '犬・猫など')),
       h('div.uh-tablewrap', h('table.uh-rooms',
         h('thead', h('tr', ['階', '名前', '種類', '畳', '様子', '候補', ''].map((t) => h('th', t)))),
         h('tbody', rows))),
@@ -1798,7 +1831,7 @@
       logBox);
   }
   // 建物の種類のうち、並んで出てきても食い違いとみなさない組
-  const COMPAT = { マンション一棟: ['マンション', 'ビル'], ビル: ['マンション一棟'], マンション: ['マンション一棟', 'タワーマンション', 'ペントハウス'], タワーマンション: ['マンション', 'ペントハウス'], ペントハウス: ['マンション', 'タワーマンション'], 洋館: ['屋敷'], 屋敷: ['洋館'], 一軒家: [], アパート: [], 別荘: [] };
+  const COMPAT = { ワンルーム: ['アパート', 'マンション'], マンション一棟: ['マンション', 'ビル'], ビル: ['マンション一棟'], マンション: ['マンション一棟', 'タワーマンション', 'ペントハウス'], タワーマンション: ['マンション', 'ペントハウス'], ペントハウス: ['マンション', 'タワーマンション'], 洋館: ['屋敷'], 屋敷: ['洋館'], 一軒家: [], アパート: [], 別荘: [] };
   function analyzeLog(data, s) {
     const items = (data.items || []).filter((x) => x && x.body);
     const bld = {}, rooms = {}, above = {}, below = {};
@@ -1888,7 +1921,8 @@
     const b = s.bld, keys = floorKeys(b), floors = [], notes = [];
     let core = '';
     keys.forEach((key) => {
-      const A = analyze(s, key), label = tight(floorLong(key));
+      // 1 階だけの住まいは、階ではなく「間取り」として書く
+      const A = analyze(s, key), label = keys.length > 1 ? tight(floorLong(key)) : '間取り';
       const rooms = A.real.filter((it) => roomOf(it.id)).sort((p, q) => p.y - q.y || p.x - q.x);
       const st = A.real.find((it) => typeOf(it) === 'stairs');
       if (!core && st) core = placeOf(st, A.W, A.D, s.north);
@@ -1899,11 +1933,11 @@
           if (op && op.k === 'window') wins.add(dirOf(ed.side, s.north));
           else if (op && DOOR_JA[op.k]) {
             doors.push(`${sideName(ed.other)}（${DOOR_JA[op.k]}）`);
-            if (op.k === 'entrance') notes.push(`玄関は${label}の${DIR_JA[dirOf(ed.side, s.north)]}側`);
+            if (op.k === 'entrance') notes.push(`玄関は${keys.length > 1 ? label + 'の' : ''}${DIR_JA[dirOf(ed.side, s.north)]}側`);
           } else if (A.walls.get(ed.e) === 'step') doors.push(`${sideName(ed.other)}（上がり框）`);
+          // 壁のない所でつながる部屋(LDK・ワンルームの洋室とキッチン)
+          else if (!A.walls.has(ed.e) && ed.other && roomOf(ed.other.id) && !isOutdoor(typeOf(ed.other), key)) doors.push(`${roomOf(ed.other.id).name}（仕切りなし）`);
         });
-        const gr = A.ldk.find((x) => x.includes(it) && x.length > 1);
-        if (gr) gr.filter((x) => x !== it).forEach((x) => doors.push(`${roomOf(x.id).name}（仕切りなし）`));
         return {
           name: r.name, outdoor: isOutdoor(t, key),
           // 様子と広さは名前のあとの 1 つの括弧に(「スタジオ（完全防音・18.0帖）」)
@@ -1918,7 +1952,7 @@
     return {
       bld: {
         type: `${b.place ? b.place + 'の' : ''}${b.note || ''}${b.type || '住まい'}`,
-        floors: `地上${b.above}階${b.below ? `・地下${b.below}階` : ''}${b.roof ? '・屋上あり' : ''}`,
+        floors: keys.length > 1 ? `地上${b.above}階${b.below ? `・地下${b.below}階` : ''}${b.roof ? '・屋上あり' : ''}` : '',
         equip: [b.ev && 'エレベーター', ...(b.features || []).map(tight)].filter(Boolean),
         people: tight(b.people), pets: tight(b.pets)
       },
@@ -1947,11 +1981,21 @@
     }
     const lines = ['## 住まい'];
     if (rule) lines.push(MEMO_RULE);
-    lines.push('### 建物', `- 種類: ${b.type}`, `- 階数: ${b.floors}`);
+    lines.push('### 建物', `- 種類: ${b.type}`);
+    if (b.floors) lines.push(`- 階数: ${b.floors}`);
     if (b.equip.length) lines.push(`- 設備: ${b.equip.join('、')}`);
     if (b.people) lines.push(`- 住む人: ${b.people}`);
     if (b.pets) lines.push(`- ペット: ${b.pets}`);
     d.notes.forEach((n) => lines.push(`- ${n}`));
+    // 1 階だけの住まいは、階の段を作らずに部屋を並べる
+    if (d.floors.length === 1) {
+      lines.push('### 部屋');
+      const f = d.floors[0];
+      if (f.attrs.length) lines.push(`- 部屋全体: ${f.attrs.join('・')}`);
+      f.rooms.forEach((r) => lines.push(`- ${roomLine(r, 'md')}`));
+      f.open.forEach((o) => lines.push(`- ${o}`));
+      return lines.join('\n');
+    }
     lines.push('### 階ごとの部屋');
     d.floors.forEach((f) => {
       const head = `- ${f.label}${f.attrs.length ? `（${f.attrs.join('・')}）` : ''}`;
