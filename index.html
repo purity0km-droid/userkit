@@ -215,6 +215,16 @@
           <rect x="48" y="36" width="24" height="4.4" rx="2.2" fill="${INK}" opacity=".7"/>
           ${bars(48, 46, [36, 28, 32], 6)}
           <g fill="${INK}" opacity=".7"><rect x="78" y="62" width="1.2" height="8"/><rect x="80.6" y="62" width="2.4" height="8"/><rect x="84.4" y="62" width="1.2" height="8"/><rect x="87" y="62" width="3" height="8"/><rect x="91.4" y="62" width="1.2" height="8"/><rect x="94" y="62" width="2" height="8"/><rect x="97.4" y="62" width="1.2" height="8"/></g>`,
+        // L 判に並んだ 2 枚のチェキ風プリント: 左はそのまま、右に落書き(ハートと星)
+        usersnap: `
+          <rect x="9" y="14" width="102" height="62" rx="2" fill="#fff" stroke="currentColor" stroke-opacity=".3"/>
+          <rect x="22" y="18" width="34" height="54" fill="#fff" stroke="${INK}" stroke-opacity=".3"/>
+          <rect x="25" y="21" width="28" height="38" fill="currentColor" opacity=".24"/>
+          <rect x="64" y="18" width="34" height="54" fill="#fff" stroke="${INK}" stroke-opacity=".3"/>
+          <rect x="67" y="21" width="28" height="38" fill="currentColor" opacity=".24"/>
+          <path d="M74 31.5c-1.6-2.6-5.6-1.4-4.8 1.5.6 2 4.8 4.8 4.8 4.8s4.2-2.8 4.8-4.8c.8-2.9-3.2-4.1-4.8-1.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          <path d="M88 26.5l1.1 2.4 2.6.3-1.9 1.8.5 2.6-2.3-1.3-2.3 1.3.5-2.6-1.9-1.8 2.6-.3z" fill="currentColor"/>
+          ${bars(29, 64, [20], 5)}${bars(71, 64, [20], 5, .45)}`,
         // スクショの名前とアイコンを、黒塗りとモザイクで隠したところ
         usermask: `
           <rect x="15" y="9" width="90" height="72" rx="6" fill="#fff" stroke="currentColor" stroke-opacity=".3"/>

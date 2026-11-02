@@ -1,0 +1,167 @@
+/* usersnap — チェキ風プリント(見本)。作業台は暗い布の台、L 判の用紙は canvas で描く */
+
+/* ===== ページ(作業画面) */
+.snp-app{max-width:1280px;margin:0 auto;padding:22px 16px 8px}
+.snp-app .page-head{margin-bottom:0}
+.snp-app .lead{max-width:72ch}
+.snp-app .ed-help{margin:10px 0 0}
+/* 説明の文は文節で折り返す(語の途中で行が分かれないように) */
+.snp-app .ed-help li,.snp-app .hint,.snp-app .snp-note,.snp-tip{word-break:auto-phrase}
+.snp-work{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:18px;align-items:start;margin-top:16px}
+
+/* 作業台: 起毛した布のような暗い台に、用紙を 1 枚置く */
+.snp-stage{position:sticky;top:calc(var(--kitbar-h) + 12px);height:clamp(560px,calc(100vh - var(--kitbar-h) - 40px),900px);
+  display:flex;flex-direction:column;border-radius:16px;overflow:hidden;
+  background-color:#2b282e;
+  background-image:
+    radial-gradient(120% 90% at 50% 45%,rgba(255,255,255,.07),transparent 62%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  user-select:none;-webkit-user-select:none}
+.snp-stage.is-over{box-shadow:inset 0 0 0 3px #ff8fc4}
+
+/* 道具の帯 */
+.snp-tools{position:relative;z-index:4;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px 4px}
+.snp-modes{display:flex;flex-wrap:wrap;gap:2px;padding:3px;border-radius:12px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1)}
+.snp-mode{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:54px;padding:4px 6px 3px;border:0;border-radius:9px;background:none;color:rgba(255,255,255,.74);font-size:10.5px;font-weight:700;line-height:1.3}
+.snp-mode svg{display:block;width:26px;height:22px}
+.snp-mode:hover{color:#fff;background:rgba(255,255,255,.08)}
+.snp-mode[aria-pressed="true"]{background:#f6f3ee;color:#2b282e}
+.snp-hist{display:flex;align-items:center;gap:5px;margin-left:auto}
+.snp-tbtn{display:inline-flex;align-items:center;gap:5px;min-height:32px;border:1px solid rgba(255,255,255,.22);background:rgba(0,0,0,.2);color:#fff;border-radius:999px;padding:0 10px;font-size:12px;font-weight:700}
+.snp-tbtn:hover:not(:disabled){background:rgba(0,0,0,.36)}
+.snp-tbtn:disabled{opacity:.35}
+.snp-viewsw{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.snp-viewsw .snp-tbtn[aria-pressed="true"]{background:#f6f3ee;border-color:#f6f3ee;color:#2b282e}
+.snp-stage.is-real .snp-mount{overflow:auto;justify-content:safe center;align-items:safe center}
+.snp-penbar{position:relative;z-index:4;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin:2px 12px 0;padding:7px 12px;border-radius:12px;background:rgba(0,0,0,.24);color:rgba(255,255,255,.86);font-size:12px;font-weight:700}
+.snp-penbar[hidden]{display:none}
+.snp-pcolors{display:flex;flex-wrap:wrap;gap:6px}
+.snp-pc{width:22px;height:22px;padding:0;border:2px solid rgba(255,255,255,.9);border-radius:50%;background:var(--sw);box-shadow:0 0 0 1px rgba(0,0,0,.35)}
+.snp-pc[aria-pressed="true"]{box-shadow:0 0 0 2px #2b282e,0 0 0 4px #fff}
+.snp-pc.own{display:grid;place-items:center;color:#fff;background:conic-gradient(from 90deg,#ff5f9e,#ffc93c,#5fcf8a,#5fb6ff,#8a7cff,#ff5f9e)}
+.snp-pc.own .icon{filter:drop-shadow(0 0 1px rgba(0,0,0,.8))}
+.snp-pw{display:flex;align-items:center;gap:8px}
+.snp-pw input{width:120px;accent-color:#ff8fc4}
+.snp-pw output{min-width:4.2em;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.7)}
+.snp-both{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.snp-both input{accent-color:#ff8fc4}
+
+/* 用紙を置く所。用紙の上に大きさの札、下に 2 枚の名前を置くので、上下を空ける */
+.snp-mount{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:30px 18px 36px}
+.snp-paper{position:relative;flex:none}
+#sheet{display:block;width:100%;height:100%;border-radius:1px;box-shadow:0 24px 44px -20px rgba(0,0,0,.8),0 2px 6px rgba(0,0,0,.35);touch-action:none;cursor:default}
+.mode-pen #sheet{cursor:crosshair}
+.snp-plabel{position:absolute;left:0;bottom:calc(100% + 8px);font:500 11px/1 ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.06em;color:rgba(255,255,255,.72);white-space:nowrap}
+.snp-legend{position:absolute;right:0;bottom:calc(100% + 6px);display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(255,255,255,.72);white-space:nowrap}
+.snp-legend i{width:20px;border-top:1.5px dashed rgba(255,120,150,.9)}
+/* 1 枚ごとの名前。敷き詰めると上の段の名前は用紙の上に乗るので、暗い札にする */
+.snp-cap{position:absolute;top:calc(100% + 10px);transform:translateX(-50%);padding:1px 9px 1px 12px;border-radius:999px;background:rgba(30,28,34,.72);font-size:11.5px;font-weight:700;letter-spacing:.24em;color:rgba(255,255,255,.88);white-space:nowrap;pointer-events:none}
+.snp-cap[hidden]{display:none}
+.snp-cap.is-cur{background:#ff8fc4;color:#2b1020}
+.snp-cut{position:absolute;border:1px dashed rgba(230,70,110,.55);pointer-events:none}
+.snp-empty{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:6px;color:#727a88;text-align:center;pointer-events:none}
+.snp-empty[hidden]{display:none}
+.snp-empty b{font-size:12.5px}
+.snp-empty small{font-size:10.5px;line-height:1.4}
+.mode-pen .snp-empty{opacity:.5}
+.snp-tip{margin:0;padding:0 14px 10px;font-size:11.5px;line-height:1.5;color:rgba(255,255,255,.66);text-align:center}
+
+/* 選んだ物の枠と、その上の操作の帯 */
+.snp-sel{position:absolute;border:1.5px dashed #fff;border-radius:6px;box-shadow:0 0 0 1px rgba(0,0,0,.4),inset 0 0 0 1px rgba(0,0,0,.25);pointer-events:none}
+.snp-sel[hidden],.snp-selbar[hidden]{display:none}
+.snp-sel-h{position:absolute;right:-12px;bottom:-12px;width:22px;height:22px;padding:0;border:2px solid #2b282e;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.45);pointer-events:auto;cursor:nwse-resize;touch-action:none}
+.snp-sel-h::after{content:"";position:absolute;inset:4px;border-radius:50%;border:2px solid #ff6fa8;border-left-color:transparent}
+.snp-selbar{position:absolute;z-index:3;display:flex;gap:2px;padding:3px;border-radius:10px;background:#1f1d24;box-shadow:0 6px 18px rgba(0,0,0,.45);white-space:nowrap}
+.snp-selbar button{display:inline-flex;align-items:center;gap:4px;min-height:28px;padding:0 9px;border:0;border-radius:7px;background:none;color:#eee;font-size:12px;font-weight:700}
+.snp-selbar button:hover{background:rgba(255,255,255,.1)}
+.snp-selbar button[aria-pressed="true"]{background:#ff8fc4;color:#2b1020}
+.snp-selbar button.danger:hover{background:#7a2236}
+
+/* ===== 設定の欄 */
+.snp-side{display:flex;flex-direction:column;padding:0}
+.snp-side-top{position:sticky;top:var(--kitbar-h);z-index:4;display:flex;align-items:center;gap:8px;padding:10px 14px;
+  background:rgba(255,255,255,.95);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);border-radius:var(--radius) var(--radius) 0 0}
+.snp-side-top .kit-spacer{flex:1}
+.snp-side-body{display:flex;flex-direction:column;padding:2px 18px 18px}
+.snp-sec{display:flex;flex-direction:column;gap:10px;padding:16px 0}
+.snp-sec+.snp-sec{border-top:1px solid var(--line)}
+.snp-sec h2{font-size:14px;color:var(--heading)}
+.snp-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.snp-row>input[type=text],.snp-row>input[type=date]{flex:1;min-width:0}
+.snp-col{display:flex;flex-direction:column;gap:8px}
+.snp-side .seg{flex-wrap:wrap}
+.snp-range{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.snp-range input{flex:1;min-width:0;accent-color:var(--primary)}
+.snp-range output{min-width:3.4em;font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted);text-align:right}
+.snp-note{margin:0;padding:8px 12px;border-radius:10px;background:#fff7e6;border:1px solid #f1d8a6;color:#7a5512;font-size:12.5px;line-height:1.6}
+.snp-swatches{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
+.snp-sw{width:28px;height:28px;padding:0;border:2px solid #fff;border-radius:50%;background:var(--sw);box-shadow:0 0 0 1px var(--line-strong)}
+.snp-sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--primary)}
+.snp-sw.own{display:grid;place-items:center;color:#fff;background:conic-gradient(from 90deg,#ff5f9e,#ffc93c,#5fcf8a,#5fb6ff,#8a7cff,#ff5f9e)}
+.snp-sw.own[aria-pressed="true"]{background:var(--sw)}
+.snp-sw.own .icon{filter:drop-shadow(0 0 1px rgba(0,0,0,.7))}
+/* 書体を選ぶボタン(その書体で見本を出す) */
+.snp-fonts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.snp-fonts.jp{grid-template-columns:repeat(5,minmax(0,1fr))}
+.snp-fonts button{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;padding:6px 4px 5px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.snp-fonts button:hover{background:var(--soft)}
+.snp-fonts b{font-size:19px;font-weight:500;line-height:1.25;white-space:nowrap}
+.snp-fonts small{max-width:100%;overflow:hidden;text-overflow:ellipsis;font-size:9.5px;color:var(--muted);white-space:nowrap}
+.snp-fonts.sign b{font-size:23px;line-height:1.35}
+.snp-fgroup{margin:2px 0 -2px;font-size:11.5px;font-weight:700;color:var(--muted)}
+.snp-fonts button[aria-pressed="true"]{border-color:var(--primary);background:var(--soft);box-shadow:0 0 0 2px rgba(109,93,252,.22)}
+/* 文字の一覧(押すと選ぶ) */
+.snp-chips{display:flex;flex-wrap:wrap;gap:6px}
+.snp-chips button{min-height:32px;padding:0 12px;border:1px solid var(--line-strong);border-radius:999px;background:var(--surface);font-size:12.5px;font-weight:700;color:var(--text)}
+.snp-chips button[aria-pressed="true"]{border-color:var(--primary);background:var(--primary);color:#fff}
+.snp-chips .snp-chip-add{display:inline-flex;align-items:center;gap:4px;border-style:dashed;color:var(--primary-dark)}
+.snp-editor{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fbfaff}
+.snp-editor textarea{min-height:56px}
+.snp-ed-title{margin:0;font-size:12.5px;font-weight:700;color:var(--muted)}
+.snp-place{padding-top:4px;border-top:1px dashed var(--line)}
+.snp-place .kit-spacer{flex:1}
+.snp-danger{color:var(--danger)}
+/* ステッカーの一覧 */
+.snp-stickers{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.snp-stickers button{display:grid;place-items:center;aspect-ratio:1;padding:5px;border:1px solid var(--line);border-radius:10px;background:#f4f2f8}
+.snp-stickers button:hover{background:var(--soft);transform:rotate(-4deg)}
+.snp-stickers svg{width:100%;height:100%;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.22))}
+/* 直すカードを選ぶ見本(2 枚以上のとき) */
+.snp-cards{display:flex;flex-wrap:wrap;gap:8px}
+.snp-cardbtn{position:relative;display:grid;place-items:center;width:52px;height:70px;padding:0;overflow:hidden;border:2px solid var(--line-strong);border-radius:6px;background:#eef0f4;color:var(--muted)}
+.snp-cardbtn img{position:absolute;inset:3px 3px 12px;width:calc(100% - 6px);height:calc(100% - 15px);object-fit:cover}
+.snp-cardbtn span{position:absolute;left:0;right:0;bottom:0;font-size:10.5px;font-weight:700;line-height:12px;background:#fff;color:var(--text)}
+.snp-cardbtn[aria-pressed="true"]{border-color:var(--primary);box-shadow:0 0 0 2px rgba(109,93,252,.25)}
+/* お店の刷り方に合わせる(試し刷り) */
+.snp-calib{border:1px solid var(--line);border-radius:12px;background:#fbfaff}
+.snp-calib summary{display:flex;align-items:center;gap:6px;padding:10px 12px;cursor:pointer;font-size:13px;font-weight:700;color:var(--primary-dark)}
+.snp-calib[open] summary{border-bottom:1px solid var(--line)}
+.snp-calib>.snp-col{padding:10px 12px 12px}
+.snp-badge{margin-left:auto;padding:1px 8px;border-radius:999px;background:#e3f6ec;color:#1d7a4c;font-size:11px}
+.snp-num{width:100%;min-height:36px;padding:4px 10px;font-size:13.5px}
+.snp-cuts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.snp-cuts label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;font-weight:700;color:var(--muted)}
+/* 画面の実寸を合わせるカードの枠 */
+.snp-card-wrap{display:flex;justify-content:center;padding:14px 0;overflow:auto}
+.snp-card{flex:none;display:grid;place-items:center;border:2px dashed var(--primary);background:var(--soft);color:var(--primary-dark);font-size:12px;font-weight:700}
+/* 保存のボタン。設定の欄の下に貼りつける */
+.snp-actions{position:sticky;bottom:0;z-index:4;display:flex;flex-direction:column;gap:9px;padding:12px 16px 14px;
+  background:rgba(255,255,255,.96);backdrop-filter:blur(6px);border-top:1px solid var(--line);border-radius:0 0 var(--radius) var(--radius)}
+.snp-ones{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.snp-ones span{margin-right:2px}
+
+@media(max-width:920px){
+  .snp-work{grid-template-columns:minmax(0,1fr)}
+  .snp-stage{position:relative;top:0;height:auto}
+  .snp-mount{flex:none}
+  .snp-hist{margin-left:0}
+}
+@media(max-width:520px){
+  /* 道具は 7 つを 1 段に並べる */
+  .snp-modes{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));width:100%}
+  .snp-mode{min-width:0;padding:4px 0 3px;font-size:8.5px;letter-spacing:-.04em}
+  .snp-mode svg{width:22px;height:19px}
+  .snp-stickers{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .snp-fonts,.snp-fonts.jp{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .snp-legend{display:none}
+}

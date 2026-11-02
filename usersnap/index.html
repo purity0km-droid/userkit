@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>usersnap — チェキ風プリント</title>
+  <meta name="description" content="userの写真をチェキ風に仕上げて、そのままの1枚と落書きした1枚をL判に並べて保存します。コンビニのネットプリントでそのまま刷れます。">
+  <meta name="theme-color" content="#d0507a">
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- 文字とサインの書体。Permanent Marker・Homemade Apple・Rock Salt・Yellowtail は Apache License 2.0、ほかは SIL Open Font License 1.1（2026-11-02 に google/fonts で確認） -->
+  <link href="https://fonts.googleapis.com/css2?family=Mr+Dafoe&family=Herr+Von+Muellerhoff&family=Mrs+Saint+Delafield&family=Ms+Madi&family=Dr+Sugiyama&family=Yellowtail&family=Kristi&family=Meddon&family=Cedarville+Cursive&family=Sacramento&family=Homemade+Apple&family=Caveat:wght@500&family=Permanent+Marker&family=Rock+Salt&family=Gochi+Hand&family=Shadows+Into+Light&family=Reenie+Beanie&family=Nothing+You+Could+Do&family=Covered+By+Your+Grace&family=Yomogi&family=Hachi+Maru+Pop&family=Zen+Kurenaido&family=Yusei+Magic&family=Klee+One:wght@600&family=DotGothic16&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/kit.css">
+  <link rel="stylesheet" href="../assets/colorpick.css">
+  <link rel="stylesheet" href="../assets/editor.css">
+  <link rel="stylesheet" href="usersnap.css">
+</head>
+<body>
+<main class="snp-app">
+  <div class="page-head">
+    <div>
+      <h1>チェキ風プリント</h1>
+      <p class="lead">user の写真をチェキ風のフチと落書きで仕上げます。そのままの 1 枚と落書きした 1 枚を L 判に並べて保存でき、コンビニのネットプリントでそのまま刷れます。どこにも送らず、このブラウザの中だけで作ります。</p>
+    </div>
+  </div>
+  <div id="help"></div>
+  <div class="snp-work">
+    <section class="snp-stage" id="stage" aria-label="L 判の用紙">
+      <div class="snp-tools" id="tools"></div>
+      <div class="snp-penbar" id="penbar"></div>
+      <div class="snp-mount" id="mount">
+        <div class="snp-paper" id="paper">
+          <canvas id="sheet" role="img" aria-label="L 判の用紙に並んだ 2 枚のチェキ風プリント"></canvas>
+          <div class="snp-cut" id="cut"></div>
+          <div class="snp-sel" id="sel" hidden><button type="button" class="snp-sel-h" id="selHandle" title="ドラッグで大きさと向きを変える" aria-label="大きさと向きを変える"></button></div>
+          <div class="snp-selbar" id="selbar" hidden></div>
+        </div>
+      </div>
+      <p class="snp-tip" id="tip"></p>
+    </section>
+    <aside class="snp-side panel" id="side" aria-label="プリントの設定"></aside>
+  </div>
+</main>
+<input type="file" id="photoIn" accept="image/*" multiple hidden>
+
+<script src="../assets/kit.js"></script>
+<script src="../assets/colorpick.js"></script>
+<script src="../assets/editor.js"></script>
+<script src="usersnap.js"></script>
+</body>
+</html>

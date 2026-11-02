@@ -13,6 +13,7 @@ AIチャット「zeta」で使う、自分のキャラクター（user）のた�
 | usersns | セットログ風のVlog画面(2〜4人)・インスタ風の投稿(タグ付け)・ストーリー・LINE風のトーク・Twitter風のプロフィールとリプ画面を、1つの画面で切り替えて作って画像で保存 |
 | usercard | userのプロフィールを、ホロ箔や単色の箔押しのトレカ風カードにして、画像（PNG）と短い動画（MP4）で保存 |
 | userid | userの社員証・学生証・自己紹介カードなどを、載せる項目を自由に選んで作り、表・裏・両面を画像（PNG）で保存 |
+| usersnap | userの写真をチェキ風のフチと落書きで仕上げ、そのままの1枚と落書きした1枚をL判に並べて、JPEG・PNG・レイヤーに分けたPSDで保存。2L判には1枚ずつ実寸のまま3枚並べられる |
 | usermask | スクショのユーザー名・アイコンを、なぞるだけで隠す。登録した名前・アイコンは次の画像から自動で見つける |
 | talklog | zeta（Web版）のトークを、吹き出しのまま読めるHTMLファイルに保存。書き出したログの閲覧・テキスト化も |
 
@@ -32,6 +33,7 @@ AIチャット「zeta」で使う、自分のキャラクター（user）のた�
 - ツール（このリポジトリのコード）の再配布と、手を加えたものの公開はお断りします。紹介するときは、サイト https://purity0km-droid.github.io/userkit/ を案内してください。
 - 使ったことで起きた問題について、作者は責任を負えません。
 - PNG 書き出しに使う html-to-image は、それ自体のライセンス（MIT）に従います。
+- PSD 書き出しに使う ag-psd は、それ自体のライセンス（MIT）に従います。
 
 © 2026 purity0km-droid
 
@@ -49,3 +51,4 @@ python -m http.server 5175
 - `dev/zeta-mock.html` … talklog の収集スクリプトを確かめるための模擬トーク画面（zeta の画面ではありません）
 
 PNG書き出し（userpair / userline / usersns / usercard）には [html-to-image](https://github.com/bubkoo/html-to-image)（MIT）を CDN から読み込んで使っています。
+PSD書き出し（usersnap）には [ag-psd](https://github.com/Agamnentzar/ag-psd)（MIT）を CDN から読み込んで使っています。
