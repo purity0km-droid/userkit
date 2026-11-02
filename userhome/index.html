@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>userhome — 間取り図</title>
+  <meta name="description" content="userの住まいの設定文から、階ごとの間取り図を起こします。トークのログと照らし合わせて設定のぶれを見つけ、zetaに貼る覚え書きも作れます。">
+  <meta name="theme-color" content="#6d5dfc">
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- 図の書体。どれも SIL Open Font License 1.1（2026-11-02 に google/fonts で確認） -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@500;700&family=Zen+Kurenaido&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/kit.css">
+  <link rel="stylesheet" href="../assets/colorpick.css">
+  <link rel="stylesheet" href="../assets/editor.css">
+  <link rel="stylesheet" href="userhome.css">
+</head>
+<body>
+<main class="uh-app">
+  <div class="page-head">
+    <div>
+      <h1>間取り図</h1>
+      <p class="lead">user の住まいの設定文から、階ごとの間取り図を起こします。トークのログと照らし合わせて設定のぶれを見つけ、zeta に貼る覚え書きも作れます。どこにも送らず、このブラウザの中だけで作ります。</p>
+    </div>
+  </div>
+  <div id="help"></div>
+  <div class="uh-work">
+    <section class="uh-stage" id="stage" aria-label="間取り図">
+      <div class="uh-tools" id="tools"></div>
+      <div class="uh-mount" id="mount">
+        <div class="uh-paper" id="paper">
+          <canvas id="plan" role="img" aria-label="間取り図"></canvas>
+        </div>
+      </div>
+      <p class="uh-tip" id="tip"></p>
+    </section>
+    <aside class="uh-side panel" id="side" aria-label="間取りの設定"></aside>
+  </div>
+</main>
+<input type="file" id="logIn" accept=".html,text/html" hidden>
+
+<script src="../assets/kit.js"></script>
+<script src="../assets/colorpick.js"></script>
+<script src="../assets/editor.js"></script>
+<script src="userhome.js"></script>
+</body>
+</html>

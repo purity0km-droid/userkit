@@ -88,6 +88,7 @@
     card: '<rect x="5" y="2.5" width="14" height="19" rx="2"/><circle cx="14.5" cy="7" r="2"/><path d="M8 13h8M8 16.5h5"/>',
     idcard: '<rect x="3" y="5.5" width="18" height="13" rx="2"/><circle cx="8.5" cy="10.5" r="2"/><path d="M5.6 15.5c.6-1.3 1.6-2 2.9-2s2.3.7 2.9 2M14 10h4.5M14 13.5h3"/>',
     snap: '<rect x="5.5" y="2.5" width="13" height="19" rx="1.5"/><rect x="7.5" y="4.5" width="9" height="10.5" rx=".5"/><path d="M9 18h6"/>',
+    plan: '<rect x="3.5" y="4.5" width="17" height="15" rx="1"/><path d="M12 4.5v5M12 13.5v6M12 13.5h4M16 13.5a4 4 0 0 0-4-4"/>',
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
     help: '<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2-2.5 3.6M12 16.8h.01"/>'
   };
@@ -312,6 +313,8 @@
   const TOOLS = [
     { id: 'userprof', group: 'note', label: 'プロフィール帳', icon: 'book', out: ['ブラウザに保存', 'テキスト'],
       desc: 'userのプロフィール・年表・設定メモ・画像を、プロットごとにまとめて保存します。zetaのユーザープロフィール(1000字)の保存と字数の調整もできます。' },
+    { id: 'userhome', group: 'note', label: '間取り図', icon: 'plan', out: ['PNG', 'テキスト'],
+      desc: 'userの住まいの設定文から、階ごとの間取り図を起こして画像（PNG）で保存します。zetaに貼る住まいの覚え書きも作れます。talklogのログと照らし合わせて、設定のぶれを見つけられます。' },
     { id: 'userpair', group: 'make', label: 'ペアプロフィール', icon: 'pair', out: ['PNG'],
       desc: '2人(または1人)のキャラシートを作って、画像で保存します。userprofのプロフィールも読み込めます。' },
     { id: 'userline', group: 'make', label: 'タイムラインペアカード', icon: 'timeline', out: ['PNG'],

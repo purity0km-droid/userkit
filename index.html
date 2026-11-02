@@ -132,7 +132,7 @@
         </div>
         <div>
           <dt><span data-icon="link"></span>ツール同士でつながります</dt>
-          <dd>同じ端末・同じブラウザなら、userprofに保存したプロフィールと画像を userpair・userline・usersns・usercard から読み込めます。</dd>
+          <dd>同じ端末・同じブラウザなら、userprof に保存したプロフィールと画像を、ほかの多くのツールで読み込めます。talklog で書き出したトークは、userhome で住まいの設定と照らし合わせられます。</dd>
         </div>
       </dl>
     </section>
@@ -161,6 +161,19 @@
           <path d="M71 29v32" stroke="currentColor" stroke-opacity=".45" stroke-width="1.5"/>
           <circle cx="71" cy="32" r="2.6" fill="currentColor"/><circle cx="71" cy="45" r="2.6" fill="currentColor"/><circle cx="71" cy="58" r="2.6" fill="currentColor"/>
           ${bars(77, 30.5, [19, 15, 20], 13)}`,
+        // 間取り図: 太い外壁、色を付けた部屋、階段の段、開き戸の弧、窓、キッチンと浴槽
+        userhome: `
+          <rect x="16" y="12" width="88" height="66" fill="#fff"/>
+          <rect x="44" y="12" width="60" height="34" fill="currentColor" opacity=".16"/>
+          <rect x="44" y="46" width="30" height="32" fill="currentColor" opacity=".34"/>
+          <rect x="74" y="46" width="30" height="32" fill="currentColor" opacity=".08"/>
+          <path d="${[16, 20, 24, 28, 32, 36, 40].map((y) => `M18 ${y}h18`).join('')}" stroke="${INK}" stroke-opacity=".3" stroke-width=".8"/>
+          <path d="M36 12v34M36 46h-20M44 12v5M44 25v25M44 58v20M44 46h60M74 46v32" fill="none" stroke="${INK}" stroke-width="1.8"/>
+          <path d="M44 25h8M52 25A8 8 0 0 0 44 17M44 58h8M52 58A8 8 0 0 0 44 50" fill="none" stroke="${INK}" stroke-opacity=".7" stroke-width="1"/>
+          <rect x="16" y="12" width="88" height="66" fill="none" stroke="${INK}" stroke-width="3"/>
+          <rect x="60" y="10.5" width="28" height="3" fill="#fff" stroke="${INK}" stroke-width=".8"/>
+          <rect x="95" y="16" width="6" height="24" fill="#fff" stroke="${INK}" stroke-opacity=".5" stroke-width=".8"/>
+          <rect x="80" y="64" width="20" height="10" rx="3" fill="#fff" stroke="${INK}" stroke-opacity=".5" stroke-width=".8"/>`,
         // 2 人のキャラシート: 見出しの帯、2 人のアイコンと関係の矢印
         userpair: `
           <rect x="13" y="13" width="94" height="64" rx="5" fill="#fff" stroke="currentColor" stroke-opacity=".3"/>
