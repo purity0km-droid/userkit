@@ -107,7 +107,7 @@
     const p = ed.state.people[i];
     p.name = u.name || p.name;
     if (u.plot) p.intro = u.plot;
-    const items = [['年齢', u.age], ['性別', u.gender], ['身長', u.height], ['職業', u.occupation], ['好き', u.likes], ['苦手', u.dislikes]]
+    const items = [['年齢', u.age], ['誕生日', u.birthday], ['性別', u.gender], ['身長', u.height], ['職業', u.occupation], ['好き', u.likes], ['苦手', u.dislikes]]
       .filter(([, v]) => v && String(v).trim()).map(([k, v]) => ({ k, v: String(v) }));
     if (items.length) p.items = items;
     if (u.personality) p.tags = String(u.personality).split(/[、,。・\s]+/).filter(Boolean).slice(0, 4).map((t) => ({ t }));

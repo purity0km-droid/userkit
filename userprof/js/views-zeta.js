@@ -299,6 +299,72 @@
     body.append(toolFoot(ctl, h('span'), useBtn));
   }
 
+  /* ====================================================== 前の版 */
+  const KIND = { copy: 'コピーした版', replaced: '道具で置き換える前', restore: '前の版に戻す前' };
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const fmtTime = (at) => { const d = new Date(at); return `${U.fmtDate(at)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+
+  /** 行ごとの見比べ (a=前の版, b=いま)。[{ t: 'same'|'del'|'add', s }] */
+  function lineDiff(a, b) {
+    const A = nl(a).split('\n'), B = nl(b).split('\n');
+    const n = A.length, m = B.length;
+    const L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    }
+    const out = [];
+    let i = 0, j = 0;
+    while (i < n && j < m) {
+      if (A[i] === B[j]) { out.push({ t: 'same', s: A[i] }); i++; j++; }
+      else if (L[i + 1][j] >= L[i][j + 1]) out.push({ t: 'del', s: A[i++] });
+      else out.push({ t: 'add', s: B[j++] });
+    }
+    while (i < n) out.push({ t: 'del', s: A[i++] });
+    while (j < m) out.push({ t: 'add', s: B[j++] });
+    return out;
+  }
+
+  /** 前の版を選んで、いまの文章と見比べる・戻す・コピーする・消す */
+  function historyDialog(u, current, restore, changed) {
+    const list = u.zeta.history;
+    let sel = 0;
+    const items = h('div.zhist-list', { role: 'listbox', 'aria-label': '前の版' });
+    const detail = h('div.zhist-detail');
+    const draw = () => {
+      items.replaceChildren(...list.map((v, i) => h('button.zhist-item', {
+        type: 'button', role: 'option', 'aria-selected': i === sel ? 'true' : 'false',
+        onclick: () => { sel = i; draw(); }
+      }, h('b', fmtTime(v.at)), h('small', `${KIND[v.kind] || '前の版'}・${count(v.text).toLocaleString()}字`),
+        h('span', nl(v.text).split('\n').find((l) => l.trim()) || ''))));
+      const v = list[sel], now = current();
+      const d = lineDiff(v.text, now);
+      const same = d.every((x) => x.t === 'same');
+      const dn = count(now) - count(v.text);
+      detail.replaceChildren(
+        h('p.zhist-sum', same ? 'いまの「zetaに貼る文章」と同じです。'
+          : `この版 ${count(v.text).toLocaleString()}字 → いまの文章 ${count(now).toLocaleString()}字(${dn >= 0 ? '+' : '−'}${Math.abs(dn).toLocaleString()}字)`),
+        !same && h('p.zhist-legend', h('span.zd-del', 'この版だけにある行'), h('span.zd-add', 'いまの文章だけにある行')),
+        h('div.zdiff-lines', d.map((x) => h('div.zd-' + x.t, x.s || ' '))),
+        h('div.zhist-actions',
+          h('button.btn.btn-ghost.btn-sm.danger', { type: 'button', onclick: async () => {
+            if (!(await U.confirmDialog({ title: '前の版を消す', message: `${fmtTime(v.at)} の版を消しますか?`, okLabel: '消す', danger: true }))) return;
+            list.splice(sel, 1);
+            changed();
+            if (!list.length) return ctl.close();
+            sel = Math.min(sel, list.length - 1);
+            draw();
+          } }, icon('trash'), 'この版を消す'),
+          h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: () => U.copyText(v.text) }, icon('copy'), 'この版をコピー'),
+          h('button.btn.btn-primary.btn-sm', { type: 'button', disabled: same, onclick: () => { restore(v.text); ctl.close(); } },
+            icon('undo'), 'この版に戻す')));
+    };
+    const body = h('div.modal-body',
+      h('p.modal-lead', `コピーした版と、道具で置き換える前の版を、新しい順に${Store.ZETA_HISTORY}個まで残しています。戻すと、いまの文章も前の版に残ります。`),
+      h('div.zhist', items, detail));
+    const ctl = U.openDialog({ title: '前の版', content: body, wide: true });
+    draw();
+  }
+
   /* ====================================================== タブ本体 */
   function tabZeta(u) {
     const z = u.zeta;
@@ -343,8 +409,28 @@
       undoBtn.hidden = true;
     };
     outTa.addEventListener('input', () => { z.text = outTa.value; save(); undoText = null; undoBtn.hidden = true; });
+
+    // 前の版
+    const histN = h('span.zhist-n');
+    const histBtn = h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => {
+      if (!z.history.length) return;
+      historyDialog(u, () => outTa.value, (text) => {
+        Store.keepZeta(u, z.text, 'restore');
+        setOut(text);
+        drawHist();
+        U.toast('この版に戻しました');
+      }, () => { save(); drawHist(); });
+    } }, icon('clock'), '前の版', histN);
+    const drawHist = () => {
+      histBtn.hidden = !z.history.length;
+      histN.textContent = z.history.length;
+    };
+    drawHist();
+    const keep = (text, kind) => { if (Store.keepZeta(u, text, kind)) { save(); drawHist(); } };
+
     const use = (text) => {
       const before = z.text;
+      if (before !== text) keep(before, 'replaced');
       setOut(text);
       if (before !== text) { undoText = before; undoBtn.hidden = false; }
       U.toast('zetaに貼る文章に入れました');
@@ -353,6 +439,7 @@
     const copyOut = () => {
       const t = outTa.value;
       if (!t.trim()) return U.toast('コピーする内容がありません', 'error');
+      keep(t, 'copy');
       const over = count(t) - LIMIT;
       U.copyText(t, over > 0 ? `コピーしました(${LIMIT}字を${over}字 超えています)` : 'コピーしました');
     };
@@ -371,7 +458,7 @@
 
     return h('div.zeta',
       h('div.sec-head', h('h2', 'zetaプロフ')),
-      h('p.zeta-lead', `zetaのユーザープロフィールは改行も1字と数えて${LIMIT}字までです。長い設定は「元の文章」に丸ごと保存しておき、${LIMIT}字に収めた版を下で作れます。入力した内容は自動で保存されます。`),
+      h('p.zeta-lead', `zetaのユーザープロフィールは改行も1字と数えて${LIMIT}字までです。長い設定は「元の文章」に丸ごと保存しておき、${LIMIT}字に収めた版を下で作れます。入力した内容は自動で保存されます。「zetaに貼る文章」をコピーした版は「前の版」に残り、あとで見比べたり戻したりできます。`),
 
       h('section.zeta-box',
         h('div.zeta-box-head',
@@ -391,7 +478,7 @@
       h('section.zeta-box.zeta-out',
         h('div.zeta-box-head',
           h('label.zeta-title', { for: 'z-text' }, h('span.zno', '3'), 'zetaに貼る文章', h('small', `${LIMIT}字まで`)),
-          h('div.sec-actions', undoBtn,
+          h('div.sec-actions', undoBtn, histBtn,
             h('button.btn.btn-primary.btn-sm', { type: 'button', onclick: copyOut }, icon('copy'), 'コピー'))),
         outTa, outCount.el));
   }

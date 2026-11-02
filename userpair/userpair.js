@@ -124,14 +124,16 @@
     const u = r.user;
     const p = ed.state.people[i];
     p.name = u.name || p.name;
+    if (u.reading) p.sub = u.reading;
     const setTag = (k, v) => {
       if (!v) return;
       const t = p.tags.find((x) => x.k.toUpperCase() === k);
       if (t) t.v = v; else p.tags.push({ k, v });
     };
     setTag('AGE', u.age); setTag('GENDER', u.gender); setTag('HEIGHT', u.height);
-    const rows = [['職業・立場', u.occupation], ['性格', u.personality], ['好きなもの', u.likes], ['嫌いなもの', u.dislikes],
-      ['髪', [u.hairColor, u.hairStyle].filter(Boolean).join('・')], ['瞳', u.eyes], ['服装・雰囲気', u.style], ['家族', u.family], ['生い立ち', u.past]]
+    const own = (Array.isArray(u.extra) ? u.extra : []).filter((x) => x && x.label).map((x) => [x.label, x.value]);
+    const rows = [['誕生日', u.birthday], ['職業・立場', u.occupation], ['一人称', u.firstPerson], ['性格', u.personality], ['好きなもの', u.likes], ['嫌いなもの', u.dislikes],
+      ['髪', [u.hairColor, u.hairStyle].filter(Boolean).join('・')], ['瞳', u.eyes], ['服装・雰囲気', u.style], ['家族', u.family], ['生い立ち', u.past], ...own]
       .filter(([, v]) => v && String(v).trim()).map(([k, v]) => ({ k, v: String(v) }));
     if (rows.length) p.desc = rows;
     if (u.bio) p.note = u.bio;

@@ -983,8 +983,8 @@ $('fromProf').addEventListener('click', async () => {
   if (!r) return;
   const u = r.user, s = (v) => (typeof v === 'string' ? v : '');
   Object.assign(state, {
-    name: s(u.name), sub: '', emb: '', plot: s(u.plot), partners: (Array.isArray(u.partners) ? u.partners : []).join('、'),
-    age: s(u.age), birthday: '', gender: s(u.gender),  // 生年月日は userprof に無いので空にする
+    name: s(u.name), sub: s(u.reading), emb: '', plot: s(u.plot), partners: (Array.isArray(u.partners) ? u.partners : []).join('、'),
+    age: s(u.age), birthday: s(u.birthday), gender: s(u.gender),
     height: s(u.height), occupation: s(u.occupation),
     hair: [s(u.hairColor), s(u.hairStyle)].filter(Boolean).join('・'), eyes: s(u.eyes), likes: s(u.likes), dislikes: s(u.dislikes),
     text: s(u.personality) || s(u.bio), color: Store.colorHex(u), image: r.image ? r.image.src : '', posY: 30, zoom: 100

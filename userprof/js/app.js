@@ -23,6 +23,7 @@
     const titles = { list: 'user一覧', backup: 'バックアップ' };
     const u = parts[0] === 'user' ? Store.getUser(parts[1]) : null;
     document.title = `${u ? u.name : titles[nav]} — userprof`;
+    Views.drawBackupAt();
   }
 
   let lastPage = null;

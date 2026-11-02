@@ -731,14 +731,20 @@
     const u = r.user, str = (v) => (typeof v === 'string' ? v.trim() : '');
     const s = ed.state;
     if (str(u.name)) s.name = str(u.name);
+    if (str(u.reading)) s.nameSub = str(u.reading);
     if (r.image) s.photo = r.image;
     if (window.Store && Store.colorHex) s.color = safeHex(Store.colorHex(u), s.color);
-    const MAP = [[/好き/, 'likes'], [/苦手|嫌い/, 'dislikes'], [/年齢/, 'age'], [/身長/, 'height'], [/職業|役職|仕事/, 'occupation'], [/性格|ひとこと|一言/, 'personality'], [/自己紹介|紹介/, 'bio']];
+    const MAP = [[/好き/, 'likes'], [/苦手|嫌い/, 'dislikes'], [/年齢/, 'age'], [/誕生日|生年月日/, 'birthday'], [/身長/, 'height'], [/一人称/, 'firstPerson'],
+      [/職業|役職|仕事/, 'occupation'], [/性格|ひとこと|一言/, 'personality'], [/自己紹介|紹介/, 'bio']];
+    // userprof で自分で足した項目は、項目名が同じものに入れる
+    const extra = (Array.isArray(u.extra) ? u.extra : []).filter((x) => x && str(x.label) && str(x.value));
     let n = 0;
     s.items.forEach((x) => {
       if (!('value' in x)) return;
       const m = MAP.find(([re]) => re.test(x.label));
-      if (m && str(u[m[1]])) { x.value = str(u[m[1]]); n++; }
+      const own = extra.find((e) => str(e.label) === str(x.label));
+      const v = m && str(u[m[1]]) ? str(u[m[1]]) : own ? str(own.value) : '';
+      if (v) { x.value = v; n++; }
     });
     ed.dirty();
     renderPanel();

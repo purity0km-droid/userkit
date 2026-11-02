@@ -4,11 +4,12 @@
   const { h, icon } = U;
   window.Views = window.Views || {};
 
+  // short = 狭い画面で5つを1列に収めるときの名前
   const TABS = [
     { id: 'profile', label: 'プロフィール', icon: 'user' },
-    { id: 'zeta', label: 'zetaプロフ', icon: 'file' },
+    { id: 'zeta', label: 'zetaプロフ', short: 'zeta', icon: 'file' },
     { id: 'timeline', label: '年表', icon: 'list' },
-    { id: 'notes', label: '設定メモ', icon: 'edit' },
+    { id: 'notes', label: '設定メモ', short: 'メモ', icon: 'edit' },
     { id: 'images', label: '画像', icon: 'image' }
   ];
 
@@ -70,7 +71,11 @@
 
   /* ------------------------------------------------ プロフィール */
   function tabProfile(u, refresh) {
-    const rows = Store.FIELDS.filter((f) => u[f.key].trim());
+    // [見出し, 中身, コピーのkey, 広く取るか]。自分で足した項目は、長いときや改行があるときだけ広く取る
+    const rows = [
+      ...Store.FIELDS.filter((f) => u[f.key].trim()).map((f) => [f.label, u[f.key], f.key, !!f.long]),
+      ...u.extra.filter((x) => x.value.trim()).map((x) => [x.label || '項目', x.value, 'x:' + x.id, x.value.includes('\n') || x.value.length > 30])
+    ];
     const wrap = h('div');
     wrap.append(sectionHead('プロフィール',
       copyBtn(() => Store.text.profile(u), '全項目をコピー'),
@@ -82,13 +87,13 @@
       return wrap;
     }
     const grid = h('dl.facts');
-    rows.forEach((f) => grid.append(
-      h('div.fact' + (f.long ? '.wide' : ''),
-        h('dt', f.label, h('button.mini-copy', {
-          type: 'button', title: `${f.label}をコピー`, 'aria-label': `${f.label}をコピー`,
-          onclick: () => U.copyText(Store.text.profile(u, [f.key]))
+    rows.forEach(([label, value, key, wide]) => grid.append(
+      h('div.fact' + (wide ? '.wide' : ''),
+        h('dt', label, h('button.mini-copy', {
+          type: 'button', title: `${label}をコピー`, 'aria-label': `${label}をコピー`,
+          onclick: () => U.copyText(Store.text.profile(u, [key]))
         }, icon('copy', 14))),
-        h('dd', u[f.key]))));
+        h('dd', value))));
     wrap.append(grid);
     if (u.bio.trim()) {
       wrap.append(h('div.bio',
@@ -274,6 +279,7 @@
       avatar,
       h('div.hero-main',
         h('h1', u.name),
+        u.reading.trim() && h('p.hero-reading', u.reading),
         h('div.chips',
           h('span.chip.chip-plot', u.plot || 'プロット未設定'),
           u.partners.map((p) => h('span.chip', icon('link', 13), p))),
@@ -290,8 +296,8 @@
         } }, icon('trash'), '削除')));
 
     const tabs = h('div.tabs', { role: 'tablist' }, TABS.map((t) => h('a.tab' + (t.id === tab ? '.active' : ''), {
-      href: `#/user/${u.id}/${t.id}`, role: 'tab', 'aria-selected': t.id === tab ? 'true' : 'false'
-    }, icon(t.icon, 16), t.label)));
+      href: `#/user/${u.id}/${t.id}`, role: 'tab', 'aria-selected': t.id === tab ? 'true' : 'false', 'aria-label': t.label
+    }, icon(t.icon, 16), h('span.tab-long', t.label), h('span.tab-short', t.short || t.label))));
 
     const panel = h('section.panel.tab-panel', { role: 'tabpanel' });
     panel.append(({
