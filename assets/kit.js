@@ -90,6 +90,7 @@
     snap: '<rect x="5.5" y="2.5" width="13" height="19" rx="1.5"/><rect x="7.5" y="4.5" width="9" height="10.5" rx=".5"/><path d="M9 18h6"/>',
     plan: '<rect x="3.5" y="4.5" width="17" height="15" rx="1"/><path d="M12 4.5v5M12 13.5v6M12 13.5h4M16 13.5a4 4 0 0 0-4-4"/>',
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+    scroll: '<path d="M18 16V5a2 2 0 0 0-2-2H5"/><path d="M5 3a2 2 0 0 0-2 2v1.5h4V5a2 2 0 0 0-2-2z"/><path d="M7 6.5V19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1.5H11V19a2 2 0 0 1-2 2"/><path d="M10.5 8.5h4.5M10.5 12h4.5"/>',
     help: '<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2-2.5 3.6M12 16.8h.01"/>'
   };
   function icon(name, size) {
@@ -307,7 +308,7 @@
   const GROUPS = [
     { id: 'note', label: '書きためる', desc: 'userの設定をあとから見返せる形で手元に残す', tint: '#6d5dfc' },
     { id: 'make', label: '画像にする', desc: 'プロフィールや2人の関係を1枚の画像や短い動画にする', tint: '#d0507a' },
-    { id: 'keep', label: '隠す・残す', desc: 'スクショの名前を隠し、トークを手元に保存する', tint: '#138a7e' }
+    { id: 'keep', label: '隠す・残す', desc: 'スクショの名前を隠し、トークやプロットを手元に保存する', tint: '#138a7e' }
   ];
   // 並びはメニュー・トップの順。out はできあがる物(トップの札)
   const TOOLS = [
@@ -330,7 +331,9 @@
     { id: 'usermask', group: 'keep', label: '名前・アイコン隠し', icon: 'mask', out: ['PNG'],
       desc: 'スクショのユーザー名やアイコンを、なぞるだけで隠します。登録した名前は次の画像から自動で見つけます。' },
     { id: 'talklog', group: 'keep', label: 'トーク保存', icon: 'bubble', out: ['HTML', 'テキスト'],
-      desc: 'zetaのトークを、吹き出しのまま読めるHTMLファイルにして手元に保存します。書き出したログを開いて読むこともできます。' }
+      desc: 'zetaのトークを、吹き出しのまま読めるHTMLファイルにして手元に保存します。書き出したログを開いて読むこともできます。' },
+    { id: 'charplot', group: 'keep', label: 'プロット保存', icon: 'scroll', out: ['ブラウザに保存', 'プレビュー'],
+      desc: 'zetaのプロットを編集画面と同じタブの並びに貼って、手元に保存します。紹介ページは記法を選んでマークダウンで書き、zetaに近い見え方で確かめてからコピーしてzetaに貼れます。イントロの見え方も確かめられます。' }
   ];
   const toolUrl = (id) => new URL(id ? id + '/' : './', BASE).href;
   const groupOf = (toolId) => GROUPS.find((g) => g.id === (TOOLS.find((t) => t.id === toolId) || {}).group);
