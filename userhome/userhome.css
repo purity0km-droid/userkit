@@ -49,6 +49,8 @@
 .uh-rooms .uh-c{text-align:center}
 .uh-rooms tr.is-cand td{background:#fbfaf2}
 .uh-rooms tr.is-cand input[type=text]{color:var(--muted)}
+/* 読み取りの知らせ */
+.uh-note{margin:0;padding:8px 12px;border-radius:10px;background:#fff5e6;color:#7a4e00;font-size:12.5px;line-height:1.6;word-break:auto-phrase}
 /* 案 */
 .uh-variants{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .uh-variants button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:9px 10px;border:1px solid var(--line-strong);border-radius:12px;background:var(--surface);text-align:left}
