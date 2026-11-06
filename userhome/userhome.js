@@ -98,7 +98,8 @@
   /**
    * 設定文 → { bld: 建物, rooms: 部屋, unread: 読み取れなかった言葉 [{ word, floor }] }。
    * 文を「。」「／」と改行で区切り、その中を「、」で区切る。階の言葉が出たら、文をまたいで次の階の言葉が出るまで、その階の部屋とみなす
-   * (「2階：」の下に部屋を並べる書き方のため。階を書き忘れた文は前の階に寄るが、表で直せる)
+   * (「2階：」の下に部屋を並べる書き方のため。階を書き忘れた文は前の階に寄るが、表で直せる)。
+   * 同じ部屋に何度も触れる文章でも部屋が増えないよう、最後に mergeMentions で言及をまとめる
    */
   function parseSetting(src) {
     const text = normText(src);
@@ -133,9 +134,16 @@
     }
     // 文ごと・区切りごとに、階と部屋を拾う
     let maxAbove = 0, ctx = [], prevSize = false;   // ctx = いま有効な階(「1階と2階：」なら 2 つ)。prevSize = 前の区切りが建物の大きさの言葉だった
+    let listNo = 0, prevBare = false, topic = null;   // listNo = 列挙の番号(同じ番号の部屋は別の部屋)。topic = 寸法だけの文が指す部屋
     text.split(/[。\n／/;；]+/).forEach((sent) => {
-      clausesOf(sent).forEach((clause) => {
-        const found = roomsIn(clause);
+      const parts = clausesOf(sent).map((clause) => ({ clause, found: roomsIn(clause) }));
+      const inSent = parts.flatMap((p) => p.found);
+      // 部屋だけの行が続くときは、行をまたいで 1 つの列挙にする(「・洋室 6帖」の箇条書き)
+      const bare = isBareLine(parts);
+      if (!bare || !prevBare) listNo++;
+      prevBare = bare;
+      listNo = numberLists(parts, listNo, bare);
+      parts.forEach(({ clause, found }) => {
         // 部屋の名前に含まれる「地下」「屋上」(地下室・地下浴室など)は、階の言葉として読まない
         const groups = floorGroups(found.filter((f) => /^(地下|屋上)/.test(f.label)).reduce((t, f) => t.slice(0, f.start) + '□'.repeat(f.end - f.start) + t.slice(f.end), clause));
         groups.forEach((gr) => gr.keys.forEach((k) => { if (/^\d+$/.test(k)) maxAbove = Math.max(maxAbove, Number(k)); }));
@@ -144,7 +152,8 @@
         prevSize = sizeOnly;
         const attrs = ATTRS.filter((a) => clause.includes(a) && !(a === '防音' && clause.includes('完全防音')));
         const lastKeys = groups.length ? groups[groups.length - 1].keys : ctx;
-        unreadIn(clause, found).forEach((word) => { if (!unread.has(word)) unread.set(word, lastKeys.length === 1 && lastKeys[0] !== 'ALL' ? lastKeys[0] : ''); });
+        // 階の話でも部屋の話でもない文(家具の説明など)からは、部屋らしい終わり方の言葉だけを拾う
+        unreadIn(clause, found, lastKeys.length > 0 || inSent.length > 0).forEach((word) => { if (!unread.has(word)) unread.set(word, lastKeys.length === 1 && lastKeys[0] !== 'ALL' ? lastKeys[0] : ''); });
         if (!found.length) {
           // 部屋の名前がなく様子だけの区切り(「地下は完全防音仕様」など)は、その階の様子にする
           if (attrs.length) groups.forEach((gr) => gr.keys.forEach((k) => { bld.floorAttrs[k] = Array.from(new Set([...(bld.floorAttrs[k] || []), ...attrs])); }));
@@ -163,20 +172,29 @@
           const own = f.paren ? f.paren.split(/[、・,]/).map((x) => x.trim()).filter(Boolean) : [];
           // 様子の言葉は、括弧の中のものはその部屋に、区切りの中のものは最後の部屋に付ける
           const more = i === found.length - 1 ? attrs.filter((a) => !own.some((o) => o.includes(a))) : [];
+          // 同じ部屋への言及をまとめるときの覚え(mergeMentions が読んで外す)
+          f.mention = { word: f.word, list: f.list, tag: f.tag, size: f.size, dim: 0, apart: !!f.apart, many: f.count > 1 || floors.length > 1 || floors[0] === 'ALL' };
           // 「洋室×2」は個数だけ、「1階と2階にトイレ」は階ごとに置く
           (floors.length ? floors : ['']).forEach((floor) => {
-            for (let n = 0; n < clamp(f.count, 1, MAX_COUNT); n++) rooms.push({ id: U.uid(), floor, name: f.label, type: f.type, tatami: f.size || ROOMS[f.type][2], attrs: own.concat(more), cand: false });
+            for (let n = 0; n < clamp(f.count, 1, MAX_COUNT); n++) rooms.push({ id: U.uid(), floor, name: f.label, type: f.type, tatami: f.size || ROOMS[f.type][2], attrs: own.concat(more), cand: false, mention: f.mention });
           });
         });
         // 複数の階にまとめて置く言葉は、後の文に引き継がない
         if (groups.length && lastKeys.length === 1 && lastKeys[0] !== 'ALL') ctx = lastKeys;
       });
+      // 「横幅3m、奥行き2m」は、その文の部屋の広さにする。文に部屋がなければ前の文の部屋。部屋が多くてどれか分からなければ使わない
+      const labelled = inSent.find((f) => f.labelled);
+      const target = inSent.length ? (inSent.length === 1 ? inSent[0] : labelled) : topic;
+      const dim = dimsIn(sent);
+      if (dim && target) target.mention.dim = dim;
+      if (inSent.length) topic = labelled || inSent[inSent.length - 1];
     });
     bld.above = Math.max(bld.above, maxAbove, 1);
     // 「各階に〜」は地上のすべての階に置く(地下は含めない)。階の数が決まってから広げる
     rooms = rooms.flatMap((r) => (r.floor === 'ALL' ? Array.from({ length: bld.above }, (_, i) => Object.assign({}, r, { id: U.uid(), floor: String(i + 1), attrs: r.attrs.slice() })) : [r]));
     if (rooms.some((r) => r.floor === 'R')) bld.roof = true;
     if (rooms.some((r) => r.floor.startsWith('B'))) bld.below = Math.max(bld.below, 1);
+    rooms = mergeMentions(rooms, bld);
     // 書いていなくても、地上と地下を合わせて 4 階以上ならエレベーターを置く(表で外せる)
     if (bld.above + bld.below >= 4) bld.ev = true;
     // 書いていない部屋は勝手に足さず、「候補」として薄く出す(玄関・防音の階の防音室)
@@ -189,6 +207,89 @@
   }
   const basementKeys = (bld) => Array.from({ length: bld.below }, (_, i) => 'B' + (i + 1));
   const MAX_COUNT = 20;   // 「洋室×2」の個数の上限
+  // この字だけで隔たった部屋どうしは、同じ列挙の別の部屋
+  const LIST_GAP = /^(?:[\s、,・&+とや]|および|及び)*$/;
+  // 部屋だけの行に、部屋のほかにあってよい字(行頭の記号と「2階に」の「に」)
+  const BARE_LINE = /^[\s、,・&+とやに:\-*•●○◎◆◇■□★☆※[\]【】]*$/;
+  /** 文に部屋があり、階の言葉と部屋のほかに何も書いていないか */
+  function isBareLine(parts) {
+    return parts.some((p) => p.found.length) && parts.every(({ clause, found }) => {
+      let pos = 0, t = '';
+      found.forEach((f) => { t += clause.slice(pos, f.head); pos = f.tail; });
+      return BARE_LINE.test((t + clause.slice(pos)).replace(FLOOR_RE, ''));
+    });
+  }
+  /** 文の中の部屋に列挙の番号を振り、最後の番号を返す。bare は部屋だけの行で、先頭の記号を列挙の切れ目にしない */
+  function numberLists(parts, start, bare) {
+    let no = start, gap = '', first = true;
+    parts.forEach(({ clause, found }) => {
+      let pos = 0;
+      found.forEach((f) => {
+        gap += clause.slice(pos, f.head);
+        if (!(first && bare) && !LIST_GAP.test(gap)) no++;
+        f.list = no;
+        first = false;
+        // 「1LDK」は間取りの言葉なので、次の部屋と列挙にしない
+        gap = /\d$/.test(clause.slice(0, f.head)) ? '×' : '';
+        pos = f.tail;
+      });
+      gap += clause.slice(pos) + '、';
+    });
+    return no;
+  }
+  const LENGTH_RE = /(\d+(?:\.\d+)?)\s*(?:[~〜-]\s*(\d+(?:\.\d+)?)\s*)?(?:m|メートル)(?![A-Za-z0-9])/g;
+  const SQM_PER_JO = 1.62;
+  // 家具や廊下の寸法は、部屋の広さにしない
+  const NOT_ROOM_SIZE = /廊下|階段|エレベーター|ソファ|ベッド|テーブル|カーテン|カウンター|デスク|本棚|ラグ|テレビ|浴槽|バスタブ/;
+  /** 文の中の「3m×2m」「横幅3〜4m、奥行き1.5〜1.8m」を帖数にする(範囲は真ん中の値。0.5 帖刻み)。なければ 0 */
+  function dimsIn(sent) {
+    if (NOT_ROOM_SIZE.test(sent) || !/[×xX*]|幅|奥行|間口|縦|横/.test(sent)) return 0;
+    const len = Array.from(sent.matchAll(LENGTH_RE), (m) => (m[2] ? (Number(m[1]) + Number(m[2])) / 2 : Number(m[1])));
+    return len.length < 2 ? 0 : clamp(Math.round((len[0] * len[1] / SQM_PER_JO) * 2) / 2, 1, 60);
+  }
+  // LDK がある階では、リビングとダイニングは LDK の一部
+  const LDK_PART = new Set(['リビングダイニング', 'リビング', '居間', 'ダイニングキッチン', 'ダイニング', '食堂']);
+  // 同じ種類でも別の部屋を指す言葉(ここにない書き方は、同じ種類なら同じ部屋の言い換えとみなす)
+  const OWN_ROOM = {
+    子ども部屋: '子供部屋', 子供部屋: '子供部屋', ラウンジ: 'ラウンジ', アトリエ: 'アトリエ', ワークスペース: 'ワークスペース', ジャグジー: 'ジャグジー',
+    パウダールーム: 'パウダールーム', ランドリールーム: 'ランドリールーム', 応接間: '応接', 応接室: '応接', 茶室: '茶室',
+    ウォークインクローゼット: 'ウォークイン', ウォークイン: 'ウォークイン', ドレッシングルーム: '衣装部屋', 衣装部屋: '衣装部屋',
+    ルーフバルコニー: 'ルーフバルコニー', ウッドデッキ: 'デッキ', デッキ: 'デッキ', テラス: 'テラス', 中庭: '中庭'
+  };
+  /**
+   * 同じ部屋への言及を 1 つにまとめる。同じ階・同じ部屋の言葉なら、畳数は書いてある値、名前は最初の書き方、様子は合わせたものにする。
+   * 迷うときは別の部屋のままにする。別のまま: 同じ列挙の中(個数で増やした分も) / 畳数が互いに違う / 印が違う(メイン浴室とサブ浴室、洋室Aと洋室B) / 「もう一つの」。
+   * LDK がある階のリビングとダイニングは列挙でも畳数が違っても LDK にまとめ、畳数は LDK に書いてある値を先に使う
+   */
+  function mergeMentions(rooms, bld) {
+    const floorOf = (r) => effFloor(r, bld);
+    const ldkFloors = new Set(rooms.filter((r) => r.mention.word === 'LDK').map(floorOf));
+    const out = [];
+    rooms.forEach((r) => {
+      const m = r.mention, part = !m.apart && !m.many && LDK_PART.has(m.word) && ldkFloors.has(floorOf(r));
+      const key = part || m.word === 'LDK' ? 'LDK' : OWN_ROOM[m.word] || r.type;
+      const g = m.apart ? null : out.find((x) => x.key === key
+        && (!x.room.floor || !r.floor || floorOf(x.room) === floorOf(r))
+        && (!x.tag || !m.tag || x.tag === m.tag)
+        && (part || (!x.lists.has(m.list) && (!x.size || !m.size || x.size === m.size))));
+      if (!g) {
+        if (part) Object.assign(r, { name: 'LDK', type: 'living' });
+        out.push({ key, room: r, tag: m.tag, lists: new Set([m.list]), size: part ? 0 : m.size, partSize: part ? m.size : 0, dim: m.dim });
+        return;
+      }
+      g.lists.add(m.list);
+      if (part) g.partSize = g.partSize || m.size;
+      else g.size = m.size || g.size;
+      g.tag = g.tag || m.tag;
+      g.dim = g.dim || m.dim;
+      if (!g.room.floor) g.room.floor = r.floor;
+      g.room.attrs = Array.from(new Set([...g.room.attrs, ...r.attrs]));
+    });
+    return out.map(({ room, size, partSize, dim }) => {
+      const { mention, ...clean } = room;
+      return Object.assign(clean, { tatami: size || partSize || dim || ROOMS[room.type][2] });
+    });
+  }
   /** 文を「、」で区切る。括弧の中では切らず、「1階、2階にトイレ」は 1 つの区切りにする */
   function clausesOf(sent) {
     const out = [];
@@ -230,9 +331,19 @@
   // 部屋の前に置く書き方(「20帖のリビング」「2部屋の洋室」)
   const BEFORE_AREA = /(?:約|およそ)?\s*(\d+(?:\.\d+)?)\s*(?:帖|畳)\s*(?:ほど|くらい|ぐらい)?\s*の?\s*$/;
   const BEFORE_COUNT = /(\d+)\s*(?:つ|部屋|室|個)\s*の?\s*$/;
+  // 「もう一つの寝室」「別の寝室」は、前に出た部屋とは別の部屋
+  const APART_BEFORE = /(?:もう\s*(?:1\s*つ|ひとつ)の?|(?:別|他|ほか)の|\d+\s*(?:つ目|番目)の?)\s*$/;
+  // 「洋室A」「寝室2」の印。「寝室2階」「洋室2つ」のような数は印にしない
+  const AFTER_MARK = /^(?:[A-Z]|\d)(?![A-Za-z0-9.]|\s*(?:帖|畳|つ|部屋|室|個|階|台|人|m))/;
+  // 部屋の言葉に続くと、部屋でなく物の名前になる言葉(洗面台・ダイニングテーブル・トイレットペーパーなど)
+  const THING_AFTER = /^(?:テーブル|チェア|セット|カウンター|ボード|マット|ペーパー|ットペーパー|ブラシ|台|器|ボウル|用具|道具|家電|ツール|用品|上がり|乾燥機|桶|敷)/;
+  // 総称。「全室洋室」「各部屋にクローゼット」の部屋の言葉は、部屋として数えない
+  const GENERIC = '(?:全室|全居室|全部屋|各室|各部屋|全部の部屋|すべての部屋|全ての部屋|どの部屋)(?:とも|が|は|に|にも|も)?';
+  const GENERIC_BEFORE = new RegExp(`${GENERIC}\\s*$`);
+  const GENERIC_WORDS = new RegExp(`${GENERIC}\\s*(?:${ROOM_WORDS.map((w) => w[0]).join('|')})?`, 'g');
   /**
-   * 区切りの中の部屋 [{ start, end, type, label, paren, size, count }]。長い書き方から探し、見つけた所は塗りつぶして重ねて拾わない。
-   * start・end は名前の範囲(前に付く語も含む)。広さと個数は、前に置く書き方を先に、次に後ろに続く書き方を読む
+   * 区切りの中の部屋 [{ start, end, head, tail, type, word, tag, label, paren, size, count, apart, labelled }]。長い書き方から探し、見つけた所は塗りつぶして重ねて拾わない。
+   * start・end は名前の範囲(前に付く語も含む)、head・tail は前に置いた広さや後ろの括弧まで含めた範囲。広さと個数は、前に置く書き方を先に、次に後ろに続く書き方を読む
    */
   function roomsIn(clause) {
     let rest = clause;
@@ -241,7 +352,10 @@
       let i = rest.indexOf(w);
       while (i >= 0) {
         const pre = rest.slice(Math.max(0, i - 4), i).match(PREFIX_RE);
-        out.push({ start: i - (pre ? pre[1].length : 0), end: i + w.length, type, label: (pre ? pre[1] : '') + w, paren: '', size: 0, count: 0 });
+        const start = i - (pre ? pre[1].length : 0);
+        if (!THING_AFTER.test(clause.slice(i + w.length)) && !GENERIC_BEFORE.test(clause.slice(0, start))) {
+          out.push({ start, end: i + w.length, head: start, tail: i + w.length, type, word: w, tag: pre ? pre[1] : '', label: (pre ? pre[1] : '') + w, paren: '', size: 0, count: 0 });
+        }
         rest = rest.slice(0, i) + '□'.repeat(w.length) + rest.slice(i + w.length);
         i = rest.indexOf(w);
       }
@@ -251,9 +365,11 @@
     out.forEach((f, n) => {
       const next = n + 1 < out.length ? out[n + 1].start : clause.length;
       let head = clause.slice(done, f.start), m;
-      if ((m = head.match(BEFORE_COUNT))) { f.count = Number(m[1]); head = head.slice(0, m.index); }
-      if ((m = head.match(BEFORE_AREA))) f.size = Number(m[1]);
+      f.apart = APART_BEFORE.test(head);
+      if ((m = head.match(BEFORE_COUNT))) { f.count = Number(m[1]); f.head = done + m.index; head = head.slice(0, m.index); }
+      if ((m = head.match(BEFORE_AREA))) { f.size = Number(m[1]); f.head = done + m.index; }
       let tail = clause.slice(f.end, next), pos = f.end;
+      if ((m = tail.match(AFTER_MARK))) { f.tag = f.tag || m[0]; tail = tail.slice(m[0].length); pos += m[0].length; }
       for (;;) {
         if (!f.paren && (m = tail.match(AFTER_PAREN))) {
           // 括弧の中の広さと個数を読み、残りを様子にする(「洋室（6帖×2）」「書斎（約5帖・防音）」)
@@ -268,19 +384,31 @@
         pos += m[0].length;
       }
       done = pos;
+      f.tail = pos;
+      f.labelled = /^\s*:/.test(clause.slice(pos));   // 「ベランダ：…」の見出しの形
     });
     return out;
   }
   // 部屋らしい言葉の終わり方。文の途中にあっても拾う
-  const ROOM_LIKE = /(?:室|部屋|ルーム|ホール|スペース|コーナー|クローク|サロン|ロフト|土間|広間|仏間|座敷|ギャラリー|サウナ|場)$/;
-  // 読み取れなかった言葉に出さない語(建物や設定の話で、部屋ではないもの)
-  const NOT_ROOM = new Set(['部屋', '角部屋', '教室', '研究室', '病室', '職場', '現場', '工場', '市場', '会場', '劇場', '立場', '登場', '本場', '近場', '場所', '間取', '設備', '構成', '詳細', '概要', '基本', '情報', '設定', '備考', 'メモ', '自宅', '住居', '全体', '家族', '夫婦', '立地', '住所', '外観', '内装', '階数', '建築', '鉄筋', 'コンクリート', '木造', '鉄骨', '仕様', '徒歩', '眺望', '高層階', '低層階', '上層階', '和風', '洋風', 'フロア', '防犯', 'カメラ']);
+  const ROOM_LIKE = /(?:室|部屋|ルーム|ホール|スペース|コーナー|クローク|サロン|ロフト|座敷|ギャラリー|サウナ|場|間|所)$/;
+  // 読み取れなかった言葉に出さない語(建物や設定の話、家具や設備、向き、ふつうの言葉で、部屋ではないもの)。クローゼットなど辞書にある部屋は入れない
+  const NOT_ROOM = new Set([
+    '部屋', '角部屋', '全部屋', '各部屋', '全室', '各室', '同室', '教室', '研究室', '病室', '職場', '現場', '工場', '市場', '会場', '劇場', '立場', '登場', '本場', '近場', '場所', '居場所', '間取', '設備', '構成', '詳細', '概要', '基本', '情報', '設定', '備考', 'メモ', '自宅', '住居', '全体', '家族', '夫婦', '立地', '住所', '近所', '長所', '短所', '箇所', '個所', '役所', '外観', '内装', '階数', '建築', '鉄筋', 'コンクリート', '木造', '鉄骨', '仕様', '徒歩', '眺望', '高層階', '低層階', '上層階', '和風', '洋風', 'フロア', '防犯', 'カメラ',
+    '時間', '空間', '期間', '仲間', '人間', '夜間', '週間', '年間', '月間', '日間', '昼間', '瞬間', '世間', '手間', '隙間', '中間', '合間', '区間', '民間',
+    'ソファ', 'ソファー', 'テレビ', 'ラグ', 'カーペット', '絨毯', 'クッション', '椅子', 'デスク', 'ドレッサー', 'タンス', '箪笥', '照明', 'シャンデリア', '冷蔵庫', 'レンジ', '電子レンジ', 'コンロ', 'シンク', 'カウンター', '食器', '調理器具', '浴槽', 'バスタブ', 'シャワー', '便器', 'エアコン', '下駄箱', '靴箱', '傘立て', '観葉植物', 'ピアノ', '家具', '家電', '洗濯物',
+    '天板', '天井', '手すり', 'フローリング', '木目', 'ダークブラウン', '夜景', '景色', '自然光', '光景',
+    '左手', '右手', '正面', '背後', '背面', '手前', '奥側', '突き当たり', '南向き', '北向き', '東向き', '西向き', '中央', '真ん中', '両側', '反対', '上下', '左右', '前後', '横幅', '奥行',
+    '二人', '一人', '生活', '中心', '食事', '料理', '家事', '日常', '距離', '相手', '様子', '気配', '会話', '恋人'
+  ]);
+  // 物や向きを指す言葉の終わり方(ダブルベッド・シューズボックス・洗濯機・洗面台・左側・楕円形・別個室など)
+  const THING_WORD = /(?:テーブル|ベッド|ソファ|ソファー|チェア|ボックス|カーテン|ライト|個室|機|器|台|棚|窓|戸|扉|ドア|形|側|際)$/;
+  const FLOOR_THEN_NO = new RegExp(`(?:${FLOOR_RE.source})の?`, 'g');   // 階の言葉と、続く「の」(「1階のバー」)
   const KNOWN_WORDS = new RegExp([...BUILDINGS.flatMap(([, ws]) => ws), ...ATTRS, 'フルリノベーション', 'フルリノベ', 'リノベーション', 'リノベ', '改装', 'ヴィンテージ', '新築', '一棟', '建物', '階建て?', '地上', '地下', '外壁', '防犯カメラ', 'エレベーター', 'EV', '階段', '廊下', '収納'].sort((a, b) => b.length - a.length).join('|'), 'g');
   /**
    * 区切りの中で読み取れなかった部屋らしい言葉。読めた言葉を消して残った漢字・カタカナの連なりのうち、
-   * 部屋らしい終わり方のものと、区切りが名詞の列だけのとき(「1階にサウナと温室」)のものを返す
+   * 部屋らしい終わり方のものと、階や部屋の話(inRoomTalk)で区切りが名詞の列だけのとき(「1階にサウナと温室」)のものを返す
    */
-  function unreadIn(clause, found) {
+  function unreadIn(clause, found, inRoomTalk) {
     let t = clause;
     // 読めた部屋は、すぐ前につながる字ごと消す(「音楽スタジオ」の「音楽」を別の言葉にしない)
     found.slice().sort((a, b) => b.start - a.start).forEach((f) => {
@@ -288,7 +416,7 @@
       while (a > 0 && /[一-龥々ァ-ヶー]/.test(t[a - 1])) a--;
       t = t.slice(0, a) + ' '.repeat(f.end - a) + t.slice(f.end);
     });
-    t = t.replace(/[（(][^）)]*[）)]?/g, ' ').replace(FLOOR_RE, ' ').replace(/[×xX*]\s*\d+/g, ' ')
+    t = t.replace(GENERIC_WORDS, ' ').replace(/[（(][^）)]*[）)]?/g, ' ').replace(FLOOR_THEN_NO, ' ').replace(/[×xX*]\s*\d+/g, ' ')
       .replace(/(?:約|およそ|築)?\s*\d+(?:\.\d+)?\s*(?:階建て?|階|帖|畳|つ|部屋|室|個|台|坪|m2|平米|年|人|匹|歳|分|棟|F)?/g, ' ')
       .replace(new RegExp(PETS_RE.source, 'g'), ' ').replace(/[^\s、。]{1,8}?と(?:同居|暮らし|住ん|二人暮らし)/g, ' ')
       .replace(/[一-龥ァ-ヶ]{1,5}(?:区|市|町|村)/g, ' ').replace(KNOWN_WORDS, ' ');
@@ -298,8 +426,9 @@
     const words = t.match(/[一-龥々ァ-ヶーA-Za-z]{2,}/g) || [];
     // 「家賃は8万円」のように、言葉のあとに帖数でない数が続く区切りは、部屋の列とみなさない
     const listLike = !(/[はが]\s*(?:約|およそ)?\d/.test(clause) && !/帖|畳/.test(clause))
-      && /^[\s・にはがのともやをでへ:\-~〜→■□◆◇●○◎★☆※[\]【】<>「」『』]*$/.test(t.replace(/[一-龥々ァ-ヶーA-Za-z]{2,}/g, ' '));
-    return owned.concat(words.filter((w) => !NOT_ROOM.has(w) && w.length <= 14 && (listLike || ROOM_LIKE.test(w))));
+      && /^[\s・にはがともやをでへ:\-~〜→■□◆◇●○◎★☆※[\]【】<>「」『』]*$/.test(t.replace(/[一-龥々ァ-ヶーA-Za-z]{2,}/g, ' '));
+    const isNoise = (w) => NOT_ROOM.has(w) || THING_WORD.test(w);
+    return owned.filter((w) => !NOT_ROOM.has(w.replace(/の部屋$/, ''))).concat(words.filter((w) => !isNoise(w) && w.length <= 14 && ((listLike && inRoomTalk) || ROOM_LIKE.test(w))));
   }
 
   /* ================================================================ 階 */
