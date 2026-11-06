@@ -501,6 +501,15 @@
     if (bh < reg.h) out.push({ id: fillId + '-b', x: bx, y: south ? reg.y : reg.y + bh, w: bw, h: reg.h - bh });
     return { out, cost: best.cost };
   }
+  const STORE_LEN = 4;   // 階段の列の余りを収納にする長さ(ます目)。列の幅は 2 ますなので 4 帖まで
+  /** 階段の列の start から end までの余り。屋上は屋上の床、ほかは STORE_LEN まで収納にして、その先は空き。place(id, 位置, 長さ) で置き場所を作る */
+  function coreRest(roof, start, end, place) {
+    if (start >= end) return [];
+    if (roof) return [place('deck-core', start, end - start)];
+    const len = Math.min(end - start, STORE_LEN), rest = [place('store', start, len)];
+    if (start + len < end) rest.push(place('empty-core', start + len, end - start - len));
+    return rest;
+  }
   /** 1 つの階の割り付け { out: [{ id, x, y, w, h }], cost } */
   function layoutFloor(s, v, key, W, D, wide, anchors) {
     const bld = s.bld, multi = floorKeys(bld).length > 1, ev = multi && bld.ev;
@@ -516,7 +525,7 @@
       out.push({ id: 'stairs', x: 0, y: 0, w: 4, h: 2 });
       let x = 4;
       if (ev) { out.push({ id: 'ev', x, y: 0, w: 2, h: 2 }); x += 2; }
-      if (x < W) out.push({ id: roof ? 'deck-core' : 'store', x, y: 0, w: W - x, h: 2 });
+      out.push(...coreRest(roof, x, W, (id, p, len) => ({ id, x: p, y: 0, w: len, h: 2 })));
       if (!roof) out.push({ id: 'hall', x: 0, y: 2, w: W, h: 1 });
       const top = roof ? 2 : 3;
       region = { x: 0, y: top, w: W, h: D - top };
@@ -527,7 +536,7 @@
       out.push({ id: 'stairs', x: cx, y: 0, w: 2, h: 4 });
       let y = 4;
       if (ev) { out.push({ id: 'ev', x: cx, y, w: 2, h: 2 }); y += 2; }
-      if (y < D) out.push({ id: roof ? 'deck-core' : 'store', x: cx, y, w: 2, h: D - y });
+      out.push(...coreRest(roof, y, D, (id, p, len) => ({ id, x: cx, y: p, w: 2, h: len })));
       if (!roof) out.push({ id: 'hall', x: v.core === 'right' ? cx - 1 : cx + 2, y: 0, w: 1, h: D });
       if (v.core === 'left') { region = { x: cw, y: 0, w: W - cw, h: D }; pref.edgeX = cw; }
       else { region = { x: 0, y: 0, w: W - cw, h: D }; pref.edgeX = W - cw; }
@@ -1447,8 +1456,9 @@
     const biggest = (pre) => items.filter((it) => it.id.startsWith(pre)).sort((a, b) => b.w * b.h - a.w * a.h)[0];
     // 空きの名前は画面だけ、部屋を重ねていないときだけ出す
     const over = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    const bare = (e) => !items.some((it) => !isFill(it.id) && over(it, e));
     const emptyBig = o.screen ? biggest('empty') : null;
-    const deckMain = biggest('deck'), emptyMain = emptyBig && !items.some((it) => !isFill(it.id) && over(it, emptyBig)) ? emptyBig : null;
+    const deckMain = biggest('deck'), emptyMain = emptyBig && bare(emptyBig) ? emptyBig : null;
     const size = clamp(u * 0.36, 8, 24), wt = style === 'note' ? 400 : 700;
     HALO = style === 'note' ? 'rgba(251,250,244,.85)' : 'rgba(255,255,255,.85)';
     // 物件チラシ風: 仕切りのない LDK は、いちばん広い部屋の所に 1 つの名前(LDK・LD・DK)と合わせた広さで書く
@@ -1462,7 +1472,9 @@
       if (merged.get(it) === null) return;
       if (t === 'stairs') return;
       if (t === 'ev') { fitText(g, 'EV', ox + (it.x + it.w / 2) * u, oy + (it.y + it.h / 2) * u, it.w * u - 6, Math.max(8, u * 0.34), 700, font, ink); return; }
-      if ((it.id.startsWith('deck') && it !== deckMain) || (it.id.startsWith('empty') && it !== emptyMain)) return;
+      // 階段の列の空きは廊下で隔たっているので、ほかの空きとは別に名前を書く
+      const coreEmpty = o.screen && it.id === 'empty-core' && bare(it);
+      if ((it.id.startsWith('deck') && it !== deckMain) || (it.id.startsWith('empty') && it !== emptyMain && !coreEmpty)) return;
       // 名前は設備を避けた残りの所に。狭すぎるときは部屋の真ん中
       let [lx, ly, lw, lh] = labels.get(it) || [ox + it.x * u, oy + it.y * u, it.w * u, it.h * u];
       if (lw < size * 2.2 || lh < size * 1.5) [lx, ly, lw, lh] = [ox + it.x * u, oy + it.y * u, it.w * u, it.h * u];
