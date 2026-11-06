@@ -619,7 +619,7 @@
   const VARIANTS = [
     { id: 'A', label: '案 A', desc: '階段が左、水回りを奥に', hallDesc: '廊下の右に水回り', core: 'left', order: (a, b) => WET_FIRST(a) - WET_FIRST(b) },
     { id: 'B', label: '案 B', desc: '階段が右、広い部屋を奥に', hallDesc: '廊下の左に水回り', core: 'right', order: (a, b) => b.tatami - a.tatami },
-    { id: 'C', label: '案 C', desc: '階段が北で、部屋を南に並べる', hallDesc: '廊下を端に寄せる（部屋が多いときは両側に分ける）', core: 'top', order: (a, b) => WET_FIRST(a) - WET_FIRST(b) || b.tatami - a.tatami }
+    { id: 'C', label: '案 C', desc: '階段が上、部屋をその下に', hallDesc: '廊下を端に寄せる（部屋が多いときは両側に分ける）', core: 'top', order: (a, b) => WET_FIRST(a) - WET_FIRST(b) || b.tatami - a.tatami }
   ];
   // 足もとの歯止め(ます目)。階段のある建物は、階段・エレベーターと廊下が入るだけの大きさが要る
   const FOOT_MAX = 40;
