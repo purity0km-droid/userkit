@@ -20,10 +20,12 @@
   const LIMIT = {
     title: 20, charName: 10, prompt: 2400,
     profName: 20, profSummary: 50, profDesc: 1000,
-    examples: 2000, intro: 1500, short: 40, about: 10000, comment: 150
+    examples: 2000, intro: 1500, short: 40, about: 10000, comment: 150,
+    // 設定集の画面(2026-11-13 にユーザーのスクショで確かめた): 紹介文の題名・簡単な紹介と、ロアブックの項目ごとの題名・キーワード 1 語・内容
+    loreTitle: 20, loreIntro: 50, itemTitle: 20, keyword: 20, itemContent: 500
   };
   /** zeta で足せる数 (ハッシュタグは 2026-11-02 に編集画面の「追加 7/10」で確かめた) */
-  const MAX = { chars: 10, profiles: 5, lore: 5, introImages: 5, tags: 10 };
+  const MAX = { chars: 10, profiles: 5, lore: 5, introImages: 5, tags: 10, loreItems: 50, keywords: 5 };
 
   /** スタイルのタブの選び方 (zeta の画面の並び。single=1つ選ぶ、max=いくつまで選べるか) */
   const STYLE = [
@@ -57,6 +59,8 @@
   const promptCount = (p) => count(p.description) + count(p.narrator) + sum(p.characters, (c) => count(c.name) + count(c.profile));
   const examplesCount = (p) => sum(p.examples, (e) => count(e.text));
   const introCount = (p) => sum(p.intro, (m) => (m.who === 'img' ? 0 : count(m.text)));
+  /** 設定集のキーワードの欄を語に分ける(カンマ・読点・改行で区切る) */
+  const keywordsOf = (t) => nl(t).split(/[,、，\n]/).map((x) => x.trim()).filter(Boolean);
   const aboutCount = (p) => sum(p.about, (b) => (b.kind === 'text' ? count(b.text) : 0))
     + sum(p.characters, (c) => count(p.aboutChars[c.id]));
 
@@ -77,7 +81,7 @@
       characters: [],          // [{ id, name, profile, images: [画像id] }]
       profiles: [],            // トークプロフィール [{ id, name, summary, description, image }]
       examples: [],            // 状況例 [{ id, text }]
-      lore: [],                // 設定集 [{ id, name, memo }]
+      lore: [],                // 設定集 [{ id, title, intro, items: [{ id, title, keywords, content }], memo(自分用の控え) }]
       style: emptyStyle(),
       plugins: [],             // [{ id, name, memo }]
       intro: [],               // [{ id, who: 'n'(ナレーター)|'u'(ユーザー)|キャラのid|'img', text, image }]
@@ -102,7 +106,12 @@
     p.characters = arr(raw.characters).map((c) => ({ id: s(c.id) || U.uid(), name: s(c.name), profile: s(c.profile), images: ids(c.images) }));
     p.profiles = arr(raw.profiles).map((x) => ({ id: s(x.id) || U.uid(), name: s(x.name), summary: s(x.summary), description: s(x.description), image: s(x.image) }));
     p.examples = arr(raw.examples).map((e) => ({ id: s(e.id) || U.uid(), text: s(e.text) }));
-    p.lore = arr(raw.lore).map((l) => ({ id: s(l.id) || U.uid(), name: s(l.name), memo: s(l.memo) }));
+    // 2026-11-13 より前の設定集は { name, memo } だけ。名前は題名に、メモは自分用の控えに移す
+    p.lore = arr(raw.lore).map((l) => ({
+      id: s(l.id) || U.uid(), title: s(l.title !== undefined ? l.title : l.name), intro: s(l.intro),
+      items: arr(l.items).map((x) => ({ id: s(x.id) || U.uid(), title: s(x.title), keywords: s(x.keywords), content: s(x.content) })),
+      memo: s(l.memo)
+    }));
     const st = raw.style && typeof raw.style === 'object' ? raw.style : {};
     STYLE_ITEMS.forEach((it) => {
       const v = st[it.key];
@@ -279,7 +288,13 @@
       add(`p:${x.id}:description`, `${n}の説明`, x.description);
     });
     d.examples.forEach((e, i) => add(`e:${e.id}`, `状況例${i + 1}`, e.text));
-    d.lore.forEach((l, i) => add(`l:${l.id}`, `設定集「${l.name || i + 1}」`, [l.name, l.memo].filter(Boolean).join('\n')));
+    d.lore.forEach((l, i) => {
+      const n = `設定集「${l.title || i + 1}」`;
+      add(`l:${l.id}:title`, `設定集${i + 1}の題名`, l.title);
+      add(`l:${l.id}:intro`, `${n}の簡単な紹介`, l.intro);
+      l.items.forEach((x, j) => add(`l:${l.id}:i:${x.id}`, `${n}の項目「${x.title || j + 1}」`, [x.title, x.keywords, x.content].filter(Boolean).join('\n')));
+      add(`l:${l.id}:memo`, `${n}の控え`, l.memo);
+    });
     add('style', 'スタイル', styleText(d.style));
     d.plugins.forEach((g, i) => add(`g:${g.id}`, `プラグイン「${g.name || i + 1}」`, [g.name, g.memo].filter(Boolean).join('\n')));
     add('intro', 'イントロ', d.intro.map((m) => (m.who === 'img' ? '[画像]'
@@ -466,7 +481,7 @@
 
   window.Store = {
     LIMIT, MAX, STYLE, STYLE_ITEMS, PLUGINS, HISTORY,
-    count, promptCount, examplesCount, introCount, aboutCount,
+    count, promptCount, examplesCount, introCount, aboutCount, keywordsOf,
     load, loadError: () => loadError, all, get, create, remove, touch, opened, flush,
     keep, restore, dropVersion, fields, styleText, gcImages,
     askPersist, persisted, backupAt, backupDue, snoozeBackup: () => writeTime(BACKUP_SNOOZE_KEY),

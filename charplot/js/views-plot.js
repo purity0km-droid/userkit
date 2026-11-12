@@ -158,18 +158,74 @@
   }
 
   /* ------------------------------------------------ 設定集 */
+  // 閉じたロアブックの項目の id(描き直しても閉じたままにする。ページを開き直すと全部開く)
+  const shutItems = new Set();
+  /** キーワードの欄。zeta と同じく 1 語 20 字・5 語まで。コピーはカンマ区切りにそろえる */
+  function keywordField(x, onInput) {
+    const id = 'f-' + U.uid();
+    const input = h('textarea.pf-ta.kw-ta', { id, rows: 2, value: x.keywords });
+    const cnt = h('span.pf-count'), warn = h('p.pf-warn');
+    const update = () => {
+      const list = Store.keywordsOf(input.value), long = list.filter((k) => Store.count(k) > L.keyword), many = list.length > Store.MAX.keywords;
+      cnt.textContent = `各${L.keyword}字以内・${list.length}/${Store.MAX.keywords}個`;
+      cnt.classList.toggle('over', many || long.length > 0);
+      warn.textContent = [many ? `${Store.MAX.keywords}個を超えています` : '', long.length ? `${L.keyword}字を超える語があります: ${long.join('、')}` : ''].filter(Boolean).join('。');
+      warn.hidden = !warn.textContent;
+    };
+    input.addEventListener('input', () => { update(); onInput(input.value); });
+    update();
+    return h('div.pf',
+      h('div.pf-head', h('label', { for: id }, 'キーワード', h('small', '必須・カンマか読点で区切る')), cnt,
+        ui().copyBtn(() => Store.keywordsOf(input.value).join(', '), 'カンマで区切ってコピー')),
+      input, warn);
+  }
   function tabLore(ctx) {
     const { p, save } = ctx;
     const redraw = changed(ctx);
-    const rows = p.lore.map((l, i) => h('div.pcard',
-      h('div.pcard-head', h('b', `設定集 ${i + 1}`), ui().rowTools(p.lore, l, redraw, { delLabel: 'この設定集を消す', confirm: 'この設定集の控えを消しますか?' })),
-      ui().field({ label: '名前', line: true, value: l.name, ph: '設定集の名前や作者', onInput: (v) => { l.name = v; save(); } }).el,
-      ui().field({ label: 'メモ', rows: 4, value: l.memo, ph: 'キーワードと中身、連動した理由など', onInput: (v) => { l.memo = v; save(); } }).el));
+    const f = (o, obj, key, after) => ui().field({ ...o, value: obj[key], onInput: (v) => { obj[key] = v; save(); if (after) after(); } }).el;
+    const lores = p.lore.map((l, i) => {
+      // ロアブックの項目: 見出しは zeta と同じく「題名 - キーワード」
+      const items = l.items.map((x, j) => {
+        const head = h('span.li-head');
+        const drawHead = () => {
+          const kw = Store.keywordsOf(x.keywords).join(', ');
+          head.replaceChildren(...[h('b', x.title.trim() || '(題名なし)'), kw ? h('span', ' - ' + kw) : null].filter(Boolean));
+        };
+        drawHead();
+        const d = h('details.lore-item', { open: !shutItems.has(x.id) },
+          h('summary', h('span.li-no', j + 1), head,
+            ui().rowTools(l.items, x, redraw, { delLabel: 'この項目を消す', confirm: `「${x.title || 'この項目'}」を消しますか?` })),
+          h('div.li-body',
+            f({ label: '題名', limit: L.itemTitle, line: true }, x, 'title', drawHead),
+            keywordField(x, (v) => { x.keywords = v; save(); drawHead(); }),
+            f({ label: '内容', sub: '必須', limit: L.itemContent, rows: 5 }, x, 'content')));
+        d.addEventListener('toggle', () => { if (d.open) shutItems.delete(x.id); else shutItems.add(x.id); });
+        return d;
+      });
+      const openAll = (open) => { l.items.forEach((x) => (open ? shutItems.delete(x.id) : shutItems.add(x.id))); redraw(); };
+      return h('div.pcard.lore-card',
+        h('div.pcard-head', h('b', icon('book', 15), `設定集 ${i + 1}`), ui().rowTools(p.lore, l, redraw, { delLabel: 'この設定集を消す', confirm: `「${l.title || 'この設定集'}」の控えを消しますか? ロアブックの項目も消えます。` })),
+        h('div.lore-part',
+          h('div.psec-head', h('h3', '紹介文'), h('small', 'AIには伝わりません。設定集の管理用です')),
+          f({ label: '設定集題名', sub: '必須', limit: L.loreTitle, line: true }, l, 'title'),
+          f({ label: '簡単な紹介', limit: L.loreIntro, rows: 2 }, l, 'intro')),
+        h('div.lore-part',
+          h('div.psec-head', h('h3', 'ロアブック'), h('small', `${l.items.length}/${Store.MAX.loreItems}`),
+            l.items.length > 1 && h('span.lore-fold',
+              h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => openAll(true) }, 'すべて開く'),
+              h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => openAll(false) }, 'すべて閉じる'))),
+          ...items,
+          h('button.btn.btn-outline.btn-sm', { type: 'button', disabled: l.items.length >= Store.MAX.loreItems, onclick: () => {
+            l.items.push({ id: U.uid(), title: '', keywords: '', content: '' }); redraw();
+          } }, icon('plus'), `項目を足す(${l.items.length}/${Store.MAX.loreItems})`)),
+        f({ label: '自分用の控え', sub: 'zetaには入れません', rows: 2 }, l, 'memo'));
+    });
     return h('div.ptab',
-      h('p.tab-lead', 'zetaで連動した設定集の名前や、自分の設定集のキーワードと中身を控えておけます。'),
-      ...rows,
-      h('button.btn.btn-outline.btn-sm', { type: 'button', disabled: p.lore.length >= Store.MAX.lore, onclick: () => { p.lore.push({ id: U.uid(), name: '', memo: '' }); redraw(); } },
-        icon('plus'), `設定集を足す(${p.lore.length}/${Store.MAX.lore})`));
+      h('p.tab-lead', 'zetaの設定集の画面と同じ欄です。連動しただけの設定集は題名と控えだけでも構いません。'),
+      ...lores,
+      h('button.btn.btn-outline.btn-sm', { type: 'button', disabled: p.lore.length >= Store.MAX.lore, onclick: () => {
+        p.lore.push({ id: U.uid(), title: '', intro: '', items: [], memo: '' }); redraw();
+      } }, icon('plus'), `設定集を足す(${p.lore.length}/${Store.MAX.lore})`));
   }
 
   /* ------------------------------------------------ スタイル */
