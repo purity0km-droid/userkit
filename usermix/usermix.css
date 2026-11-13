@@ -1,0 +1,227 @@
+/* usermix — シート (書き出す画像と同じ見た目。フォントは端末にあるものだけを使う)
+   --pa・--pb は 1 人目・2 人目の印の色、--pa-ink・--pb-ink はその上の字の色。
+   --t-top はプレイリストの上の地、--t-deep・--t-deeper は再生画面の暗い地(どれも JS がテーマから作る) */
+.mix-sheet {
+  --sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "YuGothic", "Meiryo", "Noto Sans JP", sans-serif;
+  width: 760px; padding: 42px 40px 32px; color: var(--t-text);
+  background: linear-gradient(180deg, var(--t-top) 0, var(--t-bg) 460px) var(--t-bg);
+  font: 400 13.5px/1.7 var(--sans); letter-spacing: .01em;
+  display: flex; flex-direction: column; gap: 22px;
+}
+.mix-sheet *, .mix-sheet *::before, .mix-sheet *::after { box-sizing: border-box; }
+.um-ic { flex: none; display: block; }
+
+/* ---------- 題・紹介・下の一文 ----------
+   書き出し(html-to-image)は画面で測った幅を写すので、字が少しでも広く描かれると、中身の幅に縮めた箱では折り返してはみ出す。
+   中身の幅で並ぶ物は幅いっぱいに伸ばすか、余りのある箱に入れ、短い物は折り返さない(white-space: pre) */
+.um-label { font-size: 11.5px; font-weight: 800; letter-spacing: .22em; color: var(--t-main); min-width: 4em; }
+.um-title-main { font-size: 36px; line-height: 1.24; font-weight: 800; letter-spacing: .01em; min-width: 4em; word-break: auto-phrase; }
+.um-intro { font-size: 13px; line-height: 1.8; color: var(--t-muted); }
+.um-foot { font-size: 12px; color: var(--t-muted); letter-spacing: .06em; min-width: 6em; }
+
+/* ---------- 選んだ人の印 ---------- */
+.um-badge { flex: none; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--pa); color: var(--pa-ink); font-size: 9.5px; font-weight: 800; line-height: 1; letter-spacing: 0; }
+.um-badge.b { background: var(--pb); color: var(--pb-ink); }
+.um-badge.two { font-size: 7.5px; letter-spacing: -.06em; }
+.um-mark { flex: none; display: inline-flex; padding: 0; border: 0; border-radius: 999px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.um-mark:focus-visible { outline: 2px solid var(--t-main); outline-offset: 2px; }
+.um-mark .um-badge + .um-badge, .um-pair .um-badge + .um-badge { margin-left: -5px; box-shadow: 0 0 0 1.5px var(--t-bg); }
+.um-pair { display: inline-flex; }
+.um-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12.5px; }
+.um-legend-k { font-size: 11px; font-weight: 800; letter-spacing: .14em; color: var(--t-muted); white-space: nowrap; }
+.um-who { display: inline-flex; align-items: center; gap: 6px; }
+.um-who .um-badge { width: 20px; height: 20px; font-size: 10.5px; }
+.um-who-name { font-weight: 700; min-width: 3em; white-space: pre; }
+.um-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin-top: 8px; }
+.um-meta > .um-legend { flex: 1 1 auto; }
+.um-total { font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--t-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---------- 画像の枠(画像がなければ音符の四角) ---------- */
+.um-artbox { position: relative; overflow: hidden; border-radius: var(--art-r, 6px); background: var(--t-soft); }
+.um-artbox .ed-img { --img-r: var(--art-r, 6px); }
+.um-art-ph { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--t-main); opacity: .55; }
+
+/* ================================================================ プレイリスト(縦長)
+   上にジャケットと題 → 操作の段 → 曲目の表 → 再生中の曲の小さなバー */
+.um-head { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 30px; align-items: end; }
+.um-head.no-cover { grid-template-columns: minmax(0, 1fr); }
+.um-cover .ed-img { --img-r: 10px; box-shadow: 0 26px 48px -24px rgba(20, 16, 40, .6); }
+.um-head-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+/* 操作の段(飾り): シャッフル・お気に入り・保存・メニューと、大きな再生ボタン */
+.um-actions { display: flex; align-items: center; gap: 22px; padding: 0 4px; color: var(--t-text); }
+.um-act { opacity: .62; }
+.um-spacer { flex: 1; }
+.um-play { flex: none; display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--t-main); color: var(--t-ink); }
+.um-play.big { width: 58px; height: 58px; box-shadow: 0 12px 24px -12px var(--t-main); }
+.um-play .um-ic { margin-left: 1px; }
+
+/* 曲目の表: 見出し(# ・タイトル・時計)と行を同じ幅の並びにする */
+.um-list { display: flex; flex-direction: column; }
+.um-colhead { display: flex; align-items: center; gap: 14px; padding: 0 12px 8px; border-bottom: 1px solid var(--t-line); font-size: 11.5px; font-weight: 700; letter-spacing: .06em; color: var(--t-muted); }
+.um-colhead .um-lead { justify-content: center; }
+.um-art-sp { flex: none; width: 46px; }
+.um-time-h { flex: none; min-width: 3.4em; display: flex; justify-content: flex-end; }
+.um-more-sp { flex: none; width: 16px; }
+.um-rows { display: flex; flex-direction: column; padding-top: 6px; }
+.um-list > .ed-add, .um-group > .ed-add { margin: 8px 0 0 12px; }
+
+.um-row { position: relative; display: flex; align-items: flex-start; gap: 14px; padding: 10px 12px; border-radius: 12px; }
+.um-row.is-now { background: var(--t-soft); }
+.um-lead { flex: none; width: 22px; display: flex; justify-content: center; padding-top: 13px; }
+.um-no { font-size: 13.5px; font-weight: 500; color: var(--t-muted); font-variant-numeric: tabular-nums; line-height: 1; }
+.um-row.is-now .um-no { display: none; }
+.um-row.is-blank .um-no { color: var(--t-line); }
+/* 再生中の印: 高さの違う 4 本のバー */
+.um-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+.um-eq i { width: 3px; border-radius: 1px; background: var(--t-main); }
+.um-eq i:nth-child(1) { height: 55%; } .um-eq i:nth-child(2) { height: 100%; } .um-eq i:nth-child(3) { height: 35%; } .um-eq i:nth-child(4) { height: 75%; }
+.um-art { flex: none; width: 46px; }
+.um-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.um-title { font-size: 15px; font-weight: 700; line-height: 1.45; }
+.um-row.is-now .um-title { color: var(--t-main); }
+.um-sub { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.um-sub .um-badge { width: 16px; height: 16px; font-size: 8.5px; }
+.um-sub .um-badge.two { font-size: 7px; }
+.um-artist { flex: 1; min-width: 0; font-size: 12.5px; color: var(--t-muted); }
+.um-note { margin-top: 5px; font-size: 12.5px; line-height: 1.75; }
+.um-quote { position: relative; margin-top: 7px; padding: 6px 12px 6px 26px; background: var(--t-card); border: 1px solid var(--t-line); border-radius: 10px; }
+.um-row.is-now .um-quote { border-color: transparent; }
+.um-quote::before { content: "\201C"; position: absolute; left: 9px; top: 1px; font: 800 22px/1 Georgia, "Times New Roman", serif; color: var(--t-main); }
+.um-line { font-size: 12.5px; font-weight: 500; line-height: 1.75; }
+.um-time { flex: none; min-width: 3.4em; padding-top: 11px; text-align: right; font-size: 13px; color: var(--t-muted); font-variant-numeric: tabular-nums; white-space: pre; line-height: 1.4; }
+.um-more { flex: none; width: 16px; padding-top: 13px; color: var(--t-muted); opacity: .8; }
+
+/* 選んだ人ごとの段 */
+.um-group + .um-group { margin-top: 12px; }
+.um-group-head { display: flex; align-items: center; gap: 8px; padding: 14px 12px 2px; font-size: 13px; }
+.um-group-head > b { font-weight: 800; }
+.um-group-head .um-badge { width: 20px; height: 20px; font-size: 10.5px; }
+.um-group-head .um-total { margin-left: auto; }
+
+/* 並べ替えなどのボタン(行の右の外) */
+.um-tools { position: absolute; right: -24px; top: 6px; z-index: 3; display: flex; flex-direction: column; gap: 3px; opacity: 0; transition: opacity .12s; }
+.um-row:hover > .um-tools, .um-row:focus-within > .um-tools { opacity: 1; }
+.um-tools button { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .15); background: #fff; color: #6b6478; }
+.um-tools button:hover { color: var(--accent, #6d5dfc); border-color: var(--accent, #6d5dfc); }
+.um-tools button.rm:hover { color: #c4425a; border-color: #c4425a; }
+@media (pointer: coarse) { .um-tools { opacity: .8; } }
+
+/* 再生中の曲の小さなバー */
+.um-mini { display: flex; align-items: center; gap: 14px; padding: 12px 18px 12px 12px; background: var(--t-card); border: 1px solid var(--t-line); border-radius: 16px;
+  box-shadow: 0 16px 34px -20px rgba(20, 16, 40, .5); }
+.um-mini-art { flex: none; width: 58px; --art-r: 8px; }
+.um-mini-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.um-mini-top { display: flex; align-items: center; gap: 14px; }
+.um-mini-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.45; }
+.um-mini-title { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-mini-artist { font-size: 12px; color: var(--t-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-ctrls { flex: none; display: flex; align-items: center; gap: 16px; color: var(--t-text); }
+.um-ctrls .sm { opacity: .5; }
+
+/* 再生位置・進み具合のバー・曲の時間(--p は 0〜1。JS が書く) */
+.um-prog { display: flex; align-items: center; gap: 10px; font-size: 11.5px; color: var(--t-muted); font-variant-numeric: tabular-nums; line-height: 1.4; }
+.um-pos, .um-dur { flex: none; min-width: 2.8em; white-space: pre; }
+.um-dur { text-align: right; }
+.um-bar { position: relative; flex: 1; height: 4px; border-radius: 4px; background: var(--t-line); }
+.um-bar i { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--p, .38) * 100%); border-radius: inherit; background: var(--t-main); }
+.um-bar i::after { content: ""; position: absolute; right: -6px; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: var(--t-main); box-shadow: 0 0 0 3px var(--t-card); }
+
+/* 写し(書けるのは曲目の行だけ)。空のときは画面でだけ薄い字で何の欄かを出す */
+.um-mirror.is-empty::before { content: attr(data-ph); opacity: .45; }
+
+/* ================================================================ 再生画面(横長 .is-player)
+   左に再生中の曲(ぼかしたジャケットの地)、右に曲目 */
+.mix-sheet.is-player { width: 1040px; padding: 40px; background: var(--t-bg); }
+.ump { display: grid; grid-template-columns: 420px minmax(0, 1fr); overflow: hidden; border-radius: 22px; background: var(--t-card);
+  box-shadow: 0 0 0 1px var(--t-line), 0 30px 60px -30px rgba(20, 16, 40, .55); }
+
+.ump-now { position: relative; isolation: isolate; overflow: hidden; display: flex; flex-direction: column; gap: 16px; padding: 24px 34px 30px; color: #fff;
+  background: linear-gradient(165deg, var(--t-deep), var(--t-deeper)); }
+.ump-bg { position: absolute; inset: 0; z-index: -1; overflow: hidden; }
+.ump-bg img { position: absolute; left: -20%; top: -20%; width: 140%; height: 140%; object-fit: cover; filter: blur(40px) saturate(1.3); }
+.ump-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8, 6, 16, .3), rgba(8, 6, 16, .62)); }
+.ump-top { display: flex; flex-direction: column; align-items: center; gap: 1px; text-align: center; }
+.ump-top-k { font-size: 10.5px; font-weight: 800; letter-spacing: .26em; opacity: .7; }
+.ump-from { max-width: 100%; font-size: 12.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 左の画像から下を、残りの高さの上下の真ん中に置く(auto の余白は書き出しで写らなかったので、並べ方で寄せる) */
+.ump-main { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 16px; }
+.ump-art { --art-r: 14px; background: rgba(255, 255, 255, .12); box-shadow: 0 28px 50px -22px rgba(0, 0, 0, .7); }
+.ump-art .um-art-ph { width: 76px; height: 76px; color: #fff; opacity: .5; }
+.ump-info { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+.ump-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ump-title { font-size: 22px; font-weight: 800; line-height: 1.35; }
+.ump-sub { display: flex; align-items: center; gap: 7px; margin-top: 2px; min-width: 0; }
+.ump-artist { font-size: 14px; opacity: .75; }
+.ump-heart { opacity: .85; }
+.ump-now .um-badge { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .85); }
+.ump-now .um-mark .um-badge + .um-badge { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .85); }
+.ump-now .um-prog { color: rgba(255, 255, 255, .72); }
+.ump-now .um-bar { background: rgba(255, 255, 255, .26); }
+.ump-now .um-bar i, .ump-now .um-bar i::after { background: #fff; }
+.ump-now .um-bar i::after { box-shadow: none; }
+.ump-now .ed-text { --ph: rgba(255, 255, 255, .5); }
+.ump-ctrls { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+.ump-ctrls .sm { opacity: .7; }
+.ump-now .um-play.big { width: 66px; height: 66px; background: #fff; color: var(--t-deeper); box-shadow: none; }
+.ump-lyric { padding: 14px 18px; border-radius: 14px; background: rgba(255, 255, 255, .12); font-size: 15px; font-weight: 700; line-height: 1.7; text-align: center; }
+
+.ump-queue { display: flex; flex-direction: column; gap: 18px; min-width: 0; padding: 30px 30px 24px; }
+.ump-qhead { display: flex; align-items: flex-end; gap: 20px; }
+.ump-qcover { flex: none; width: 108px; }
+.ump-qcover .ed-img { --img-r: 8px; box-shadow: 0 16px 30px -18px rgba(20, 16, 40, .6); }
+.ump-qtext { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.is-player .um-title-main { font-size: 26px; }
+.is-player .um-meta { margin-top: 4px; }
+.is-player .um-row { gap: 12px; padding: 8px 10px; }
+.is-player .um-colhead { gap: 12px; padding: 0 10px 8px; }
+.is-player .um-art, .is-player .um-art-sp { width: 40px; }
+.is-player .um-lead { padding-top: 11px; }
+.is-player .um-title { font-size: 14px; }
+.is-player .um-time { padding-top: 9px; font-size: 12.5px; }
+.is-player .um-more { padding-top: 11px; }
+.is-player .um-quote { background: var(--t-bg); }
+.is-player .um-foot { margin-top: auto; }
+
+/* ================================================================ ツールバー */
+.ed-toolbar .um-layout button, .ed-toolbar .um-order button { padding: 5px 11px; font-size: 12.5px; }
+.um-seg-k { align-self: center; padding: 0 4px 0 8px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.um-shape { display: inline-block; flex: none; border: 1.6px solid currentColor; border-radius: 2.5px; }
+.um-shape.list { width: 9px; height: 13px; }
+.um-shape.player { width: 15px; height: 10px; background: linear-gradient(to right, currentColor 42%, transparent 42%); }
+/* 選んだ人のパネル */
+.um-pp { display: flex; flex-direction: column; gap: 10px; width: 300px; }
+.um-pp-row { display: flex; align-items: center; gap: 10px; }
+.um-pp-fields { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 4.6em; gap: 6px; }
+.um-pp-fields label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted); font-weight: 700; }
+.um-pp input[type=text] { min-height: 0; height: 32px; padding: 4px 9px; font-size: 13px; border-radius: 9px; }
+.um-pp .hint { font-size: 11.5px; line-height: 1.5; }
+@media (max-width: 760px) {
+  .ed-pop:has(.um-pp) { position: static; }
+  .ed-pop-body:has(.um-pp) { left: 6px; width: min(330px, calc(100% - 12px)); }
+  .um-pp { width: auto; }
+}
+
+/* 書き出す画像では、空の欄・空の曲・追加と並べ替えのボタンを場所ごと省く
+   (書き出しの除外だけだと、ボタンの分の隙間が画像に残るため。:has の中に :has は書けない) */
+.exporting .ed-add,
+.exporting .um-tools,
+.exporting .um-row.is-blank,
+.exporting .um-label.is-empty,
+.exporting .um-intro.is-empty,
+.exporting .um-foot.is-empty,
+.exporting .um-artist.is-empty,
+.exporting .um-note.is-empty,
+.exporting .um-time.is-empty,
+.exporting .um-total.is-empty,
+.exporting .um-quote:has(> .um-line.is-empty),
+.exporting .ump-lyric:has(> .um-mirror.is-empty),
+.exporting .um-who:has(> .um-who-name.is-empty),
+.exporting .um-legend:not(:has(.um-who-name:not(.is-empty))),
+.exporting .um-cover:has(> .ed-img:not(.has-img)),
+.exporting .ump-qcover:has(> .ed-img:not(.has-img)),
+.exporting .um-group:not(:has(.um-row:not(.is-blank))) { display: none; }
+.exporting .um-mirror.is-empty::before { content: ""; }
+.exporting .um-head:has(> .um-cover > .ed-img:not(.has-img)) { grid-template-columns: minmax(0, 1fr); }
+.exporting .um-meta:not(:has(.um-total:not(.is-empty))):not(:has(.um-who-name:not(.is-empty))) { display: none; }

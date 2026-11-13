@@ -11,6 +11,7 @@ AIチャット「zeta」のための非公式ツール集です。
 | userhome | userの住まいの設定文から、ドアや窓の入った階ごとの間取り図を起こして画像（PNG）で保存。zetaに貼る住まいの覚え書き（マークダウンかふつうの文）づくりと、talklogのログとの照らし合わせも |
 | userpair | 2人（または1人）のキャラシートを作って画像で保存 |
 | userline | プロフィール・年表・まとめ・関係を1枚にしたタイムライン風ペアカードを画像で保存 |
+| usermix | 2人のための曲を並べたプレイリストを、音楽アプリ風のプレイリストの画面（縦長）か再生画面（横長）にして画像で保存。曲ごとに選んだ人の印と、選んだわけ・好きな一節を添えられる |
 | usersns | セットログ風のVlog画面(2〜4人)・インスタ風の投稿(タグ付け)・ストーリー・LINE風のトーク・Twitter風のプロフィールとリプ画面を、1つの画面で切り替えて作って画像で保存 |
 | usercard | userのプロフィールを、ホロ箔や単色の箔押しのトレカ風カードにして、画像（PNG）と短い動画（MP4）で保存 |
 | userid | userの社員証・学生証・自己紹介カードなどを、載せる項目を自由に選んで作り、表・裏・両面を画像（PNG）で保存 |
@@ -49,8 +50,8 @@ python -m http.server 5175
 
 → http://127.0.0.1:5175/
 
-- `assets/` … 共通の部品（kit.js / kit.css：ツールの一覧・共通バー・ダイアログなど、changelog.js：更新履歴、editor.js / editor.css：userpair・userline・usersns の編集部品）
+- `assets/` … 共通の部品（kit.js / kit.css：ツールの一覧・共通バー・ダイアログなど、changelog.js：更新履歴、editor.js / editor.css：userpair・userline・usermix・usersns の編集部品）
 - `dev/zeta-mock.html` … talklog の収集スクリプトを確かめるための模擬トーク画面（zeta の画面ではありません）
 
-PNG書き出し（userpair / userline / usersns / usercard）には [html-to-image](https://github.com/bubkoo/html-to-image)（MIT）を CDN から読み込んで使っています。
+PNG書き出し（userpair / userline / usermix / usersns / usercard）には [html-to-image](https://github.com/bubkoo/html-to-image)（MIT）を CDN から読み込んで使っています。
 PSD書き出し（usersnap）には [ag-psd](https://github.com/Agamnentzar/ag-psd)（MIT）を CDN から読み込んで使っています。
