@@ -319,7 +319,7 @@
     { id: 'userpair', group: 'make', label: 'ペアプロフィール', icon: 'pair', out: ['PNG'],
       desc: '2人(または1人)のキャラシートを作って、画像で保存します。userprofのプロフィールも読み込めます。' },
     { id: 'userline', group: 'make', label: 'タイムラインペアカード', icon: 'timeline', out: ['PNG'],
-      desc: 'プロフィール・年表・まとめ・関係を1枚に載せた、縦長のタイムライン風カードを作って画像で保存します。' },
+      desc: 'プロフィール・年表・まとめ・関係を1枚に載せた、タイムライン風のカードを作って画像で保存します。レイアウトは縦長と横長から選べます。' },
     { id: 'usersns', group: 'make', label: 'SNS風画面', icon: 'phone', out: ['PNG'],
       desc: 'セットログ風のVlog画面(2〜4人)、インスタ風の投稿・ストーリー、LINE風のトーク、Twitter風のプロフィール・リプ画面を切り替えて作り、画像で保存します。' },
     { id: 'usercard', group: 'make', label: 'ホロカード', icon: 'card', out: ['PNG', 'MP4'],

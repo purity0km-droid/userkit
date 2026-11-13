@@ -24,7 +24,7 @@
 .ul-people { display: grid; gap: 16px; }
 .ul-people.cols-2 { grid-template-columns: 1fr 1fr; }
 .ul-people.cols-1 { grid-template-columns: 1fr; }
-.ul-people > .ed-add { grid-column: 1 / -1; }
+.ul-people > .ed-add { grid-column: 1 / -1; justify-self: start; }
 .ul-person { background: var(--t-card); border: 1px solid var(--t-line); border-radius: 22px; overflow: hidden; display: flex; flex-direction: column; }
 .ul-people.cols-1 .ul-person { flex-direction: row; }
 .ul-people.cols-1 .ul-person > .ed-img { width: 42%; flex: none; }
@@ -75,10 +75,61 @@
 /* ---------- 下の一文 ---------- */
 .ul-foot { font-size: 12px; color: var(--t-muted); letter-spacing: .06em; min-width: 6em; align-self: flex-start; }
 
-/* 書き出す画像では、空のラベル・見出し・画像枠などを省く */
+/* ================================================================ 横長 (.is-wide)
+   見出しの横にまとめ → 場面の画像と関係 → 横に流れる年表 → 画像を左に置いた人物 → 下の一文 */
+.line-sheet.is-wide { width: 1040px; padding: 46px 42px 36px; gap: 30px; }
+.is-wide .ul-title { font-size: 44px; }
+
+/* 見出しとまとめ */
+.ulw-top { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 36px; align-items: end; }
+.ulw-top > .ul-head { grid-column: 1; }
+.ulw-summary { border-left: 3px solid var(--t-main); padding: 4px 0 4px 18px; }
+.ulw-summary .ul-summary { font-size: 13.5px; line-height: 1.85; }
+
+/* 場面の画像と関係。関係のカードは画像の高さまで伸ばし、中身を上下の真ん中に置く */
+.ulw-hero { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 24px; align-items: stretch; }
+.ulw-hero.solo { grid-template-columns: minmax(0, 1fr); }
+.ulw-hero > .ul-sec { min-width: 0; }
+.ulw-hero > .ul-sec > .ul-card { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 18px 16px; }
+.ulw-hero:not(.solo) .ul-rel { grid-template-columns: 82px minmax(0, 1fr) 82px; gap: 10px; padding: 0; }
+.ulw-hero:not(.solo) .ul-rel-who .ed-img { width: 74px; }
+.ulw-hero:not(.solo) .ul-rels { gap: 16px; }
+.ulw-hero:not(.solo) .ul-rels > .ed-add { margin-left: 0; }
+.ulw-hero:not(.solo) .ul-arrow { margin: 0 10%; }
+.ulw-hero.solo .ul-rels { width: 100%; max-width: 640px; margin: 0 auto; }
+
+/* 年表: 点を線でつないで横に流す。1 段 --cols 個(JS が決める)。段の終わり(.row-end)と最後は線を出さない */
+.ul-tls.is-row { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); row-gap: 22px; }
+.ul-tls.is-row > .ul-tl { flex-direction: column; gap: 12px; padding: 0 22px 0 0; }
+.ul-tls.is-row > .ul-tl::before { left: 5px; right: 0; top: 4px; bottom: auto; width: auto; height: 2px; }
+.ul-tls.is-row > .ul-tl.row-end::before { display: none; }
+.ul-tls.is-row .ul-dot { position: relative; z-index: 1; margin-top: 0; }
+.ul-tls.is-row > .ed-add { grid-column: 1 / -1; justify-self: start; margin-left: 0; }
+
+/* 人物: 画像をカードの内側の左に、文を右に。画像は縦横比を保つため上にそろえる(伸ばさない) */
+.is-wide .ul-person { flex-direction: row; gap: 4px; padding: 14px; }
+.is-wide .ul-person > .ed-img { --img-r: 14px; width: 38%; flex: none; align-self: flex-start; }
+.is-wide .ul-people.cols-1 .ul-person > .ed-img { width: 24%; }
+.is-wide .ul-person-body { padding: 2px 6px 2px 14px; }
+
+/* ================================================================ ツールバー: レイアウトの切り替え */
+.ed-toolbar .ul-layout button { padding: 5px 11px; font-size: 12.5px; }
+.ul-shape { display: inline-block; flex: none; border: 1.6px solid currentColor; border-radius: 2.5px; }
+.ul-shape.tall { width: 9px; height: 13px; }
+.ul-shape.wide { width: 14px; height: 10px; }
+
+/* 書き出す画像では、空のラベル・見出し・画像枠などを省く。
+   「＋項目」などの追加ボタンも場所ごと省く(書き出しの除外だけだと、ボタンの分の隙間が画像に残るため) */
+.exporting .ed-add,
 .exporting .ul-label.is-empty,
 .exporting .ul-intro.is-empty,
 .exporting .ul-desc.is-empty,
 .exporting .ul-foot.is-empty,
 .exporting .ul-banner:not(:has(.has-img)),
+.exporting .ulw-summary:has(> .ul-summary.is-empty),
 .exporting .ul-tags:not(:has(.ed-text:not(.is-empty))) { display: none; }
+/* 横長で場面の画像が空なら、関係を幅いっぱいに(:has の中に :has は書けないので、画像枠を直接たどる) */
+.exporting .ulw-hero:has(> .ul-banner > .ed-img:not(.has-img)) { grid-template-columns: minmax(0, 1fr); }
+.exporting .ulw-hero:has(> .ul-banner > .ed-img:not(.has-img)) .ul-rels { width: 100%; max-width: 640px; margin: 0 auto; }
+.exporting .ulw-hero:has(> .ul-banner > .ed-img:not(.has-img)) .ul-rel { grid-template-columns: 92px minmax(0, 1fr) 92px; gap: 16px; padding: 0 30px; }
+.exporting .ulw-hero:has(> .ul-banner > .ed-img:not(.has-img)) .ul-rel-who .ed-img { width: 72px; }
