@@ -1955,6 +1955,11 @@
     return { name: r.name, cat: ROOMS[r.type][1], cand: !!r.cand, room: r };
   }
   const tatamiOf = (it) => (it.w * it.h) / 2;
+  /** 図に描いた LDK とキッチンの広さの合計(帖。覚え書きの LDK と同じ計算)。どちらかが図になければ null */
+  function ldkDrawn(s, key, ldk, kit) {
+    const list = s.plan.floors[key] || [], a = list.find((it) => it.id === ldk.id), c = list.find((it) => it.id === kit.id);
+    return a && c ? tatamiOf(a) + tatamiOf(c) : null;
+  }
   const m2Of = (it) => it.w * it.h * GRID_M * GRID_M;
   /** 広さの字。fixed なら物件のチラシのように帖を小数 1 桁でそろえる(6.0帖) */
   function areaText(it, unit, fixed) {
@@ -3332,7 +3337,8 @@
     if (!gest || e.pointerId !== gest.id) return;
     const moved = gest.moved;
     gest = null;
-    if (moved) { ed.state.edited = true; ed.dirty(); renderSelInfo(); renderMemo(); renderLinks(); }
+    // 大きさを変えると LDK の広さの知らせも変わる
+    if (moved) { ed.state.edited = true; ed.dirty(); renderSelInfo(); renderMemo(); renderLinks(); renderNotes(); }
   };
   cv.addEventListener('pointerup', endGest);
   cv.addEventListener('pointercancel', endGest);
@@ -3519,6 +3525,9 @@
   function renderNotes() {
     const s = ed.state, b = s.bld;
     const empty = floorKeys(b).filter((k) => k !== 'R' && !s.rooms.some((r) => !r.cand && effFloor(r, b) === k));
+    // 部屋のない階に候補(点線)を描いていれば、それが書いた部屋ではないことも添える
+    // (「候補だけを描いた」とは書かない。階段の列の収納は候補でなく実線で描くので)
+    const emptyCand = empty.some((k) => (s.plan.floors[k] || []).some((it) => infoOf(it).cand));
     // 図で手直ししたあとは、利用者が決めた大きさなので知らせない
     const off = s.edited ? [] : offRooms(s, s.plan.floors);
     const addRoom = (u) => {
@@ -3526,17 +3535,23 @@
       s.unread = s.unread.filter((x) => x !== u);
       replan(`${u.word}を表に足しました`);
     };
-    // LDK のある階のキッチンは、LDK の中に含めるか別に数えるかを知らせて、切り替えられるようにする
+    // LDK のある階のキッチンは、LDK の中に含めるか別に数えるかを知らせて、切り替えられるようにする。
+    // 広さは図に描いた広さ(覚え書きの LDK と同じ計算)で書き、LDK の中に含めたときは指定と違えば指定も添える
     const ldkNotes = floorKeys(b).flatMap((k) => {
       const here = s.rooms.filter((r) => !r.cand && effFloor(r, b) === k), ldk = here.find((r) => r.type === 'living' && /LDK/.test(r.name)), kit = here.find((r) => r.type === 'kitchen');
       if (!ldk || !kit) return [];
       const toggle = (label) => h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => { kit.inLdk = !kit.inLdk; replan(); } }, label);
-      return [h('div.uh-col', kit.inLdk
-        ? [h('p.hint', `${kit.name}は${ldk.name}の中に含め、合わせて ${ldk.tatami} 帖で描いています。`), h('div.uh-row', toggle(`${ldk.name}と別に数える`))]
-        : [h('p.hint', `${ldk.name}（${ldk.tatami}帖）と${kit.name}（${kit.tatami}帖）を別に数え、図では合わせて約 ${ldk.tatami + kit.tatami} 帖で描いています。`), h('div.uh-row', toggle(`${ldk.name}に含める`))])];
+      const drawn = ldkDrawn(s, k, ldk, kit);
+      if (kit.inLdk) {
+        const spec = ldk.tatami || ROOMS.living[2];
+        const area = drawn === null ? `${spec} 帖` : `${drawn.toFixed(1)} 帖${Math.abs(drawn - spec) > 0.01 ? `（指定は ${spec} 帖）` : ''}`;
+        return [h('div.uh-col', h('p.hint', `${kit.name}は${ldk.name}の中に含め、合わせて ${area}で描いています。`), h('div.uh-row', toggle(`${ldk.name}と別に数える`)))];
+      }
+      const area = drawn === null ? `約 ${ldk.tatami + kit.tatami} 帖` : `${drawn.toFixed(1)} 帖`;
+      return [h('div.uh-col', h('p.hint', `${ldk.name}（${ldk.tatami}帖）と${kit.name}（${kit.tatami}帖）を別に数え、図では合わせて ${area}で描いています。`), h('div.uh-row', toggle(`${ldk.name}に含める`)))];
     });
     notesBox.replaceChildren(
-      empty.length ? h('p.uh-note', `${empty.map(floorLong).join('・')}に部屋がありません。`) : '',
+      empty.length ? h('p.uh-note', `${empty.map(floorLong).join('・')}は設定文に部屋がありません。${emptyCand ? '図の点線の部屋は候補です。' : ''}`) : '',
       off.length ? h('p.uh-note', `${off.map((o) => `${o.room.name}（${o.room.tatami}帖→${o.jo}帖）`).join('、')}は指定と違う広さになっています。建物の幅と奥行きを広げるか、案を選び直してください。`) : '',
       ...ldkNotes,
       s.unread.length ? h('div.uh-col',
@@ -3712,11 +3727,16 @@
   const DOOR_JA = { swing: '開き戸', slide: '引き戸', fold: '折れ戸', open: '開口', entrance: '玄関ドア', shutter: 'シャッター' };
   // AI への約束の一文。書いたことは守らせ、書いていない部屋は話に必要なときだけ足してよいとする(キッチンなどを書いていない設定もあるため)
   const MEMO_RULE = 'この住まいの設定は会話の中で変えない。書いた部屋・出入り口・窓は守り、書いていない部屋や設備は、話に必要なときだけ、ここに書いたことと矛盾しないように足す。用途が未定の階は会話で決めてよい。';
-  /** ドアの向こうの呼び方 */
-  function sideName(o) {
+  /**
+   * ドアの向こうの呼び方。under は候補の部屋も入れた図で同じ所にある物(analyze は候補の部屋を数えないので、o が空になる)。
+   * 候補(書いていない部屋・空きを埋めた収納など)は「脱衣所（候補）」のように書く
+   */
+  function sideName(o, under) {
     const t = typeOf(o);
     if (t === 'out') return '外';
     if (o && roomOf(o.id)) return roomOf(o.id).name;
+    const c = o || under;
+    if (c && infoOf(c).cand) return `${infoOf(c).name}（候補）`;
     return { hall: '廊下', stairs: '階段', ev: 'エレベーター', store: '収納', deck: '屋上' }[t] || '用途が未定の所';
   }
   /** 物が建物のどのあたりにあるか(北西の角・南側・中ほど) */
@@ -3743,15 +3763,18 @@
       const memoArea = (it, r) => (r.inLdk ? 'LDKの中' : `${(tatamiOf(it) + (kitIn && r.type === 'living' && /LDK/.test(r.name) ? tatamiOf(kitIn) : 0)).toFixed(1)}帖`);
       const st = A.real.find((it) => typeOf(it) === 'stairs');
       if (!core && st) core = placeOf(st, A.W, A.D, s.north);
+      // 候補の部屋も入れた図(ドアの向こうが候補の部屋のとき、その名前を引く)
+      const all = s.plan.floors[key] || [], atAll = cellMap(all, A.W, A.D);
       const list = rooms.map((it) => {
         const r = roomOf(it.id), t = r.type, wins = new Set(), doors = [];
+        const under = new Map(edgesOf(it, atAll).map((x) => [x.e, x.other]));
         edgesOf(it, A.at).forEach((ed) => {
           const op = A.open.get(ed.e);
           if (op && op.k === 'window') wins.add(dirOf(ed.side, s.north));
           else if (op && DOOR_JA[op.k]) {
-            doors.push(`${sideName(ed.other)}（${DOOR_JA[op.k]}）`);
+            doors.push(`${sideName(ed.other, under.get(ed.e))}（${DOOR_JA[op.k]}）`);
             if (op.k === 'entrance') notes.push(`玄関は${keys.length > 1 ? label + 'の' : ''}${DIR_JA[dirOf(ed.side, s.north)]}側`);
-          } else if (A.walls.get(ed.e) === 'step') doors.push(`${sideName(ed.other)}（上がり框）`);
+          } else if (A.walls.get(ed.e) === 'step') doors.push(`${sideName(ed.other, under.get(ed.e))}（上がり框）`);
           // 壁のない所でつながる部屋(LDK・ワンルームの洋室とキッチン)
           else if (!A.walls.has(ed.e) && ed.other && roomOf(ed.other.id) && !isOutdoor(typeOf(ed.other), key)) doors.push(`${roomOf(ed.other.id).name}（仕切りなし）`);
         });
@@ -3763,7 +3786,9 @@
         };
       });
       const open = A.ldk.filter((gr) => gr.length > 1).map((gr) => `${joinJa(gr.map((x) => roomOf(x.id).name))}は仕切りのないひと続き（${ldkName(gr)} ${(gr.reduce((sum, x) => sum + x.w * x.h, 0) / 2).toFixed(1)}帖）`);
-      floors.push({ label, attrs: floorAttrsOf(b, key), rooms: list, open });
+      // 書いた部屋のない階でも、候補の玄関を描いていれば、玄関がこの階にあることだけは伝える(位置は書いていないので決めない)
+      const extra = !list.length && all.some((it) => { const r = roomOf(it.id); return r && r.cand && r.type === 'entry'; }) ? ['玄関はこの階（位置は未定）'] : [];
+      floors.push({ label, attrs: floorAttrsOf(b, key), rooms: list, open, extra });
     });
     if (keys.length > 1) notes.unshift(`${b.ev ? '階段とエレベーター' : '階段'}は全ての階で同じ位置（${core}）にあり、各階の廊下に面している`);
     // 書いてある位置関係のうち、図で守れているものを添える
@@ -3780,6 +3805,8 @@
       floors, notes
     };
   }
+  // 書いた部屋のない階(図に候補だけを描いた階も)
+  const NO_ROOMS = '書かれた部屋はなし（用途は未定）';
   /** 部屋 1 つの説明。md は「窓は東、出入り口は…」、plain は「東に窓があり、出入り口は…」 */
   function roomLine(r, fmt) {
     const head = r.name + (r.info.length ? `（${r.info.join('・')}）` : '');
@@ -3795,7 +3822,7 @@
       const head = [b.type, b.floors, b.equip.length && `設備は${b.equip.join('、')}`, b.people, b.pets && `${b.pets}を飼っている`, ...d.notes].filter(Boolean).map((x) => x + '。').join('');
       const fl = d.floors.map((f) => {
         const parts = [f.attrs.length ? f.attrs.join('・') : '', ...f.rooms.map((r) => roomLine(r, 'plain')), ...f.open].filter(Boolean);
-        if (!f.rooms.length) parts.push('用途は未定');
+        if (!f.rooms.length) parts.push(NO_ROOMS, ...f.extra);
         return `【${f.label}】${parts.map((x) => x + '。').join('')}`;
       });
       return [rule ? MEMO_RULE : '', `【住まい】${head}`, ...fl].filter(Boolean).join('\n');
@@ -3813,6 +3840,7 @@
       lines.push('### 部屋');
       const f = d.floors[0];
       if (f.attrs.length) lines.push(`- 部屋全体: ${f.attrs.join('・')}`);
+      if (!f.rooms.length) lines.push(`- ${NO_ROOMS}`, ...f.extra.map((x) => `- ${x}`));
       f.rooms.forEach((r) => lines.push(`- ${roomLine(r, 'md')}`));
       f.open.forEach((o) => lines.push(`- ${o}`));
       return lines.join('\n');
@@ -3820,7 +3848,7 @@
     lines.push('### 階ごとの部屋');
     d.floors.forEach((f) => {
       const head = `- ${f.label}${f.attrs.length ? `（${f.attrs.join('・')}）` : ''}`;
-      if (!f.rooms.length) { lines.push(`${head}: 用途は未定`); return; }
+      if (!f.rooms.length) { lines.push(`${head}: ${NO_ROOMS}`, ...f.extra.map((x) => `  - ${x}`)); return; }
       lines.push(head);
       f.rooms.forEach((r) => lines.push(`  - ${roomLine(r, 'md')}`));
       f.open.forEach((o) => lines.push(`  - ${o}`));
