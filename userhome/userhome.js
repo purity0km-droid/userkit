@@ -1879,6 +1879,51 @@
     if (next.includes('entry')) return '下足入れ';
     return '収納';
   }
+  /**
+   * 空きの長方形 q が、外周に面した幅 1・長さ 3 以上の帯なら、軒下の外の候補に分けて返す(なければ null)。
+   * 上の階の下に残った帯(外にできない所)を、収納にせず外にして、内側の部屋に窓を付けられるようにする。
+   * 内側の部屋ごとに名前を分ける: 居室・LDK・キッチンの前はテラス(2 階より上はバルコニー)、玄関の前はポーチ、ほかは物干し(2 ます未満の区切りは隣に含める。Fable 2026-11-13)
+   */
+  function eaveOf(q, m, W, D, s, key) {
+    const horiz = q.h === 1 && q.w >= 3;
+    if (!horiz && !(q.w === 1 && q.h >= 3)) return null;
+    const n = horiz ? q.w : q.h;
+    const cellAt = (x, y) => (x < 0 || y < 0 || x >= W || y >= D ? 'O' : m[y * W + x]);
+    const along = (off) => Array.from({ length: n }, (_, k) => (horiz ? cellAt(q.x + k, q.y + off) : cellAt(q.x + off, q.y + k)));
+    const outer = [-1, 1].find((d) => along(d).every((c) => c === 'O' || c === 'R'));
+    if (outer === undefined) return null;
+    const kind = (c) => {
+      const r = c && typeof c === 'object' ? s.rooms.find((x) => x.id === c.id) : null;
+      if (!r) return 'other';
+      if (r.type === 'entry') return 'entry';
+      return LIVING.has(r.type) || HABIT.has(ROOMS[r.type][1]) || r.type === 'kitchen' ? 'live' : 'other';
+    };
+    const segs = [];
+    along(-outer).map(kind).forEach((k, i) => { const last = segs[segs.length - 1]; if (last && last.k === k) last.n++; else segs.push({ k, a: i, n: 1 }); });
+    for (let changed = true; changed;) {
+      changed = false;
+      const t = segs.findIndex((sg, i) => i && sg.k === segs[i - 1].k);
+      if (t > 0) { segs[t - 1].n += segs[t].n; segs.splice(t, 1); changed = true; continue; }
+      const u = segs.length > 1 ? segs.findIndex((sg) => sg.n < 2) : -1;
+      if (u >= 0) { if (u) segs[u - 1].n += segs[u].n; else { segs[1].a = segs[0].a; segs[1].n += segs[0].n; } segs.splice(u, 1); changed = true; }
+    }
+    const NAME = { live: key === '1' ? 'テラス' : 'バルコニー', entry: 'ポーチ', other: '物干し' };
+    return segs.map((sg) => Object.assign({ name: NAME[sg.k] }, horiz ? { x: q.x + sg.a, y: q.y, w: sg.n, h: 1 } : { x: q.x, y: q.y + sg.a, w: 1, h: sg.n }));
+  }
+  /** つながった候補(spare)を 1 つの形にまとめる。grp にいちばん広い物の id、名前は合わせた広さで(6 帖超は用途未定、3 帖超は納戸) */
+  function groupSpares(list) {
+    const sp = list.filter((o) => /^spare/.test(o.id)), seen = new Set();
+    sp.forEach((o0) => {
+      if (seen.has(o0)) return;
+      const comp = [o0];
+      seen.add(o0);
+      for (let k = 0; k < comp.length; k++) sp.forEach((q) => { if (!seen.has(q) && sharesEdge(comp[k], q)) { seen.add(q); comp.push(q); } });
+      if (comp.length < 2) return;
+      const area = comp.reduce((a, q) => a + q.w * q.h, 0), main = comp.slice().sort((a, b) => b.w * b.h - a.w * a.h)[0];
+      const name = area > 12 ? '用途未定' : area > 6 ? '納戸' : main.name;
+      comp.forEach((q) => Object.assign(q, { grp: main.id, name }));
+    });
+  }
   function settleEmpty(s, floors, W, D) {
     const bld = s.bld, keys = floorKeys(bld).filter((k) => k !== 'R'), ups = keys.filter((k) => /^\d+$/.test(k)).sort((a, b) => a - b);
     const kinds = {};
@@ -1911,11 +1956,16 @@
       rectsOf(m, W, D, (c) => c === 'O').forEach((q, i) => { add.push(Object.assign({ id: 'out-' + i }, q)); count.out += q.w * q.h; });
       rectsOf(m, W, D, (c) => c === 'R').forEach((q, i) => { add.push(Object.assign({ id: 'roof-' + i }, q)); count.roof += q.w * q.h; });
       rectsOf(m, W, D, (c) => c === 'E').sort((p, q) => q.w * q.h - p.w * p.h).forEach((q, i) => {
+        count.spare += q.w * q.h;   // 軒下の候補にしても重さは同じ(足もとの選び方は変えない)
+        // 上の階の下に残った外周の幅 1 の帯は、軒下の外の候補(テラス・物干しなど。Fable 2026-11-13)
+        const eave = !key.startsWith('B') && !keepsBox(bld) ? eaveOf(q, m, W, D, s, key) : null;
+        if (eave) { eave.forEach((e, j) => add.push(Object.assign({ id: `out-eave-${i}-${j}` }, e))); return; }
         // 3 帖以下か幅 1 ますは収納、6 帖を超える所と部屋のない階のいちばん広い所は用途未定、ほかは納戸
         const small = q.w * q.h <= 6 || Math.min(q.w, q.h) < 2, big = q.w * q.h > 12 && Math.min(q.w, q.h) >= 3;
         add.push(Object.assign({ id: 'spare-' + i, name: roomless && !i ? '用途未定' : small ? storeName(q, items, s) : big ? '用途未定' : '納戸' }, q));
-        count.spare += q.w * q.h;
       });
+      // 地下は外形を引っ込めないので、つながった候補を 1 つの形にまとめる(名前は合わせた広さで 1 回。Fable 2026-11-13)
+      if (key.startsWith('B')) groupSpares(add);
       floors[key] = items.concat(add);
     });
     // 屋上: すぐ下の階の外・屋根の上は外にする
@@ -1965,9 +2015,41 @@
   }
   /** 割り付けた階をすべて仕上げる(使わない廊下の端を切り、部屋を広げて空きを吸い、残りを外・屋根・候補にする)。残した物の重さを返す */
   function settleFloors(s, floors, W, D) {
-    Object.keys(floors).forEach((key) => { if (key !== 'R') floors[key] = absorbFloor(s, key, trimHalls(s, floors[key], W, D), W, D); });
+    Object.keys(floors).forEach((key) => { if (key !== 'R') floors[key] = absorbFloor(s, key, trimHalls(s, trimToilets(s, key, floors[key]), W, D), W, D); });
     const n = settleEmpty(s, floors, W, D);
     return n.spare * LEFT_COST.spare + n.out * LEFT_COST.out + n.roof * LEFT_COST.roof;
+  }
+  const WET_TRIM_MAX = 6;   // トイレの余りを回してよい浴室・洗面所の広さの上限(ます目。3 帖)
+  /**
+   * 広さを書いていない幅 1・長さ 4 ます以上のトイレ(奥行き 3.6 m の個室は実在しない)を、廊下・玄関に接する端の 1 帖に縮め、
+   * 余りを、辺いっぱいに接する広さを書いていない浴室(3 帖まで)→ 洗面所(3 帖まで)に回す。回せなければ空きにする(あとで隣の部屋が吸うか、収納の候補になる)。
+   * ユーザーの提案を Fable と決まりにした(2026-11-13)。並びを写して返す
+   */
+  function trimToilets(s, key, list) {
+    const rooms = new Map(roomsOn(s, key).map((r) => [r.id, r]));
+    const unsized = (r) => !r.cand && (r.sized === undefined ? r.tatami === ROOMS[r.type][2] : !r.sized);
+    const out = list.map((o) => Object.assign({}, o));
+    const at = (x, y) => out.find((o) => !isFill(o.id) && x >= o.x && x < o.x + o.w && y >= o.y && y < o.y + o.h);
+    const walk = (o) => !!o && (isHall(o.id) || (rooms.get(o.id) || {}).type === 'entry');
+    out.filter((t) => { const r = rooms.get(t.id); return r && r.type === 'toilet' && unsized(r) && Math.min(t.w, t.h) === 1 && Math.max(t.w, t.h) >= 4; }).forEach((t) => {
+      const horiz = t.h === 1, n = horiz ? t.w : t.h, keep = Math.max(2, cellsOf(rooms.get(t.id)));
+      if (n <= keep) return;
+      const cell = (k) => (horiz ? [t.x + k, t.y] : [t.x, t.y + k]);
+      const near = (from, len) => Array.from({ length: len }, (_, k) => cell(from + k)).some(([x, y]) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const o = at(x + dx, y + dy); return o !== t && walk(o); }));
+      // 残す端: 短い辺の先が廊下・玄関なら 2、長い辺が接するなら 1
+      const endA = (walk(at(...(horiz ? [t.x - 1, t.y] : [t.x, t.y - 1]))) ? 2 : 0) + (near(0, keep) ? 1 : 0);
+      const endB = (walk(at(...(horiz ? [t.x + t.w, t.y] : [t.x, t.y + t.h]))) ? 2 : 0) + (near(n - keep, keep) ? 1 : 0);
+      if (!endA && !endB) return;
+      const fromA = endA >= endB, len = n - keep;
+      const rest = horiz ? { x: fromA ? t.x + keep : t.x, y: t.y, w: len, h: 1 } : { x: t.x, y: fromA ? t.y + keep : t.y, w: 1, h: len };
+      // 余りの長い辺いっぱいに接し、合わせて長方形になる浴室・洗面所
+      const fits = (o) => (horiz ? o.x === rest.x && o.w === rest.w && (o.y + o.h === rest.y || o.y === rest.y + 1) : o.y === rest.y && o.h === rest.h && (o.x + o.w === rest.x || o.x === rest.x + 1));
+      const host = ['bath', 'wash'].map((tp) => out.find((o) => { const r = rooms.get(o.id); return r && r.type === tp && unsized(r) && fits(o) && o.w * o.h + len <= WET_TRIM_MAX; })).find(Boolean);
+      Object.assign(t, horiz ? { x: fromA ? t.x : t.x + len, w: keep } : { y: fromA ? t.y : t.y + len, h: keep });
+      if (host) Object.assign(host, { x: Math.min(host.x, rest.x), y: Math.min(host.y, rest.y), w: horiz ? host.w : host.w + 1, h: horiz ? host.h + 1 : host.h });
+      else out.push(Object.assign({ id: `empty-wc-${t.id}` }, rest));
+    });
+    return out;
   }
   // バルコニーなどを付ける部屋の順(LDK → 主寝室 → 居室 → キッチン → ほかの部屋。水回り・収納・玄関には付けない)
   // 向きの重さ(南を先に、北は避ける)
@@ -1981,7 +2063,7 @@
     list.filter((o) => isOutId(o.id) && over(o)).forEach((o) => {
       const m = new Array(W * D).fill(false);
       for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (!over({ x, y, w: 1, h: 1 })) m[y * W + x] = true;
-      rectsOf(m, W, D, (v) => v).forEach((q, i) => add.push(Object.assign({ id: `${o.id}-${i}` }, q)));
+      rectsOf(m, W, D, (v) => v).forEach((q, i) => add.push(Object.assign({ id: `${o.id}-${i}` }, o.name ? { name: o.name } : {}, q)));
     });
     return list.filter((o) => !(isOutId(o.id) && over(o))).concat(add, item);
   }
@@ -2101,9 +2183,11 @@
     // 広い階から順に決め、水回りの位置を次の階へ渡す
     const areaOf = (key) => roomsOn(s, key).reduce((sum, r) => sum + cellsOf(r), 0);
     const keys = floorKeys(s.bld).sort((a, b) => areaOf(b) - areaOf(a));
-    const compass = linksOf(s).some((l) => isCompass(l.b)), cur = s.north || 0;
+    const compass = linksOf(s).some((l) => isCompass(l.b)), auto = s.northAuto !== false;
+    // 方角を書いていなければ、自動のあいだは案に合わせる(autoNorth)
+    const cur = !compass && auto ? autoNorth(s, vi) : s.north || 0;
     // 同じ重さなら、いまの向き、次に下(図の上が南)を選ぶ
-    const norths = compass && s.northAuto !== false ? [cur, ...[2, 0, 1, 3].filter((n) => n !== cur)] : [cur];
+    const norths = compass && auto ? [cur, ...[2, 0, 1, 3].filter((n) => n !== cur)] : [cur];
     // 廊下を通す住まいは、割り付けの中で方角を数える。ほかは割り付けが北の向きによらないので、1 度割り付けて向きごとに数える
     const hallHome = !!hallZones(roomsOn(s, floorKeys(s.bld)[0]), s.bld, linksOf(s));
     const tried = [];   // 足もとごとのいちばん軽い重さ(探し直す足もとを絞るため)
@@ -2159,11 +2243,16 @@
       const more = search(1, again());
       if (more.cost < best.cost && offRooms(s, more.floors).length < offRooms(s, best.floors).length) best = more;
     }
-    if (norths.length > 1) s.north = best.north;
+    if (norths.length > 1 || (!compass && auto)) s.north = best.north;
     // バルコニーなどを外に付ける(図の範囲が広がることがある。body は建物の足もと)
     const fin = attachOutdoor(s, best.floors, best.W, best.D, best.north);
     return Object.assign({ variant: vi, foot: [fin.W, fin.D], body: [best.W, best.D], floors: fin.floors }, unitFaces(s, fin.floors, best.north));
   }
+  /**
+   * 方角を書いていない文の、自動の北の向き。2 階以上の案 C は、階段・トイレ・収納の列が北になるよう上(0)、ほかは下(2。玄関を北、LDK を南に)。
+   * 列を北に寄せて居室を南に並べるのが戸建ての定石(Fable 2026-11-13)
+   */
+  const autoNorth = (s, vi) => ((VARIANTS[vi] || VARIANTS[0]).core === 'top' && floorKeys(s.bld).filter((k) => k !== 'R').length > 1 ? 0 : 2);
   const WIDE = 4;   // 探し直すときに、確かめる分け方を何倍にするか
   const WIDE_FEET = 2;   // 細かく探し直す足もとの数
   /** 指定の広さから 1 畳を超えて狭い部屋と、広げてよい広さ(growMax)を超えた部屋 [{ room, jo }] */
@@ -2196,6 +2285,8 @@
     s.rooms = s.rooms.filter((r) => r && ROOMS[r.type]);
     s.bld = Object.assign(defaults().bld, s.bld || {});
     if (!s.plan || !s.plan.floors) s.plan = makePlan(s, 0);
+    // 方角を書いていない文の北の向きは、2026-11-13 から自動(案に合わせる)を選べる。前の保存で自動と違う向きなら、手で選んだ向きとして残す(保存済みの案は作り直さない)
+    else if (s.northAuto === undefined && !linksOf(s).some((l) => isCompass(l.b)) && (s.north || 0) !== autoNorth(s, s.plan.variant || 0)) s.northAuto = false;
     return s;
   }
   const roomOf = (id) => ed.state.rooms.find((r) => r.id === id) || null;
@@ -2203,6 +2294,8 @@
   function infoOf(it) {
     // 空きを埋めた候補(収納・納戸・用途未定)は、名前を物に持たせる
     if (/^spare/.test(it.id)) return { name: it.name || '収納', cat: 'service', cand: true, room: null };
+    // 上の階の下に残った外周の帯(軒下の外の候補。eaveOf)
+    if (/^out-eave/.test(it.id)) return { name: it.name || 'テラス', cat: 'outdoor', cand: true, room: null };
     // 屋上の床は何か所かに分かれる(deck-core など)ので、- の前で引く
     const fx = FIXED[it.id] || FIXED[it.id.split('-')[0]];
     if (fx) return { name: fx[0], cat: fx[1], cand: false, room: null };
@@ -2267,6 +2360,54 @@
     for (let t = -hh; t < w; t += gap) { g.moveTo(x + t, y + hh); g.lineTo(x + t + hh, y); }
     g.stroke();
     g.restore();
+  }
+  /**
+   * 下の階の屋根(roof の物すべて)を 1 つの形として塗り、斜線を継ぎ目なく引く。外(建物の外・図の外)に面する辺には細い軒先の線を引く
+   * (斜線だけだと地面に見えるため。Fable 2026-11-13)
+   */
+  function drawRoofs(g, roofs, items, W, D, ox, oy, u, style) {
+    if (!roofs.length) return;
+    g.save();
+    g.fillStyle = ROOF_COLOR;
+    g.globalAlpha = style === 'note' ? 0.5 : 1;
+    g.beginPath();
+    roofs.forEach((q) => g.rect(ox + q.x * u, oy + q.y * u, q.w * u, q.h * u));
+    g.fill();
+    g.save();
+    g.clip();
+    const bx = Math.min(...roofs.map((q) => q.x)), by = Math.min(...roofs.map((q) => q.y));
+    const bw = Math.max(...roofs.map((q) => q.x + q.w)) - bx, bh = Math.max(...roofs.map((q) => q.y + q.h)) - by;
+    hatch(g, ox + bx * u, oy + by * u, bw * u, bh * u, '#a9a59a', Math.max(5, u * 0.3), 0.35, Math.max(0.8, u * 0.025));
+    g.restore();
+    const m = gridOf(items, W, D);
+    const outside = (x, y) => { if (x < 0 || y < 0 || x >= W || y >= D) return true; const o = m[y * W + x]; return !o || /^out/.test(o.id); };
+    g.strokeStyle = '#8f8b80';
+    g.globalAlpha = style === 'note' ? 0.6 : 0.9;
+    g.lineWidth = Math.max(1, u * 0.05);
+    g.beginPath();
+    roofs.forEach((q) => {
+      for (let x = q.x; x < q.x + q.w; x++) {
+        if (outside(x, q.y - 1)) { g.moveTo(ox + x * u, oy + q.y * u); g.lineTo(ox + (x + 1) * u, oy + q.y * u); }
+        if (outside(x, q.y + q.h)) { g.moveTo(ox + x * u, oy + (q.y + q.h) * u); g.lineTo(ox + (x + 1) * u, oy + (q.y + q.h) * u); }
+      }
+      for (let y = q.y; y < q.y + q.h; y++) {
+        if (outside(q.x - 1, y)) { g.moveTo(ox + q.x * u, oy + y * u); g.lineTo(ox + q.x * u, oy + (y + 1) * u); }
+        if (outside(q.x + q.w, y)) { g.moveTo(ox + (q.x + q.w) * u, oy + y * u); g.lineTo(ox + (q.x + q.w) * u, oy + (y + 1) * u); }
+      }
+    });
+    g.stroke();
+    g.restore();
+  }
+  /** 1 つの形にまとめた候補の 1 つ it の辺のうち、仲間(members)に接しない所を、つないだ線分 [x1, y1, x2, y2](ます目の座標)で返す */
+  function groupEdges(it, members) {
+    const has = (x, y) => members.some((q) => x >= q.x && x < q.x + q.w && y >= q.y && y < q.y + q.h);
+    const out = [];
+    const run = (n, test, seg) => { let a = -1; for (let k = 0; k <= n; k++) { const on = k < n && test(k); if (on && a < 0) a = k; if (!on && a >= 0) { out.push(seg(a, k)); a = -1; } } };
+    run(it.w, (k) => !has(it.x + k, it.y - 1), (a, b) => [it.x + a, it.y, it.x + b, it.y]);
+    run(it.w, (k) => !has(it.x + k, it.y + it.h), (a, b) => [it.x + a, it.y + it.h, it.x + b, it.y + it.h]);
+    run(it.h, (k) => !has(it.x - 1, it.y + k), (a, b) => [it.x, it.y + a, it.x, it.y + b]);
+    run(it.h, (k) => !has(it.x + it.w, it.y + k), (a, b) => [it.x + it.w, it.y + a, it.x + it.w, it.y + b]);
+    return out;
   }
   const deepen = (hex, t) => {
     const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) * (1 - t));
@@ -2606,7 +2747,15 @@
         return;
       }
       if (t === 'garage') {
-        const run = runsOf(it, (o) => o === undefined).sort((a, b) => (b[0].side === 'b') - (a[0].side === 'b'))[0];
+        // シャッターは、幅 3 ます(2.7 m)ある面のうち、車が入る奥行き(6 ます = 5.46 m)のある面、次に玄関ドアと同じ向きの面(道路が 1 本で済む)、次に下の辺(Fable 2026-11-13)
+        const en = rooms.find((x) => typeOf(x) === 'entry');
+        const entSide = en && [...open.entries()].filter(([, op]) => op.k === 'entrance').map(([e]) => {
+          const [ex, ey] = e.slice(1).split(',').map(Number), inEn = (x, y) => x >= en.x && x < en.x + en.w && y >= en.y && y < en.y + en.h;
+          return e[0] === 'h' ? (inEn(ex, ey) ? 't' : 'b') : (inEn(ex, ey) ? 'l' : 'r');
+        })[0];
+        const depth = (run) => (run[0].side === 't' || run[0].side === 'b' ? it.h : it.w);
+        const rank = (run) => (run.length >= 3 ? 8 : 0) + (depth(run) >= 6 ? 4 : 0) + (run[0].side === entSide ? 2 : 0) + (run[0].side === 'b' ? 1 : 0);
+        const run = runsOf(it, (o) => o === undefined).sort((a, b) => rank(b) - rank(a) || b.length - a.length)[0];
         if (run) { const n = Math.min(run.length, 3), a = Math.floor((run.length - n) / 2); run.slice(a, a + n).forEach((ed) => put(ed, { k: 'shutter' })); }
       }
       if (doored.has(it.id)) return;
@@ -2866,6 +3015,42 @@
   }
 
   /* ---------- 設備と家具 ---------- */
+  const COL_SIZE = 0.5;   // 柱の大きさ(ます目)。建物の範囲の辺では 0.3 ぶん内側へ寄せるので、部屋へは 0.4 ます入り込む
+  /**
+   * 鉄筋コンクリートの建物の柱の位置(ます目の格子点の並び。box に建物の範囲 [x0, y0, x1, y1])。外に付けたバルコニーなどを除いた建物の範囲の角と、長い辺の途中(約 5 m ごと)。
+   * 途中の柱は、2 ます以内に間仕切りの付け根(内側の 2 ますが別の物)があればそこへ寄せる(部屋の中ほどで浴槽などの設備に重ならないように。Fable 2026-11-13)
+   */
+  function rcColumns(s, key, items, A) {
+    const pts = [];
+    const body = items.filter((it) => !isOutId(it.id) && !isOutdoor(typeOf(it), key));
+    if (!RC_RE.test(s.bld.type || '') || key === 'R' || !body.length) return pts;
+    const x0 = Math.min(...body.map((it) => it.x)), y0 = Math.min(...body.map((it) => it.y));
+    const x1 = Math.max(...body.map((it) => it.x + it.w)), y1 = Math.max(...body.map((it) => it.y + it.h));
+    // 辺ごとに [始め, 終わり, 点, その点で外壁に接する内側の 2 ます]
+    [[x0, x1, (p) => [p, y0], (p) => [A.at(p - 1, y0), A.at(p, y0)]], [x0, x1, (p) => [p, y1], (p) => [A.at(p - 1, y1 - 1), A.at(p, y1 - 1)]],
+      [y0, y1, (p) => [x0, p], (p) => [A.at(x0, p - 1), A.at(x0, p)]], [y0, y1, (p) => [x1, p], (p) => [A.at(x1 - 1, p - 1), A.at(x1 - 1, p)]]].forEach(([a, b, at, pair]) => {
+      const n = Math.max(1, Math.round((b - a) / 6));
+      for (let i = 0; i <= n; i++) {
+        let p = Math.round(a + ((b - a) * i) / n);
+        if (i > 0 && i < n) {
+          const q = [0, -1, 1, -2, 2].map((k) => p + k).find((v) => { if (v <= a || v >= b) return false; const [c, d] = pair(v); return !!c && !!d && c !== d; });
+          if (q !== undefined) p = q;
+        }
+        pts.push(at(p));
+      }
+    });
+    pts.box = [x0, y0, x1, y1];
+    return pts;
+  }
+  /**
+   * 部屋 it の辺 side に沿った枠(inFrame)の両端のうち、柱(A.cols)のある部屋の角で避ける長さ(px)[始めの端, 終わりの端]。
+   * 柱が部屋へ入り込む分(0.4 ます)だけ、設備を角から離す(浴槽やキッチンが柱に重ならないように。2026-11-13)
+   */
+  function colCuts(it, side, A, u) {
+    if (!A.cols || !A.cols.size) return [0, 0];
+    const ends = { t: [[it.x, it.y], [it.x + it.w, it.y]], b: [[it.x + it.w, it.y + it.h], [it.x, it.y + it.h]], l: [[it.x, it.y + it.h], [it.x, it.y]], r: [[it.x + it.w, it.y], [it.x + it.w, it.y + it.h]] }[side];
+    return ends.map((p) => (A.cols.has(p.join(',')) ? u * COL_SIZE * 0.8 : 0));
+  }
   /** 部屋の辺 side を上にした向きで描く。f(壁の長さ, 奥行き, 回した角度) の戻り値を返す */
   function inFrame(g, x, y, w, hh, side, f) {
     g.save();
@@ -2938,6 +3123,11 @@
     let cand = SIDES.filter((sd) => !busy.has(sd));
     // need: 設備の奥行きと前の余地(m)。入らない壁は外す(便器を 0.91 m の幅に向けない)。入る壁がなければ外さない
     if (need) { const deep = cand.filter((sd) => depth[sd] * GRID_M >= need); if (deep.length) cand = deep; }
+    // opt.across: 短い辺のうち戸から遠い壁(2×3 の浴室の浴槽を奥に横向きに置き、戸の側を洗い場にする。Fable 2026-11-13)
+    if (opt && opt.across) {
+      const short = cand.filter((sd) => len[sd] === Math.min(it.w, it.h));
+      if (short.length) return short.sort((a, b) => far(b) - far(a))[0];
+    }
     // facing: 開き戸の正面の壁を先に(開いた戸が設備に重ならないように)。同じなら戸から遠い壁
     // opt.kitchen: 窓が 2 ます以上の壁とバルコニーに面した壁は最後に、小窓 1 つの壁は窓のない 3 ます以上の壁の後に(コンロの背を窓にしない。Fable 2026-11-13)
     const plain = cand.some((sd) => !win[sd] && !deck.has(sd) && len[sd] >= 3);
@@ -2969,7 +3159,12 @@
       g.fillStyle = ink; g.font = `500 ${Math.max(7, size)}px ${FONT[style]}`; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText(txt, 0, 0); g.restore();
     };
-    const place = (side, f) => { const d = inFrame(g, x, y, w, hh, side, f); if (d > 0) rest = restOf(x, y, w, hh, side, d); };
+    // 柱のある角からは、柱の入り込む分だけ離して置く(colCuts)
+    const place = (side, f) => {
+      const [c0, c1] = colCuts(it, side, A, u);
+      const d = inFrame(g, x, y, w, hh, side, (L, Dp, ang) => { g.translate(c0, 0); return f(L - c0 - c1, Dp, ang, c0); });
+      if (d > 0) rest = restOf(x, y, w, hh, side, d);
+    };
     // LDK と別にキッチンの部屋があれば、設備はキッチンの部屋にだけ描く
     const ownKitchen = (s.plan.floors[key] || []).some((o) => { const x = roomOf(o.id); return x && x !== r && x.type === 'kitchen'; });
     const kitchenLike = t === 'kitchen' || (!ownKitchen && /キッチン|LDK|台所/.test(name));
@@ -3048,7 +3243,9 @@
       });
     } else if (t === 'bath') {
       // ユニットバスは浴槽を戸の壁と直角の壁に置き、便器を戸から遠い端に(Fable 2026-11-13)
-      const unitBath = /ユニット/.test(name), side = backSide(it, A, 'long', false, 0, unitBath ? { side: true } : null);
+      // 短い辺が 2 ますで細長い浴室(2×3 など)は、浴槽を戸から遠い短い辺に横向きに(長い壁に縦に置くと洗い場が 0.9 m ほどになる。Fable 2026-11-13)
+      const across = Math.min(it.w, it.h) === 2 && Math.max(it.w, it.h) >= 3;
+      const unitBath = /ユニット/.test(name), side = backSide(it, A, 'long', false, 0, unitBath ? { side: true } : across ? { across: true } : null);
       const doorEd = edgesOf(it, A.at).find((ed) => { const op = A.open.get(ed.e); return op && op.k !== 'window'; });
       // 壁に向かって左(L の 0 の側)にあたる辺。戸がそこにあれば、便器と洗面台を入れ替える
       const zeroSide = { t: 'l', b: 'r', l: 'b', r: 't' }[side], doorAtZero = !!doorEd && doorEd.side === zeroSide;
@@ -3119,8 +3316,9 @@
     } else if (t === 'entry') {
       // 下足入れ(斜めの線は収納の印)。置く所は shoeShelf(置けなければ描かない)
       const sh = shoeShelf(it, A, r);
-      if (sh) place(sh.side, (L, Dp) => {
-        const bl = sh.len * m, bd = Math.min(Dp * 0.35, m * 0.38), x0 = clamp(sh.at * u + (sh.fromEnd ? -bl - m * 0.03 : m * 0.03), 0, Math.max(0, L - bl));
+      // sh.at は枠の始めからの位置なので、柱を避けて枠をずらした分(c0)を引く
+      if (sh) place(sh.side, (L, Dp, ang, c0) => {
+        const bl = sh.len * m, bd = Math.min(Dp * 0.35, m * 0.38), x0 = clamp(sh.at * u - (c0 || 0) + (sh.fromEnd ? -bl - m * 0.03 : m * 0.03), 0, Math.max(0, L - bl));
         box(x0, m * 0.03, bl, bd);
         g.save(); g.globalAlpha = 0.45; g.beginPath(); g.moveTo(x0, m * 0.03); g.lineTo(x0 + bl, m * 0.03 + bd); g.stroke(); g.restore();
         return bd + m * 0.05;
@@ -3260,18 +3458,20 @@
     const colorOf = (it) => { const t = typeOf(it), inf = infoOf(it); return t === 'empty' ? emptyColor : TYPE_COLOR[t === 'onsen' && key === 'R' ? 'deck' : t] || CAT_COLOR[inf.cat] || '#eee'; };
     // 床
     const labels = new Map();
+    const roofs = items.filter((it) => /^roof/.test(it.id));
+    let roofDone = false;
     items.forEach((it) => {
       // 建物の外(外形の欠き込み・広げた図の余り)は紙の色、下の階の屋根は淡い灰色に斜線
       if (isOutId(it.id)) {
-        const x = ox + it.x * u, y = oy + it.y * u, w = it.w * u, hh = it.h * u;
+        // 下の階の屋根は、全部を 1 つの形として塗り、斜線も継ぎ目なく引く(最初の屋根のときにまとめて描く。2026-11-13)
+        const isRoof = /^roof/.test(it.id);
+        if (isRoof && roofDone) return;
         g.save();
         g.fillStyle = PAPER[style];
-        g.fillRect(x, y, w, hh);
-        if (/^roof/.test(it.id)) {
-          g.fillStyle = ROOF_COLOR;
-          g.globalAlpha = style === 'note' ? 0.5 : 1;
-          g.fillRect(x, y, w, hh);
-          hatch(g, x, y, w, hh, '#a9a59a', Math.max(5, u * 0.3), 0.35, Math.max(0.8, u * 0.025));
+        (isRoof ? roofs : [it]).forEach((q) => g.fillRect(ox + q.x * u, oy + q.y * u, q.w * u, q.h * u));
+        if (isRoof) {
+          roofDone = true;
+          drawRoofs(g, roofs, items, W, D, ox, oy, u, style);
         }
         g.restore();
         return;
@@ -3305,44 +3505,43 @@
       }
       g.restore();
     });
+    // 鉄筋コンクリートの建物の柱の位置(ます目の格子点)。設備は柱を避けて置く(A.cols。drawFixtures の place)
+    const cols = rcColumns(s, key, items, A);
+    A.cols = new Set(cols.map((p) => p.join(',')));
     // 設備と家具(名前は残りの所に書く)
     items.forEach((it) => {
       const inf = infoOf(it);
       if (inf.cand || isFill(it.id)) return;
       labels.set(it, drawFixtures(g, s, key, it, A, ox + it.x * u, oy + it.y * u, it.w * u, it.h * u, u, style));
     });
-    // 候補の部屋: 薄い面と点線の枠
+    // 候補の部屋: 薄い面と点線の枠。軒下の外の候補はテラスの色。1 つの形にまとめた候補(grp)は、まわりの辺だけに点線
     items.forEach((it, i) => {
       const inf = infoOf(it);
       if (!inf.cand) return;
       const x = ox + it.x * u, y = oy + it.y * u, w = it.w * u, hh = it.h * u;
       g.save();
       g.globalAlpha = 0.4;
-      g.fillStyle = colorOf(it);
+      g.fillStyle = /^out-eave/.test(it.id) ? TYPE_COLOR.terrace : colorOf(it);
       g.fillRect(x, y, w, hh);
       g.globalAlpha = 0.7;
       g.strokeStyle = ink;
       g.lineWidth = Math.max(1, u * 0.04);
       g.setLineDash([u * 0.18, u * 0.12]);
-      rectPath(g, style, x + 1, y + 1, w - 2, hh - 2, i * 7 + key.length);
+      if (it.grp) {
+        g.beginPath();
+        groupEdges(it, items.filter((q) => q.grp === it.grp)).forEach(([x1, y1, x2, y2]) => { g.moveTo(ox + x1 * u, oy + y1 * u); g.lineTo(ox + x2 * u, oy + y2 * u); });
+      } else rectPath(g, style, x + 1, y + 1, w - 2, hh - 2, i * 7 + key.length);
       g.stroke();
       g.restore();
     });
     drawWalls(g, A, ox, oy, u, style, key);
     drawOpenings(g, A, ox, oy, u, style);
-    // 鉄筋コンクリートの建物は、外壁の角と、長い外壁の途中(約 5 m ごと)に柱。外に付けたバルコニーなどを除いた建物の範囲で
-    const body = items.filter((it) => !isOutId(it.id) && !isOutdoor(typeOf(it), key));
-    if (RC_RE.test(s.bld.type || '') && key !== 'R' && body.length) {
-      const x0 = Math.min(...body.map((it) => it.x)), y0 = Math.min(...body.map((it) => it.y));
-      const x1 = Math.max(...body.map((it) => it.x + it.w)), y1 = Math.max(...body.map((it) => it.y + it.h));
-      const cs = u * 0.5, pts = [];
-      [[x0, x1, (p) => [p, y0]], [x0, x1, (p) => [p, y1]], [y0, y1, (p) => [x0, p]], [y0, y1, (p) => [x1, p]]].forEach(([a, b, at]) => {
-        const n = Math.max(1, Math.round((b - a) / 6));
-        for (let i = 0; i <= n; i++) pts.push(at(Math.round(a + ((b - a) * i) / n)));
-      });
+    // 鉄筋コンクリートの建物の柱(rcColumns)。建物の範囲の辺の上では内側へ寄せる
+    if (cols.length) {
+      const cs = u * COL_SIZE, [x0, y0, x1, y1] = cols.box;
       g.save();
       g.fillStyle = WALL_COLOR[style];
-      pts.forEach(([px, py]) => g.fillRect(ox + px * u - cs / 2 + (px === x0 ? cs * 0.3 : px === x1 ? -cs * 0.3 : 0), oy + py * u - cs / 2 + (py === y0 ? cs * 0.3 : py === y1 ? -cs * 0.3 : 0), cs, cs));
+      cols.forEach(([px, py]) => g.fillRect(ox + px * u - cs / 2 + (px === x0 ? cs * 0.3 : px === x1 ? -cs * 0.3 : 0), oy + py * u - cs / 2 + (py === y0 ? cs * 0.3 : py === y1 ? -cs * 0.3 : 0), cs, cs));
       g.restore();
     }
     // 名前と広さ。屋上の床は、いちばん広い所にだけ書く
@@ -3353,6 +3552,16 @@
     const emptyBig = o.screen ? biggest('empty') : null;
     const deckMain = biggest('deck'), emptyMain = emptyBig && bare(emptyBig) ? emptyBig : null;
     const hallMain = items.filter((it) => isHall(it.id)).sort((a, b) => b.w * b.h - a.w * a.h)[0];
+    // 屋根の名前は、つながった屋根ごとに 1 回だけ(ある程度広い長方形のうち、いちばん広い所。2026-11-13)
+    const roofMain = new Set(), seenRoof = new Set();
+    roofs.forEach((r0) => {
+      if (seenRoof.has(r0)) return;
+      const comp = [r0];
+      seenRoof.add(r0);
+      for (let i = 0; i < comp.length; i++) roofs.forEach((q) => { if (!seenRoof.has(q) && sharesEdge(comp[i], q)) { seenRoof.add(q); comp.push(q); } });
+      const big = comp.filter((q) => q.w * q.h >= 6 && Math.min(q.w, q.h) >= 2).sort((a, b) => b.w * b.h - a.w * a.h)[0];
+      if (big) roofMain.add(big);
+    });
     const size = clamp(u * 0.36, 8, 24), wt = style === 'note' ? 400 : 700;
     HALO = style === 'note' ? 'rgba(251,250,244,.85)' : 'rgba(255,255,255,.85)';
     // 物件チラシ風: 仕切りのない LDK は、いちばん広い部屋の所に 1 つの名前(LDK・LD・DK)と合わせた広さで書く
@@ -3370,9 +3579,10 @@
       // 階段の列の空きは廊下で隔たっているので、ほかの空きとは別に名前を書く
       const coreEmpty = o.screen && it.id === 'empty-core' && bare(it);
       if ((it.id.startsWith('deck') && it !== deckMain) || (it.id.startsWith('empty') && it !== emptyMain && !coreEmpty)) return;
-      // 建物の外には書かない。下の階の屋根は、ある程度広い所にだけ「屋根」と薄く書く
+      // 建物の外には書かない。下の階の屋根は、つながった屋根ごとに 1 回(roofMain)、「屋根」と薄く書く
       const roof = /^roof/.test(it.id);
-      if (/^out/.test(it.id) || (roof && (it.w * it.h < 6 || Math.min(it.w, it.h) < 2))) return;
+      // 軒下の外の候補(out-eave)には書く。1 つの形にまとめた候補は、いちばん広い所(grp)に 1 回
+      if ((/^out/.test(it.id) && !/^out-eave/.test(it.id)) || (roof && !roofMain.has(it)) || (it.grp && it.grp !== it.id)) return;
       // 廊下の名前は階ごとにいちばん広い所に 1 回だけ
       if (isHall(it.id) && it !== hallMain) return;
       // 名前は設備を避けた残りの所に。狭すぎるときは部屋の真ん中
@@ -3380,7 +3590,12 @@
       if (lw < size * 2.2 || lh < size * 1.5) [lx, ly, lw, lh] = [ox + it.x * u, oy + it.y * u, it.w * u, it.h * u];
       const cx = lx + lw / 2, cy = ly + lh / 2, w = lw - 6;
       const mg = merged.get(it);
-      const name = mg ? mg.name : (style === 'flyer' && SHORT[inf.name]) || inf.name + (inf.cand ? '（候補）' : '');
+      let name = mg ? mg.name : (style === 'flyer' && SHORT[inf.name]) || inf.name + (inf.cand ? '（候補）' : '');
+      // 候補の名前が 1 行に入らなければ「（候補）」を省く(点線で候補と分かる。「物入（」「候補）」と折れたり壁にかかったりしないように。2026-11-13)
+      if (inf.cand && !mg && name.endsWith('（候補）')) {
+        g.font = `${wt} ${Math.max(9, Math.round(size * 0.75))}px ${font}`;
+        if (g.measureText(name).width > w) name = inf.name;
+      }
       const showArea = inf.room && SHOW_AREA.has(t) && lh > size * 2.6 && !(SMALL_STORE.has(t) && it.w * it.h < 4);
       // トイレ・洗面所・浴室は設備で分かるので、名前が 1 行に入らなければ書かない
       if (FIXTURE_ROOM.has(t) && !showArea) {
@@ -4036,17 +4251,29 @@
       field('家具', seg('家具', [[false, '描かない'], [true, '描く']], !!s.furn, (v) => ed.set('furn', v)), '浴槽やキッチンなどの設備は、いつも描きます'),
       northField(s));
   }
-  /** 北の向き。方角が書いてあれば「自動」を選べる(手で選ぶと、読み取り直すか「自動」に戻すまでその向きのまま) */
+  /**
+   * 北の向き。「自動」を選べる(手で選ぶと、読み取り直すか「自動」に戻すまでその向きのまま)。
+   * 方角が書いてあれば守れる向きを選び、なければ案に合わせる(autoNorth。2026-11-13)。自動のときは今の向きを添える
+   */
   function northField(s) {
-    const opts = [[0, '上'], [1, '右'], [2, '下'], [3, '左']];
-    if (!linksOf(s).some((l) => isCompass(l.b))) return field('北の向き', seg('北の向き', opts, s.north, (v) => { ed.set('north', v); renderMemo(); }), '窓を付ける辺と、覚え書きの窓の向きが変わります');
-    return field('北の向き', seg('北の向き', [['auto', '自動'], ...opts], s.northAuto === false ? s.north : 'auto', (v) => {
-      if (v === 'auto') { s.northAuto = true; replan(); return; }
-      s.northAuto = false;
-      ed.set('north', v);
-      renderLinks();
-      renderMemo();
-    }), '「自動」は書いてある方角をなるべく多く守れる向きを選びます。向きを変えると、窓を付ける辺と覚え書きの窓の向きも変わります');
+    const opts = [[0, '上'], [1, '右'], [2, '下'], [3, '左']], compass = linksOf(s).some((l) => isCompass(l.b));
+    const autoLabel = () => (s.northAuto === false ? '自動' : `自動（${opts[s.north || 0][1]}）`);
+    const box = seg('北の向き', [['auto', autoLabel()], ...opts], s.northAuto === false ? s.north : 'auto', (v) => {
+      if (v === 'auto') {
+        s.northAuto = true;
+        // 方角がなく、今の向きが自動の向きと同じなら作り直さない(図で動かした部屋を残す)
+        if (compass || (s.north || 0) !== autoNorth(s, s.plan.variant || 0)) { replan(); return; }
+        ed.dirty();
+      } else {
+        s.northAuto = false;
+        ed.set('north', v);
+        if (compass) renderLinks();
+        renderMemo();
+      }
+      box.querySelector('button').textContent = autoLabel();
+    });
+    return field('北の向き', box, compass ? '「自動」は書いてある方角をなるべく多く守れる向きを選びます。向きを変えると、窓を付ける辺と覚え書きの窓の向きも変わります'
+      : '「自動」は案に合わせて向きを選びます。2 階建て以上の案 C は階段の列が北になるよう北を上に、それ以外は北を下にします。向きを変えると、窓を付ける辺と覚え書きの窓の向きも変わります');
   }
 
   /* ---------- ログと照らし合わせる ---------- */
