@@ -42,13 +42,20 @@
     const store = U.kv('userkit-editor');
     const ed = { state: cfg.defaults(), cfg };
     let saveTimer = 0;
+    let saveFailed = false;   // 前の保存が失敗したか(知らせは失敗に変わったときだけ出す)
 
     ed.get = (p) => getIn(ed.state, p);
     ed.set = (p, v, o) => { setIn(ed.state, p, v); ed.dirty(); if (o && o.rerender) ed.rerender(); };
     ed.dirty = () => { clearTimeout(saveTimer); saveTimer = setTimeout(ed.save, 400); setStatus('saving'); };
+    // 保存できない環境(保存を止めたブラウザなど)では変えるたびに失敗するので、知らせは失敗に変わったときだけにする。
+    // ツールバーの「保存できません」は失敗のたびに出す。保存できたら、次の失敗でまた知らせる
     ed.save = async () => {
-      try { await store.set(cfg.app, { v: cfg.version, state: ed.state, at: Date.now() }); setStatus('saved'); }
-      catch (e) { setStatus('error'); U.toast('ブラウザに保存できませんでした。容量をご確認ください', 'error'); }
+      try { await store.set(cfg.app, { v: cfg.version, state: ed.state, at: Date.now() }); setStatus('saved'); saveFailed = false; }
+      catch (e) {
+        setStatus('error');
+        if (!saveFailed) U.toast('ブラウザに保存できませんでした。容量をご確認ください', 'error');
+        saveFailed = true;
+      }
     };
     /* 自動保存の状態(ツールバーに置く)。保存している間・保存した・保存できない の 3 つ */
     const STATUS = {
