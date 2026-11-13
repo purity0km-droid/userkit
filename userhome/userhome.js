@@ -80,6 +80,8 @@
   ];
   // 1 戸の住まい(住戸)の建物。マンション一棟・ビルは建物全体なので含めない(2026-11-13 ユーザー決定。ペントハウスも含める)
   const UNIT_TYPES = new Set(['マンション', 'タワーマンション', 'アパート', 'ワンルーム', 'ペントハウス']);
+  // 戸建て(書いていない玄関を 1 階に足す建物。建物の言葉がない住まいも戸建てとみなす。2026-11-13)
+  const DETACHED = new Set(['一軒家', '洋館', '屋敷', '別荘', '']);
   /** 住戸の階(1 層の住戸のとき。ほかは '') */
   const unitKey = (bld) => (bld.unit && UNIT_TYPES.has(bld.type) ? String(bld.unit) : '');
   const PETS_RE = /(黒猫|白猫|三毛猫|子猫|猫|柴犬|子犬|犬|うさぎ|ウサギ|インコ|ハムスター|フェレット)(?:の)?([ァ-ヶー]{2,8}|「[^」]{1,10}」)?/;
@@ -220,7 +222,13 @@
     // 書いていなくても、地上と地下を合わせて 4 階以上ならエレベーターを置く(表で外せる)
     if (bld.above + bld.below >= 4) bld.ev = true;
     // 書いていない部屋は勝手に足さず、「候補」として薄く出す(玄関・防音の階の防音室)
-    if (!rooms.some((r) => r.type === 'entry')) rooms.push({ id: U.uid(), floor: unitKey(bld) || '1', name: '玄関', type: 'entry', tatami: 2, attrs: [], cand: true });
+    // 玄関を書いていなければ足す。1 層の住まい(平屋・住戸・ワンルームなど)と、1 階に部屋を書いた戸建ては本物の玄関に(候補だと戸も壁も付かず、トイレや居室の入り口が浴室側に回るため。
+    // 2026-11-13 ユーザー指示と Fable の勧め)。2 階より上しか書いていない屋敷、マンション一棟・ビル(エントランス)は候補のまま。auto は設定文になかった印(表で知らせる)
+    if (!rooms.some((r) => r.type === 'entry')) {
+      const oneLayer = floorKeys(bld).filter((k) => k !== 'R').length === 1;
+      const house = DETACHED.has(bld.type || '') && rooms.some((r) => !r.cand && effFloor(r, bld) === '1');
+      rooms.push(Object.assign({ id: U.uid(), floor: unitKey(bld) || '1', name: '玄関', type: 'entry', tatami: 2, attrs: [], cand: !(oneLayer || house) }, oneLayer || house ? { auto: true } : {}));
+    }
     Object.entries(bld.floorAttrs).forEach(([k, a]) => {
       const keys = k === 'B' ? basementKeys(bld) : k === 'ALL' ? [] : [k];
       if (a.some((x) => /防音/.test(x))) keys.forEach((key) => { if (!rooms.some((r) => effFloor(r, bld) === key)) rooms.push({ id: U.uid(), floor: key, name: '防音室', type: 'sound', tatami: 8, attrs: [], cand: true }); });
@@ -740,7 +748,8 @@
     return guessFloor(r, bld);
   }
   // 廊下に接していなくてよい部屋(ほかの部屋の奥にあってよいもの)
-  const INNER = new Set(['closet', 'shoes', 'pantry', 'bath', 'storage', 'pet', 'cellar', 'onsen', 'pool', 'terrace', 'garden', 'kitchen', 'dining', 'sun']);
+  // ワインセラーは廊下から入る(シアタールームなどを通らない。2026-11-13 辿れない部屋)
+  const INNER = new Set(['closet', 'shoes', 'pantry', 'bath', 'storage', 'pet', 'onsen', 'pool', 'terrace', 'garden', 'kitchen', 'dining', 'sun']);
   // 水回りは上下の階で同じ所に寄せたいので、まとめて先に置く
   const WET_FIRST = (r) => (ROOMS[r.type][1] === 'wet' ? 0 : 1);
 
@@ -1004,6 +1013,8 @@
   const HALL_TOUCH = 80;    // 廊下の両側の部屋が廊下に接しないときの重さ(ほかの部屋を通って入ることになるので、形より先に守る)
   const FACE_COST = 200;    // 住戸の居室が玄関側にもバルコニー側にも接しない(窓が取れない)ときの重さ
   const WET_HALL_COST = 300; // 廊下を通す住まいで、トイレ・洗面所が廊下にも玄関にも接しない(LDK やキッチンから入ることになる)ときの重さ
+  const WET_APART_COST = 1000; // 浴室と洗面所が離れる(浴室に居室から入ることになる)ときの重さ。2026-11-13
+  const CUT_HABIT_COST = 600; // 廊下を通す 1 階の住まいで、居室が廊下にも玄関にも LDK にも接しない(ほかの居室を通って入る)ときの重さ。2026-11-13
   const APART_COST = 80;    // 組の部屋(浴室と洗面所、居室とクローゼット)が隣り合わないときの重さ
   const NO_HALL_COST = 1e5; // 廊下を通せなかった足もとの重さ(通せる足もとを先に選ぶ)
   const WANT_COST = 70;     // 位置関係で決まった並びから外れるときの重さ
@@ -1330,6 +1341,8 @@
       if (col) f.out = col.out.concat(f.out);
       // 廊下の下の端を玄関に含める
       const entryRect = Object.assign({}, e, { x: entrySide === 'R' ? hx : e.x, w: e.w + 1 });
+      // 玄関のうち土間にならない所(下の端の 1 段を除く。玄関ドアは下の辺に付く)
+      const entryHall = entryRect.h > 1 ? Object.assign({}, entryRect, { h: entryRect.h - 1 }) : null;
       const out = f.out.concat(a.out, b.out).map((o) => (o === e ? entryRect : o));
       out.push({ id: 'hall', x: hx, y: H1, w: 1, h: e.y - H1 });
       // 指定の広さとのずれと、空きになった所を数える(玄関は廊下の端を含めた広さで比べる)
@@ -1339,7 +1352,7 @@
       const rectOf = (id) => out.find((o) => o.id === id);
       units.filter((u) => u.kids).forEach((u) => {
         const p = rectOf(u.kids[0].id), q = rectOf(u.kids[1].id);
-        if (p && q && !sharesEdge(p, q)) cost += APART_COST;
+        if (p && q && !sharesEdge(p, q)) cost += u.wet ? WET_APART_COST : APART_COST;
       });
       // 廊下の端を玄関に含めたあとの形で、廊下か奥の部屋に接しているかを確かめる(玄関にしか接しないと、玄関から直接入ることになる)
       const hallRect = out[out.length - 1], farRooms = f.out.filter((o) => roomsById.has(o.id) && !OUTSIDE.has(roomsById.get(o.id).type));
@@ -1351,10 +1364,12 @@
         if (q && !farRooms.some((f) => sharesEdge(q, f) && LIVING.has(roomsById.get(f.id).type))) { cost += WET_HALL_COST; cutOff = true; }
         const p = u.hall && rectOf(u.id);
         if (!p || sharesEdge(p, hallRect)) return;
-        // 玄関の脇なら戸はホールの側に付く(土間は戸のない側を選ぶ。analyze)
-        if (u.wet) { if (zones.entry.cand || !sharesEdge(p, entryRect)) { cost += WET_HALL_COST; cutOff = true; } return; }
-        // 奥の部屋から入れるのは LDK・リビング・ダイニングから(キッチンは居室の通り道にしない)
-        if (!farRooms.some((q) => sharesEdge(p, q) && roomsById.get(q.id).type !== 'kitchen')) { cost += HALL_TOUCH; cutOff = true; }
+        // 玄関の脇なら戸はホールの側に付く(土間は戸のない側を選ぶ。analyze)。土間になる外側の段(下の端の 1 段)にしか接しなければ戸を付けられない(2026-11-13)
+        if (u.wet) { if (zones.entry.cand || !entryHall || !sharesEdge(p, entryHall)) { cost += WET_HALL_COST; cutOff = true; } return; }
+        // 奥の部屋から入れるのは LDK・リビング・ダイニングから(キッチンは居室の通り道にしない)。玄関のホールからも入れる(書いていない玄関も本物にしたので)。
+        // 居室がほかの居室を通らないと入れない形は強く重くする(2026-11-13 辿れない部屋)
+        if (!zones.entry.cand && entryHall && sharesEdge(p, entryHall)) return;
+        if (!farRooms.some((q) => sharesEdge(p, q) && roomsById.get(q.id).type !== 'kitchen')) { cost += u.habit ? CUT_HABIT_COST : HALL_TOUCH; cutOff = true; }
       });
       out.forEach((o) => {
         const r = roomsById.get(o.id);
@@ -1471,12 +1486,20 @@
    */
   function cutOffCount(out, items) {
     const halls = out.filter((o) => isHall(o.id)), typeOfId = new Map(items.map((x) => [x.id, x.type]));
+    // 廊下・玄関から、通ってよい部屋(LDK など)と空き(あとで隣の部屋が吸う)を伝って届く物。
+    // LDK などが廊下にも玄関にも届かなければ(ほかの居室や水回りの向こう)、通り抜けに数える(2026-11-13 辿れない部屋。09C の 1 階)
+    const reach = new Set(out.filter((o) => isHall(o.id) || typeOfId.get(o.id) === 'entry'));
+    for (let more = true; more;) {
+      more = false;
+      out.forEach((q) => { if (!reach.has(q) && (PASS_ROOM.has(typeOfId.get(q.id)) || /^empty/.test(q.id)) && [...reach].some((p) => sharesEdge(p, q))) { reach.add(q); more = true; } });
+    }
     return items.filter((x) => {
       const p = x.hall && out.find((o) => o.id === x.id);
       if (!p || halls.some((hl) => sharesEdge(p, hl))) return false;
       // キッチンは居室への通り道にしない(客間や書庫にキッチンから入らないように。2026-11-13 公開前の見直し)
       const ok = WET_SIDE.has(x.type) ? (t) => t === 'entry' : (t) => PASS_ROOM.has(t) && t !== 'kitchen';
-      return !out.some((q) => q !== p && ok(typeOfId.get(q.id)) && sharesEdge(p, q));
+      const cut = !out.some((q) => q !== p && ok(typeOfId.get(q.id)) && sharesEdge(p, q));
+      return cut || (PASS_ROOM.has(x.type) && !reach.has(p));
     }).length;
   }
   const LONG_COST = 40;      // 中廊下の形と比べるときの、縦横比が 2 を超える部屋 1 つの重さ
@@ -1728,7 +1751,11 @@
     const res = expandGroups(fill(region, units, pref, v.core === 'right', roof ? 'deck' : 'empty', wide), units, pref, wide);
     // 廊下のない 1 階だけの住まい(ワンルームなど)は、居室・トイレ・洗面所が玄関・キッチン・LDK のどれかに接していないと入れないので重くする
     const reachless = !multi ? items.filter((x) => { const p = x.hall && !PASS_ROOM.has(x.type) && res.out.find((o) => o.id === x.id); return p && !res.out.some((q) => q !== p && PASS_ROOM.has((items.find((y) => y.id === q.id) || {}).type) && sharesEdge(p, q)); }).length : 0;
-    if (!multi || roof) return { out: fixAccess(out.concat(res.out), items), cost: res.cost + (zones ? NO_HALL_COST : 0) + reachless * CUT_FOOT };
+    // 玄関がキッチン・LDK(ワンルームは洋室も)のどれにも接しなければ、玄関から上がれないので同じく重くする(2026-11-13 辿れない部屋。00B・14B)
+    const entryOut = !multi && !roof && res.out.find((o) => (items.find((y) => y.id === o.id) || {}).type === 'entry' && !(items.find((y) => y.id === o.id) || {}).cand);
+    const stepTo = new Set(['kitchen', 'living', 'dining', 'family'].concat(/ワンルーム/.test(bld.type || '') ? ['room'] : []));
+    const entryLost = entryOut && !res.out.some((q) => q !== entryOut && stepTo.has((items.find((y) => y.id === q.id) || {}).type) && sharesEdge(entryOut, q)) ? 1 : 0;
+    if (!multi || roof) return { out: fixAccess(out.concat(res.out), items), cost: res.cost + (zones ? NO_HALL_COST : 0) + (reachless + entryLost) * CUT_FOOT };
     // 2 階以上の家は、通り抜けになる部屋か細長い部屋があれば、中廊下を通す形とも比べる(通り抜けの少ない方、同じなら軽い方)
     const hallRect = out.find((o) => o.id === 'hall');
     const slim = slimRooms(res.out, items);
@@ -2473,8 +2500,28 @@
       return !!(b && b.id === 'hall-branch' && hallMain) && (hallMain.h === 1 ? b.y > hallMain.y : b.x > hallMain.x);
     };
     // out: 部屋の外へ開く(トイレ。中へ開くと便器に当たる)
+    // 廊下と玄関のホール(土間でない所)のます目に開く扉の数。LDK などの扉はあとで付くので、LDK に間仕切りで接するますは 1 枚とみなす
+    const walkCell = (x, y) => { const o = at(x, y); return !!o && (isHall(o.id) || (typeOf(o) === 'entry' && !doma.has(`${x},${y}`))); };
+    const doorsAt = (x, y) => [[`h${x},${y}`, x, y - 1], [`h${x},${y + 1}`, x, y + 1], [`v${x},${y}`, x - 1, y], [`v${x + 1},${y}`, x + 1, y]].reduce((n, [e, nx, ny]) => {
+      const op = open.get(e), o = at(nx, ny);
+      if (op) return n + (['window', 'entrance', 'shutter', 'evdoor'].includes(op.k) ? 0 : 1);
+      return n + (o && LDK.has(typeOf(o)) && walls.get(e) === 'int' ? 1 : 0);
+    }, 0);
+    const insideEd = (ed) => { const [x, y] = ed.e.slice(1).split(',').map(Number); return ed.e[0] === 'h' ? (ed.into > 0 ? [x, y] : [x, y - 1]) : (ed.into > 0 ? [x, y] : [x - 1, y]); };
+    const acrossEd = (ed) => { const [x, y] = ed.e.slice(1).split(',').map(Number); return ed.e[0] === 'h' ? (ed.into > 0 ? [x, y - 1] : [x, y]) : (ed.into > 0 ? [x - 1, y] : [x, y]); };
     const door = (run, k, out) => {
-      const ed = (farLast(run) ? run.slice().reverse() : run).find((x) => !open.has(x.e));
+      let seq = (farLast(run) ? run.slice().reverse() : run).filter((x) => !open.has(x.e));
+      // 廊下・玄関のホールに開く扉は、1 ますに 2 枚までになるよう、扉の少ないますの側に付ける(部屋の両端を先に。F、2026-11-13)
+      const o = run[0].other;
+      if (seq.length > 1 && o && (isHall(o.id) || typeOf(o) === 'entry')) {
+        const walk = seq.filter((x) => walkCell(...acrossEd(x)));
+        if (walk.length) seq = walk;
+        // 洗面所は、前と同じ所(角に近い端)で 2 枚に収まるなら動かさない(浴室の折れ戸の前に開かないように。動かすのは居室の戸を先に。Fable 2026-11-13)
+        const keep = typeOf(at(...insideEd(seq[0]))) === 'wash' && doorsAt(...acrossEd(seq[0])) < 2;
+        const order = [seq[0], seq[seq.length - 1]].concat(seq.slice(1, -1)).filter((x, i, a) => a.indexOf(x) === i);
+        if (!keep) seq = order.map((x, i) => ({ x, i, n: doorsAt(...acrossEd(x)) })).sort((a, b) => a.n - b.n || a.i - b.i).map((q) => q.x);
+      }
+      const ed = seq[0];
       return ed && put(ed, { k, into: out ? -ed.into : ed.into, hinge: ed === run[0] ? 0 : 1 });
     };
     // 玄関の土間のます目("x,y")。辺の内側・向こう側のます目
@@ -2485,14 +2532,22 @@
     // 向こうからもう建具が付いていれば、それを入り口とみなす
     const reach = (it, prefs, strict) => {
       for (const want of strict ? prefs : prefs.concat('*main', '*')) {
-        const runs = runsOf(it, (o) => {
+        let runs = runsOf(it, (o) => {
           const t = typeOf(o);
           if (t === 'out' || isVoid(t) || isOutdoor(t, key) || t === 'stairs' || t === 'ev') return false;
           // 「廊下から入らない」と書いた所には、ドアを付けない
           if (noDoor.some((l) => l.a === it.id && o && l.b === o.id)) return false;
           if (want === '*main') return t === 'hall' || (!!roomOf(o.id) && !['wet', 'service'].includes(ROOMS[t][1]));
-          return want === '*' ? t === 'hall' || !!roomOf(o.id) : t === want;
+          // 廊下から入る部屋は、廊下のますが扉 2 枚で埋まっていれば玄関のホールからも(F、2026-11-13)
+          return want === '*' ? t === 'hall' || !!roomOf(o.id) : t === want || (want === 'hall' && t === 'entry' && !!hallMain && !oneRoom);
         }).map((run) => (typeOf(it) === 'shoes' ? run : run.filter((ed) => !(typeOf(ed.other) === 'entry' && doma.has(acrossOf(it, ed).join(',')))))).filter((run) => run.length);
+        if (want === 'hall') {
+          const low = (run) => Math.min(2, ...run.filter((ed) => !open.has(ed.e)).map((ed) => doorsAt(...acrossEd(ed))));
+          const isEntry = (run) => (typeOf(run[0].other) === 'entry' ? 1 : 0);
+          runs.sort((a, b) => low(a) - low(b) || isEntry(a) - isEntry(b) || b.length - a.length);
+          // 廊下に空きがあれば玄関のホールは使わない(前と同じ。ホールは廊下が埋まったときだけ)
+          if (runs.some((run) => !isEntry(run) && low(run) < 2)) runs = runs.filter((run) => !isEntry(run));
+        }
         if (runs.some((run) => run.some((ed) => open.has(ed.e)))) return true;
         // 浴室は脱衣所や寝室からは折れ戸、廊下からは開き戸。LDK から入る居室は引き戸を壁の中ほどに(Fable 2026-11-13)
         for (const run of runs) {
@@ -2573,6 +2628,20 @@
       // 1.5 帖以下のシャワールームは、洗面所と組にしないので廊下から
       // ワンルーム(1R・1K)の浴室は、玄関からキッチンへの通路の側から入る(洋室から入れない)
       if (!linked(it)) reach(it, t === 'bath' && oneRoom ? ['hall', 'kitchen', 'entry', 'wash'] : t === 'bath' && it.w * it.h <= 3 ? ['hall', 'wash'] : ACCESS[t] || ACCESS_DEFAULT);
+    });
+    // 浴室のための候補の脱衣所は、廊下・玄関のホール(なければ洗面所に入れる部屋)から戸で入れる(候補は壁を作らないので、向こうの辺に付ける。浴室へ辿れないため。2026-11-13)
+    all.forEach((cw) => {
+      const cr = roomOf(cw.id);
+      if (!cr || !cr.cand || !cr.forBath) return;
+      const eds = [];
+      for (let x = cw.x; x < cw.x + cw.w; x++) eds.push({ e: `h${x},${cw.y}`, o: at(x, cw.y - 1), c: [x, cw.y - 1], into: 1 }, { e: `h${x},${cw.y + cw.h}`, o: at(x, cw.y + cw.h), c: [x, cw.y + cw.h], into: -1 });
+      for (let y = cw.y; y < cw.y + cw.h; y++) eds.push({ e: `v${cw.x},${y}`, o: at(cw.x - 1, y), c: [cw.x - 1, y], into: 1 }, { e: `v${cw.x + cw.w},${y}`, o: at(cw.x + cw.w, y), c: [cw.x + cw.w, y], into: -1 });
+      const ok = eds.filter((ed) => ed.o && typeOf(ed.o) !== 'bath' && !(typeOf(ed.o) === 'entry' && doma.has(ed.c.join(','))));
+      if (ok.some((ed) => open.has(ed.e))) return;
+      for (const want of ['hall', 'entry'].concat(ACCESS.wash.filter((t) => t !== 'hall' && t !== 'entry'))) {
+        const ed = ok.find((x) => (want === 'hall' ? isHall(x.o.id) : typeOf(x.o) === want) && !open.has(x.e));
+        if (ed && put(ed, { k: 'swing', into: ed.into, hinge: 0 })) return;
+      }
     });
     // 洗面所: 開き戸が角にあり、開いた戸が洗面台・洗濯機の壁に沿うなら、同じ辺の反対の端へ移す。移せなければ引き戸に(Fable 2026-11-13)
     rooms.filter((it) => typeOf(it) === 'wash').forEach((it) => {
@@ -2812,6 +2881,44 @@
   }
   /** 辺 side から奥行き d を使ったあとの、部屋の残り [x, y, w, h] */
   const restOf = (x, y, w, hh, side, d) => (side === 't' ? [x, y + d, w, hh - d] : side === 'b' ? [x, y, w, hh - d] : side === 'l' ? [x + d, y, w - d, hh] : [x, y, w - d, hh]);
+  /**
+   * 玄関の下足入れの置き場 { side, at, fromEnd, len }。side の辺に沿った枠(inFrame)の中で、at(ます)の所から、fromEnd なら手前へ、でなければ奥へ len(m)。置けなければ null。
+   * 土間に接する横の壁(玄関ドアと直角の壁)に、外壁の角から奥へ 1.2 m(1 ますしか空かなければ 0.9 m)。左右を書いてあればその側を先に、次に玄関ドアのない側。
+   * 戸や開口のある辺と、ほかの辺に戸のあるます(戸の正面)は使わない。幅 1 ますの玄関は土間のますだけ。横の壁に置けなければドアの横の外壁に 0.9 m。
+   * 隣に下足入れの部屋(シューズクローク・候補の下足入れ)があれば描かない(Fable 2026-11-13。ユーザーの指摘: 洋室の戸の前に棚)
+   */
+  function shoeShelf(it, A, r) {
+    const at = A.at, eds = edgesOf(it, at);
+    if (eds.some((ed) => ed.other && (typeOf(ed.other) === 'shoes' || (/^spare/.test(ed.other.id) && /下足|シューズ/.test(ed.other.name || ''))))) return null;
+    const ent = eds.find((ed) => (A.open.get(ed.e) || {}).k === 'entrance');
+    if (!ent) return null;
+    const ds = ent.side, cellOf = (ed) => (ed.side === 't' ? [ed.pos, it.y] : ed.side === 'b' ? [ed.pos, it.y + it.h - 1] : ed.side === 'l' ? [it.x, ed.pos] : [it.x + it.w - 1, ed.pos]);
+    const doma = (ed) => A.doma.has(cellOf(ed).join(','));
+    const doorNear = (ed) => { const [x, y] = cellOf(ed); return [`h${x},${y}`, `h${x},${y + 1}`, `v${x},${y}`, `v${x + 1},${y}`].some((e) => e !== ed.e && A.open.has(e) && A.open.get(e).k !== 'window'); };
+    const free = (ed) => { const wk = A.walls.get(ed.e); return !!wk && wk !== 'step' && !A.open.has(ed.e) && !doorNear(ed); };
+    // 辺の上の位置を、その辺の枠(inFrame)の中の位置(ます)に。t・r は位置の順、b・l は逆の順
+    const local = (sd, gpos) => (sd === 't' ? gpos - it.x : sd === 'r' ? gpos - it.y : sd === 'b' ? it.x + it.w - gpos : it.y + it.h - gpos);
+    const sideRun = (sd) => {
+      const list = eds.filter((ed) => ed.side === sd).sort((a, b) => a.pos - b.pos);
+      // 外壁(玄関ドアの辺)の側の角から並べる
+      if (ds === 'b' || ds === 'r') list.reverse();
+      const narrow = (sd === 'l' || sd === 'r' ? it.w : it.h) < 2, out = [];
+      for (const ed of list) { if (!free(ed) || (narrow && !doma(ed))) break; out.push(ed); }
+      if (!out.length || !doma(out[0])) return null;
+      const len = out.length >= 2 ? 1.2 : 0.9, up = ds === 't' || ds === 'l';
+      // 角の端の位置: 位置の順に並べた辺(up)なら角は out[0].pos、逆なら out[0].pos + 1
+      const corner = local(sd, up ? out[0].pos : out[0].pos + 1);
+      return { side: sd, at: corner, fromEnd: local(sd, up ? out[0].pos + 1 : out[0].pos) < corner, len };
+    };
+    const LEFT = { b: 'l', t: 'r', l: 't', r: 'b' }, RIGHT = { b: 'r', t: 'l', l: 'b', r: 't' };
+    const want = r && r.shoe ? (r.shoe === 'L' ? LEFT : RIGHT)[ds] : '', perp = ds === 't' || ds === 'b' ? ['l', 'r'] : ['t', 'b'];
+    for (const sd of [want].concat(perp).filter(Boolean)) { const p = sideRun(sd); if (p) return p; }
+    // ドアの横の外壁(土間のますで、戸のない所)
+    const by = eds.filter((ed) => ed.side === ds && doma(ed) && free(ed)).sort((a, b) => Math.abs(b.pos - ent.pos) - Math.abs(a.pos - ent.pos))[0];
+    if (!by) return null;
+    const a = local(ds, by.pos), b = local(ds, by.pos + 1);
+    return { side: ds, at: Math.min(a, b) + 0.5 - 0.9 / GRID_M / 2, fromEnd: false, len: 0.9 };
+  }
   /** 設備を置く壁。ドアや開口のない辺から、ドアの向かいを先に、長い辺(short なら短い辺)を選ぶ */
   function backSide(it, A, pref, facing, need, opt) {
     const busy = new Set(), swing = new Set(), blocked = { t: 0, b: 0, l: 0, r: 0 }, doors = [], win = { t: 0, b: 0, l: 0, r: 0 }, deck = new Set();
@@ -3010,13 +3117,12 @@
         return m * 0.72;
       });
     } else if (t === 'entry') {
-      // 下足入れ(斜めの線は収納の印)。左右が書いてあれば、玄関から奥へ向いたその側の壁に
-      const shoeSide = r && r.shoe ? (r.shoe === 'L' ? 'l' : 'r') : '';
-      const sideFree = shoeSide && edgesOf(it, A.at).filter((ed) => ed.side === shoeSide).every((ed) => { const op = A.open.get(ed.e), wk = A.walls.get(ed.e); return wk && wk !== 'step' && !(op && op.k !== 'window'); });
-      place(sideFree ? shoeSide : backSide(it, A, 'short'), (L, Dp) => {
-        const bl = Math.min(L - m * 0.1, m * 1.2), bd = Math.min(Dp * 0.35, m * 0.38);
-        box(m * 0.03, m * 0.03, bl, bd);
-        g.save(); g.globalAlpha = 0.45; g.beginPath(); g.moveTo(m * 0.03, m * 0.03); g.lineTo(m * 0.03 + bl, m * 0.03 + bd); g.stroke(); g.restore();
+      // 下足入れ(斜めの線は収納の印)。置く所は shoeShelf(置けなければ描かない)
+      const sh = shoeShelf(it, A, r);
+      if (sh) place(sh.side, (L, Dp) => {
+        const bl = sh.len * m, bd = Math.min(Dp * 0.35, m * 0.38), x0 = clamp(sh.at * u + (sh.fromEnd ? -bl - m * 0.03 : m * 0.03), 0, Math.max(0, L - bl));
+        box(x0, m * 0.03, bl, bd);
+        g.save(); g.globalAlpha = 0.45; g.beginPath(); g.moveTo(x0, m * 0.03); g.lineTo(x0 + bl, m * 0.03 + bd); g.stroke(); g.restore();
         return bd + m * 0.05;
       });
     } else if (t === 'library' || t === 'cellar' || t === 'pantry') {
@@ -3759,7 +3865,7 @@
       s.links = p.links;
       s.northAuto = true;
       s.floor = '1';
-      replan(`${p.rooms.filter((r) => !r.cand).length} 部屋を読み取りました${p.unread.length ? `。読み取れなかった言葉が ${p.unread.length} つあります` : ''}`);
+      replan(`${p.rooms.filter((r) => !r.cand && !r.auto).length} 部屋を読み取りました${p.unread.length ? `。読み取れなかった言葉が ${p.unread.length} つあります` : ''}`);
     };
     return sec('住まいの設定文',
       ta,
@@ -3805,6 +3911,8 @@
       h('div.uh-row', h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: () => { s.rooms.push({ id: U.uid(), floor: '', name: '部屋', type: 'bed', tatami: 6, attrs: [], cand: false }); replan(); } }, icon('plus', 15), '部屋を足す')),
       notesBox,
       h('p.hint', '「候補」は設定文に書いていない部屋で、図では薄く出します。階・種類・畳数を変えると、いまの案の形で図を作り直します。階を「自動」にすると、種類から置く階を決めます。'),
+      // 書いていない玄関を本物として足したとき(parseSetting の auto。2026-11-13)
+      s.rooms.some((r) => r.auto && r.type === 'entry' && !r.cand) ? h('p.hint', '玄関は設定文に書いていないため、表に足しました。要らなければ「外す」で消せます。') : null,
       linksBox);
   }
   /** 読み取った結果の下の知らせ(部屋のない階・指定と違う広さになった部屋・読み取れなかった言葉) */
