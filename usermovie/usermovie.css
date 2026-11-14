@@ -1,0 +1,115 @@
+/* usermovie — 映画のワンシーン。作業台は暗い映写室、画面は canvas で描く */
+
+/* ===== ページ(作業画面) */
+.mov-app{max-width:1280px;margin:0 auto;padding:22px 16px 8px}
+.mov-app .page-head{margin-bottom:0}
+.mov-app .lead{max-width:72ch}
+.mov-app .ed-help{margin:10px 0 0}
+.mov-app .ed-help li,.mov-app .hint,.mov-app .lead,.mov-meta{word-break:auto-phrase}
+.mov-work{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:18px;align-items:start;margin-top:16px}
+
+/* 作業台: 暗い映写室に画面を 1 枚。下にカットの並び */
+.mov-stage{position:sticky;top:calc(var(--kitbar-h) + 12px);height:clamp(520px,calc(100vh - var(--kitbar-h) - 40px),860px);
+  display:flex;flex-direction:column;border-radius:16px;overflow:hidden;
+  background:radial-gradient(120% 80% at 50% 40%,#2a2730 0%,#17151b 70%);user-select:none;-webkit-user-select:none}
+.mov-stage.is-over{box-shadow:inset 0 0 0 3px #ff8fc4}
+.mov-view{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+.mov-screen{position:relative;line-height:0}
+#screen{display:block;box-shadow:0 26px 50px -24px rgba(0,0,0,.9),0 0 0 1px rgba(255,255,255,.06);touch-action:none;cursor:pointer}
+#screen.has-photo{cursor:grab}
+#screen.has-photo:active{cursor:grabbing}
+.mov-drop{position:absolute;left:50%;top:14px;transform:translateX(-50%);pointer-events:none;line-height:1.4}
+.mov-drop[hidden]{display:none}
+.mov-drop span{display:inline-block;padding:5px 14px;border-radius:999px;background:rgba(0,0,0,.55);border:1px dashed rgba(255,255,255,.45);color:rgba(255,255,255,.9);font-size:12px;font-weight:700;white-space:nowrap}
+
+/* カットの並び */
+.mov-strip{display:flex;align-items:center;gap:10px;padding:10px 12px 12px;overflow-x:auto;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.06)}
+.mov-cuts{display:flex;gap:8px}
+.mov-cut{position:relative;flex:none;padding:0;border:2px solid transparent;border-radius:6px;background:#000;line-height:0;opacity:.72}
+.mov-cut:hover{opacity:1}
+.mov-cut canvas{display:block;border-radius:3px}
+.mov-cut span{position:absolute;left:3px;top:3px;min-width:16px;padding:1px 4px;border-radius:4px;background:rgba(0,0,0,.7);color:#fff;font-size:10px;font-weight:700;line-height:14px;text-align:center}
+.mov-cut[aria-pressed="true"]{border-color:#ff8fc4;opacity:1}
+.mov-cut[aria-pressed="true"] span{background:#ff8fc4;color:#2b1020}
+.mov-add{flex:none;display:inline-flex;align-items:center;gap:5px;min-height:40px;padding:0 12px;border:1px dashed rgba(255,255,255,.4);border-radius:10px;background:none;color:rgba(255,255,255,.86);font-size:12px;font-weight:700;white-space:nowrap}
+.mov-add:hover{background:rgba(255,255,255,.08)}
+
+/* ===== 設定の欄 */
+.mov-side{display:flex;flex-direction:column;padding:0}
+.mov-side-top{position:sticky;top:var(--kitbar-h);z-index:4;display:flex;align-items:center;gap:8px;padding:10px 14px;
+  background:rgba(255,255,255,.95);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);border-radius:var(--radius) var(--radius) 0 0}
+.mov-side-top .kit-spacer{flex:1}
+.mov-side-body{display:flex;flex-direction:column;padding:2px 18px 18px}
+.mov-sec{display:flex;flex-direction:column;gap:12px;padding:16px 0}
+.mov-sec+.mov-sec{border-top:1px solid var(--line)}
+.mov-sec h2{font-size:14px;color:var(--heading)}
+.mov-sec h2 small{font-weight:500;color:var(--muted)}
+.mov-cuthead{display:flex;align-items:center;gap:2px}
+.mov-cuthead .kit-spacer{flex:1}
+.mov-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.mov-col{display:flex;flex-direction:column;gap:8px}
+.mov-left{align-self:flex-start}
+.mov-side textarea{min-height:0;resize:vertical}
+.mov-side .seg{flex-wrap:wrap}
+.mov-range{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.mov-range input{flex:1;min-width:0;accent-color:var(--primary)}
+.mov-range output{min-width:3.4em;font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted);text-align:right}
+.mov-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0;font-size:12px;color:var(--muted)}
+.mov-meta.is-warn{padding:8px 12px;border-radius:10px;background:#fff7e6;border:1px solid #f1d8a6;color:#7a5512}
+.mov-meta .btn{min-height:30px}
+/* 字の色 */
+.mov-swatches{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
+.mov-sw{width:28px;height:28px;padding:0;border:2px solid #fff;border-radius:50%;background:var(--sw);box-shadow:0 0 0 1px var(--line-strong)}
+.mov-sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--primary)}
+.mov-sw.own{display:grid;place-items:center;color:#fff;background:conic-gradient(from 90deg,#ff5f9e,#ffc93c,#5fcf8a,#5fb6ff,#8a7cff,#ff5f9e)}
+.mov-sw.own[aria-pressed="true"]{background:var(--sw)}
+.mov-sw.own .icon{filter:drop-shadow(0 0 1px rgba(0,0,0,.7))}
+/* 書体を選ぶボタン(その書体で見本を出す) */
+.mov-fonts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.mov-fonts button{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;padding:6px 4px 5px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.mov-fonts button:hover{background:var(--soft)}
+.mov-fonts b{font-size:19px;font-weight:400;line-height:1.3;white-space:nowrap}
+.mov-fonts small{max-width:100%;overflow:hidden;text-overflow:ellipsis;font-size:9.5px;color:var(--muted);white-space:nowrap}
+.mov-fonts button[aria-pressed="true"]{border-color:var(--primary);background:var(--soft);box-shadow:0 0 0 2px rgba(109,93,252,.22)}
+/* 色味の見本 */
+.mov-chips{display:flex;flex-wrap:wrap;gap:6px}
+.mov-chips button{min-height:32px;padding:0 12px;border:1px solid var(--line-strong);border-radius:999px;background:var(--surface);font-size:12.5px;font-weight:700;color:var(--text)}
+.mov-chips button[aria-pressed="true"]{border-color:var(--primary);background:var(--primary);color:#fff}
+.mov-stackrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.mov-sec .mov-col>.btn{align-self:flex-start}
+
+/* ===== talklog から選ぶ */
+dialog.modal.mov-log-dlg{width:min(860px,calc(100vw - 24px));max-height:calc(100vh - 32px)}
+.mov-log{gap:10px}
+.mov-log-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.mov-log-tools input[type=search]{flex:1 1 200px;min-width:0}
+.mov-log-tools select{max-width:180px}
+.mov-log-tools input[type=number]{width:96px}
+.mov-log-list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.mov-log-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:start;padding:9px 12px;border-top:1px solid var(--line);background:var(--surface)}
+.mov-log-row:first-child{border-top:0}
+.mov-log-row.is-act{background:#f6f5fa}
+.mov-log-row.is-act p{color:var(--muted);font-style:italic}
+.mov-log-pick{display:flex;align-items:center;gap:6px;padding-top:2px;cursor:pointer}
+.mov-log-no{font:600 11px/1 ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;color:var(--muted);min-width:4.2em}
+.mov-log-body{min-width:0}
+.mov-log-body b{display:block;font-size:11.5px;color:var(--primary-dark)}
+.mov-log-body p{margin:0;font-size:13.5px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.mov-log-side{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.mov-log-len{font-size:11px;color:var(--muted);white-space:nowrap}
+.mov-log-len.is-long{color:#a0661a;font-weight:700}
+.mov-log-more{display:flex;justify-content:center}
+.mov-log-more:empty{display:none}
+
+/* ===== 狭い画面 */
+@media (max-width: 920px){
+  .mov-work{grid-template-columns:minmax(0,1fr)}
+  .mov-stage{position:relative;top:0;height:auto}
+  .mov-view{flex:none;height:min(62vh,520px)}   /* 実際の高さは usermovie.js の fitStage が画面の形から決める */
+}
+@media (max-width: 520px){
+  .mov-app{padding:16px 10px 8px}
+  .mov-fonts{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .mov-log-row{grid-template-columns:auto minmax(0,1fr)}
+  .mov-log-side{grid-column:1 / -1;flex-direction:row;align-items:center;justify-content:flex-end}
+}

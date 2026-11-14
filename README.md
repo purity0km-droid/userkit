@@ -16,6 +16,7 @@ AIチャット「zeta」のための非公式ツール集です。
 | usercard | userのプロフィールを、ホロ箔や単色の箔押しのトレカ風カードにして、画像（PNG）と短い動画（MP4）で保存 |
 | userid | userの社員証・学生証・自己紹介カードなどを、載せる項目を自由に選んで作り、表・裏・両面を画像（PNG）で保存 |
 | usersnap | userの写真をチェキ風のフチと落書きで仕上げ、そのままの1枚と落書きした1枚をL判に並べて、JPEG・PNG・レイヤーに分けたPSDで保存。2L判には1枚ずつ実寸のまま3枚並べられる |
+| usermovie | 写真に映画の字幕と黒帯を重ねて、画像（PNG）で保存。字幕はtalklogのログから選べ、英語の字幕と縦書きの字幕も付けられる。カットを縦に並べた1枚で、会話の流れも見せられる |
 | usermask | スクショのユーザー名・アイコンを、なぞるだけで隠す。登録した名前・アイコンは次の画像から自動で見つける |
 | talklog | zeta（Web版）のトークを、吹き出しのまま読めるHTMLファイルに保存。書き出したログの閲覧・テキスト化も |
 | charplot | zetaのプロットを編集画面と同じタブの並びに貼って、ブラウザに保存。紹介ページは記法を選んでマークダウンで書き、zetaに近い見え方で確かめてからコピーできる。イントロのプレビュー、前の版との見比べ、復元用ファイルの書き出しも |
@@ -55,4 +56,4 @@ python -m http.server 5175
 
 PNG書き出し（userpair / userline / usermix / usersns / usercard）には [html-to-image](https://github.com/bubkoo/html-to-image)（MIT）を CDN から読み込んで使っています。
 PSD書き出し（usersnap）には [ag-psd](https://github.com/Agamnentzar/ag-psd)（MIT）を CDN から読み込んで使っています。
-ジャケット（usermix）の書体は Google Fonts から読み込んで使っています。しねきゃぷしょんは作者の配布条件に沿って、assets/fonts/cinecaption/ に説明書きと一緒に同梱しています。作者は chiphead 氏で、ひらがなのデザインは雑念の塊氏です。ほかのフォントのファイルはこのリポジトリに含めていません。
+ジャケット（usermix）と字幕（usermovie）の書体は Google Fonts から読み込んで使っています。字幕の英語の書体（Arimo・Inter・Atkinson Hyperlegible Next・Jost・EB Garamond・Courier Prime）と BIZ UDPゴシックは、どれも SIL Open Font License 1.1 です。しねきゃぷしょんは作者の配布条件に沿って、assets/fonts/cinecaption/ に説明書きと一緒に同梱しています。作者は chiphead 氏で、ひらがなのデザインは雑念の塊氏です。ほかのフォントのファイルはこのリポジトリに含めていません。

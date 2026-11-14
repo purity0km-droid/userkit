@@ -23,6 +23,17 @@
     { id: 'cinecaption', family: 'ukb-cinecaption', label: 'しねきゃぷしょん', mood: '映画字幕風（同梱）', weights: [400], file: 'fonts/cinecaption/cinecaption226.ttf', type: 'font/ttf',
       noVert: true, credit: 'しねきゃぷしょん: chiphead（ひらがなのデザインは雑念の塊）' }
   ];
+  /* 字幕用(usermovie)。ジャケットの一覧(CURATED)には出さない。どれも Google Fonts で SIL Open Font License 1.1
+     (2026-11-14 に google/fonts の METADATA.pb で確認。作った画像に OFL はかからず、名前の表示も要らない) */
+  const MORE = [
+    { id: 'biz-udp', family: 'BIZ UDPGothic', label: 'BIZ UDPゴシック', mood: '読みやすい UD 書体', weights: [400, 700] },
+    { id: 'arimo', family: 'Arimo', label: 'Arimo', mood: '定番の字幕（Arial と同じ字幅）', weights: [400, 500, 600, 700], latin: true },
+    { id: 'inter', family: 'Inter', label: 'Inter', mood: '今どきのサンセリフ', weights: [400, 500, 600, 700, 800], latin: true },
+    { id: 'atkinson', family: 'Atkinson Hyperlegible Next', label: 'Atkinson Hyperlegible', mood: '見分けやすさ重視', weights: [400, 500, 600, 700, 800], latin: true },
+    { id: 'jost', family: 'Jost', label: 'Jost', mood: '幾何学的なサンセリフ', weights: [400, 500, 600, 700], latin: true },
+    { id: 'eb-garamond', family: 'EB Garamond', label: 'EB Garamond', mood: 'クラシックなセリフ', weights: [400, 500, 600, 700, 800], serif: true, latin: true },
+    { id: 'courier-prime', family: 'Courier Prime', label: 'Courier Prime', mood: 'タイプライター', weights: [400, 700], latin: true }
+  ];
   /* 縦書き用の字形(vert)がない書体では、縦書きで位置や向きが変わる字(句読点・かっこ・長音・小さい仮名)を端末の書体に任せる。
      ファイルには手を加えず、縦書き用の別の名前(family + '-v')を、その字を外した unicode-range で登録する */
   const VERT_CHARS = '、。，．､｡「」『』（）［］｛｝〔〕【】〈〉《》〘〙〚〛ー－〜～…‥―＝：；ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ';
@@ -121,7 +132,7 @@
       const key = id.slice(5), v = index && index[key];
       return { id, kind: 'file', key, family: famOf(key), label: v ? v.name : '読み込んだフォント', mood: 'フォントファイル', weights: ALL_W, missing: !!index && !v };
     }
-    const c = CURATED.find((x) => x.id === id) || CURATED[0];
+    const c = CURATED.find((x) => x.id === id) || MORE.find((x) => x.id === id) || CURATED[0];
     return Object.assign({ kind: c.file ? 'bundled' : 'gf' }, c);
   }
   /** CSS の font-family(使えない字は端末の書体で出す)。vertical = 縦書きの所に使う(縦書き用の字形がない書体は '-v' の名前) */
@@ -233,5 +244,5 @@
     return out.join('\n');
   }
 
-  window.KitFonts = { CURATED, info, stack, nearest, hasLocal, load, embedCss, files: { list: listFiles, add: addFile, remove: removeFile, index: fileIndex } };
+  window.KitFonts = { CURATED, MORE, info, stack, nearest, hasLocal, load, embedCss, files: { list: listFiles, add: addFile, remove: removeFile, index: fileIndex } };
 })();

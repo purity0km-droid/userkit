@@ -91,6 +91,7 @@
     plan: '<rect x="3.5" y="4.5" width="17" height="15" rx="1"/><path d="M12 4.5v5M12 13.5v6M12 13.5h4M16 13.5a4 4 0 0 0-4-4"/>',
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
     video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10.5 5-3v9l-5-3"/>',
+    film: '<rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M7.5 4v16M16.5 4v16M3.5 8h4M3.5 12h4M3.5 16h4M16.5 8h4M16.5 12h4M16.5 16h4"/>',
     music: '<path d="M9 17.5V6l11-2.5V15"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="15" r="2.5"/><path d="M9 9.5 20 7"/>',
     scroll: '<path d="M18 16V5a2 2 0 0 0-2-2H5"/><path d="M5 3a2 2 0 0 0-2 2v1.5h4V5a2 2 0 0 0-2-2z"/><path d="M7 6.5V19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1.5H11V19a2 2 0 0 1-2 2"/><path d="M10.5 8.5h4.5M10.5 12h4.5"/>',
     help: '<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2-2.5 3.6M12 16.8h.01"/>'
@@ -332,6 +333,8 @@
       desc: 'userの社員証・学生証・自己紹介カードなどを、載せる項目を選んで作り、画像（PNG）で保存します。ひな形を選ぶと中身がひととおり入ります。' },
     { id: 'usersnap', group: 'make', label: 'チェキ風プリント', icon: 'snap', out: ['JPEG', 'PNG', 'PSD'],
       desc: 'userの写真をチェキ風のフチと落書きで仕上げ、そのままの1枚と落書きした1枚をL判に並べて保存します。コンビニのネットプリントでそのまま刷れます。' },
+    { id: 'usermovie', group: 'make', label: '映画のワンシーン', icon: 'film', out: ['PNG'],
+      desc: '写真に映画の字幕と黒帯を重ねて、画像（PNG）で保存します。字幕はtalklogのログから選べ、英語の字幕と縦書きの字幕も付けられます。カットを縦に並べた1枚で、会話の流れも見せられます。' },
     { id: 'usermask', group: 'keep', label: '名前・アイコン隠し', icon: 'mask', out: ['PNG'],
       desc: 'スクショのユーザー名やアイコンを、なぞるだけで隠します。登録した名前は次の画像から自動で見つけます。' },
     { id: 'talklog', group: 'keep', label: 'トーク保存', icon: 'bubble', out: ['HTML', 'テキスト'],
