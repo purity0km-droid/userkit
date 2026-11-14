@@ -197,7 +197,8 @@
   }
   /** ファイル名に使えない文字を除く */
   function safeName(s, fallback) {
-    const t = String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '').replace(/\s+/g, '_').slice(0, 40);
+    // 改行・タブは区切りの _ にする(ほかの制御文字は消す)
+    const t = String(s || '').replace(/[\t\n\r]+/g, ' ').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '').replace(/\s+/g, '_').slice(0, 40);
     return t || fallback || 'untitled';
   }
 

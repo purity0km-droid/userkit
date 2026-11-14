@@ -66,8 +66,8 @@
       o = o || {};
       const s = ed.state, P = paths(tg), jk = Object.assign(jkOf(tg), o.jk || {}), img = ed.get(P.image), has = !!(img && img.src);
       const [w1, w2] = weightsOf(jk), color = normHex(jk.color) || '#ffffff', band = normHex(jk.band) || BAND;
-      const text = (p, cls, ph, multi) => {
-        if (!o.readonly) return ed.text(p, { cls, ph, multi });
+      const text = (p, cls, ph) => {
+        if (!o.readonly) return ed.text(p, { cls, ph, multi: true });   // プレイリストの画面で入れた改行を消さない
         const v = str(p).trim();
         return h('div.' + cls + (v ? '' : '.is-empty'), v);
       };

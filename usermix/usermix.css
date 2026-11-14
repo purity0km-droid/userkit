@@ -1,4 +1,4 @@
-/* usermix — シート (書き出す画像と同じ見た目。フォントは端末にあるものだけを使う)
+/* usermix — シート (書き出す画像と同じ見た目。書体は --sans。選んだ書体は JS がシートの style に書く(mixfont.js)。下の --sans は書体を決める前の代わり)
    --pa・--pb は 1 人目・2 人目の印の色、--pa-ink・--pb-ink はその上の字の色。
    --t-top はプレイリストの上の地、--t-deep・--t-deeper は再生画面の暗い地(どれも JS がテーマから作る) */
 .mix-sheet {
@@ -85,7 +85,8 @@
 .um-sub .um-badge { width: 16px; height: 16px; font-size: 8.5px; }
 .um-sub .um-badge.two { font-size: 7px; }
 .um-artist { flex: 1; min-width: 0; font-size: 12.5px; color: var(--t-muted); }
-.um-note { margin-top: 5px; font-size: 12.5px; line-height: 1.75; }
+.um-note { margin-top: 5px; font-size: 11.5px; line-height: 1.75; }
+.note-soft .um-note { opacity: .55; }   /* 表示項目の「薄く（半透明）」 */
 .um-quote { position: relative; margin-top: 7px; padding: 6px 12px 6px 26px; background: var(--t-card); border: 1px solid var(--t-line); border-radius: 10px; }
 .um-row.is-now .um-quote { border-color: transparent; }
 .um-quote::before { content: "\201C"; position: absolute; left: 9px; top: 1px; font: 800 22px/1 Georgia, "Times New Roman", serif; color: var(--t-main); }
@@ -130,6 +131,11 @@
 
 /* 写し(書けるのは曲目の行だけ)。空のときは画面でだけ薄い字で何の欄かを出す */
 .um-mirror.is-empty::before { content: attr(data-ph); opacity: .45; }
+/* 再生画面の曲名・アーティスト・好きな一節は、曲目の行で入れた改行どおりに出す(小さなバーと上の題は 1 行のまま) */
+.ump-title, .ump-artist, .ump-line { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* 表示項目の「ひとこと」の下の設定 */
+.um-subcheck { margin-left: 24px; font-size: 12.5px; }
+.um-subcheck:has(input:disabled) { opacity: .45; cursor: default; }
 
 /* ================================================================ 再生画面(横長 .is-player)
    左に再生中の曲(ぼかしたジャケットの地)、右に曲目 */
@@ -232,6 +238,8 @@
 .is-jacket .ed-text, .jk-bandbox, .jk-obi { pointer-events: auto; }
 
 /* 文字 */
+/* 改行は書けるジャケット(.ed-text)と同じく出す(見本・まとめて保存の書けない字も) */
+.jk-title, .jk-artist, .jk-credit { white-space: pre-wrap; }
 .jk-title { font-weight: var(--jk-w); line-height: 1.14; letter-spacing: .01em; word-break: auto-phrase; }
 .jk-artist { font-weight: var(--jk-w2); font-size: 19px; line-height: 1.45; letter-spacing: .06em; margin-top: 10px; opacity: .92; }
 .jk-credit { font-weight: var(--jk-w2); font-size: 12px; line-height: 1.5; letter-spacing: .26em; opacity: .86; }
@@ -307,6 +315,22 @@
 .jk-note { flex-basis: 100%; margin: 0; font-size: 12px; font-weight: 700; color: #b4542c; }
 /* 狭い画面では操作の段で高くなるので、上に貼り付けない(絵が隠れないように) */
 @media (max-width: 760px) { .ed-toolbar:has(.um-jk-bar) { position: static; } }
+/* プレイリストと再生画面の書体(ツールバーのボタンと、書体を選ぶ画面 .umf。mixfont.js) */
+.um-fontbtn b { max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-fontbtn-k { font-size: 12px; font-weight: 700; color: var(--muted, #6b6478); }
+.umf { display: flex; flex-direction: column; gap: 14px; }
+/* 見本(いまのシートの写し)は、下の書体の並びを送っても上に残す */
+.umf-prev { position: sticky; top: 0; z-index: 2; flex: none; height: min(280px, 34vh); overflow: auto; border-radius: 12px; border: 1px solid var(--line, #e3e0fb); background: #f6f5fa; box-shadow: 0 10px 16px -12px rgba(30, 20, 60, .35); }
+.umf-prev > .mix-sheet { pointer-events: none; }
+.umf-sec h3 { margin: 0 0 8px; font-size: 13.5px; }
+.umf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.umf-chip { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; padding: 9px 11px 8px; border-radius: 12px; border: 1px solid var(--line, #e3e0fb); background: #fff; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.umf-chip:hover { border-color: var(--accent, #6d5dfc); }
+.umf-chip[aria-pressed="true"] { border-color: var(--accent, #6d5dfc); box-shadow: 0 0 0 2px var(--accent, #6d5dfc); }
+.umf-chip b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; font-weight: 700; line-height: 1.5; }
+.umf-chip span { font-size: 12px; font-weight: 700; }
+.umf-chip small { font-size: 10.5px; line-height: 1.45; color: var(--muted, #6b6478); }
+
 /* 書体を選ぶ画面(見本の並び) */
 .jk-fd { display: flex; flex-direction: column; gap: 12px; }
 .jk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 12px; }

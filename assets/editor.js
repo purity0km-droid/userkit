@@ -293,7 +293,8 @@
     };
 
     /* ---------- 書き出し・保存 ---------- */
-    ed.exportPng = async (filename) => {
+    // extra: html-to-image に足す設定。関数なら、書き出しの形(縮小なし・.exporting)にしてから呼んで、返した設定を足す(書体を埋め込む fontEmbedCSS など)
+    ed.exportPng = async (filename, extra) => {
       const node = ed.sheet;
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       const lib = await loadH2I();
@@ -301,11 +302,11 @@
       zoomBox.style.zoom = '1';
       node.classList.add('exporting');
       try {
-        const opts = {
+        const opts = Object.assign({
           pixelRatio: 2, skipFonts: true, cacheBust: false,
           backgroundColor: getComputedStyle(node).backgroundColor,
           filter: (n) => !(n.classList && n.classList.contains('ed-ui'))
-        };
+        }, typeof extra === 'function' ? await extra(node) : extra);
         let blob = await lib.toBlob(node, opts);
         if (isSafari) blob = await lib.toBlob(node, opts);   // Safariは2回目で画像がそろう
         if (!blob) throw new Error('画像を作れませんでした');

@@ -1,4 +1,4 @@
-/* userkit 共通: 書体(フォント)の選び方と読み込み(usermix のジャケットが使う)。書体の id は次の 3 種類:
+/* userkit 共通: 書体(フォント)の選び方と読み込み(usermix のジャケット・プレイリスト、usermovie が使う)。書体の id は次の 3 種類:
    'noto' など = おすすめ(CURATED)。ふつうは Google Fonts で、使う太さの CSS を <link> で読み、使う字の分だけ document.fonts.load で待つ。
                  file のある物は assets/fonts/ に同梱した書体(配布条件で再配布を認めている物だけ。ファイルも説明書きも手を加えずに置く)
    'local:名前' = 端末に入っているフォントの名前。入っていなければ代わりの書体になる(Safari などは端末に足したフォントを使わせない)
@@ -33,7 +33,24 @@
     { id: 'atkinson', family: 'Atkinson Hyperlegible Next', label: 'Atkinson Hyperlegible', mood: '見分けやすさ重視', weights: [400, 500, 600, 700, 800], latin: true, ital: true },
     { id: 'jost', family: 'Jost', label: 'Jost', mood: '幾何学的なサンセリフ', weights: [400, 500, 600, 700], latin: true, ital: true },
     { id: 'eb-garamond', family: 'EB Garamond', label: 'EB Garamond', mood: 'クラシックなセリフ', weights: [400, 500, 600, 700, 800], serif: true, latin: true, ital: true },
-    { id: 'courier-prime', family: 'Courier Prime', label: 'Courier Prime', mood: 'タイプライター', weights: [400, 700], latin: true, ital: true }
+    { id: 'courier-prime', family: 'Courier Prime', label: 'Courier Prime', mood: 'タイプライター', weights: [400, 700], latin: true, ital: true },
+    /* usermix のプレイリストと再生画面の書体(mixfont.js が選ぶ id を並べる)。どれも Google Fonts で SIL Open Font License 1.1
+       (2026-11-15 に google/fonts の METADATA.pb で確認)。weights は使える太さ(可変の書体は範囲の 100 ごと) */
+    { id: 'dm-sans', family: 'DM Sans', label: 'DM Sans', mood: '素直で親しみやすい', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900], latin: true },
+    { id: 'manrope', family: 'Manrope', label: 'Manrope', mood: '細身で今どき', weights: [200, 300, 400, 500, 600, 700, 800], latin: true },
+    { id: 'plus-jakarta', family: 'Plus Jakarta Sans', label: 'Plus Jakarta Sans', mood: 'やわらかい今どき', weights: [200, 300, 400, 500, 600, 700, 800], latin: true },
+    { id: 'outfit', family: 'Outfit', label: 'Outfit', mood: '幾何学的・すっきり', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900], latin: true },
+    { id: 'poppins', family: 'Poppins', label: 'Poppins', mood: '丸みのある幾何学', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900], latin: true },
+    { id: 'montserrat', family: 'Montserrat', label: 'Montserrat', mood: '幅広・ポスター風', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900], latin: true },
+    { id: 'space-grotesk', family: 'Space Grotesk', label: 'Space Grotesk', mood: '癖のあるグロテスク', weights: [300, 400, 500, 600, 700], latin: true },
+    { id: 'nunito', family: 'Nunito', label: 'Nunito', mood: '丸いサンセリフ', weights: [200, 300, 400, 500, 600, 700, 800, 900], latin: true },
+    { id: 'playfair', family: 'Playfair Display', label: 'Playfair Display', mood: '雑誌風のセリフ', weights: [400, 500, 600, 700, 800, 900], serif: true, latin: true },
+    { id: 'cormorant', family: 'Cormorant Garamond', label: 'Cormorant Garamond', mood: '細身で優雅なセリフ', weights: [300, 400, 500, 600, 700], serif: true, latin: true },
+    { id: 'fraunces', family: 'Fraunces', label: 'Fraunces', mood: 'レトロなセリフ', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900], serif: true, latin: true },
+    { id: 'line-seed', family: 'LINE Seed JP', label: 'LINE Seed JP', mood: '今どきの UI ゴシック', weights: [100, 400, 700, 800] },
+    { id: 'ibm-plex-jp', family: 'IBM Plex Sans JP', label: 'IBM Plex Sans JP', mood: 'すっきりした機械的なゴシック', weights: [100, 200, 300, 400, 500, 600, 700] },
+    { id: 'mplus2', family: 'M PLUS 2', label: 'M PLUS 2', mood: '軽やかなゴシック', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
+    { id: 'zen-maru', family: 'Zen Maru Gothic', label: 'Zen 丸ゴシック', mood: 'やさしい丸ゴシック', weights: [300, 400, 500, 700, 900] }
   ];
   /* 縦書き用の字形(vert)がない書体では、縦書きで位置や向きが変わる字(句読点・かっこ・長音・小さい仮名)を端末の書体に任せる。
      ファイルには手を加えず、縦書き用の別の名前(family + '-v')を、その字を外した unicode-range で登録する */

@@ -26,6 +26,8 @@
     cover: null,
     people: [person(), person()],
     show: { cover: true, disc: true, intro: true, art: true, time: true, note: true, line: true, picker: true, total: true, player: true, foot: true },
+    noteSoft: false,   // ひとことを薄く(半透明)する(表示項目の「ひとこと」の下)
+    font: UmFont.normalize(),   // プレイリストと再生画面の書体 { en: 英字, ja: 和文 }(mixfont.js。既定は iPhone 風)
     split: 'order', now: 0,
     tracks: [track('a'), track('b'), track('ab')],
     coverJk: UmJacket.normalize(), jkAt: null   // 表紙のジャケットの設定・ジャケットを作る曲(null = 再生中の曲、'cover' = 表紙)
@@ -42,6 +44,8 @@
     if (!WIDTH[out.layout]) out.layout = 'list';
     if (out.split !== 'person') out.split = 'order';
     if (!Number.isInteger(out.now)) out.now = 0;
+    out.noteSoft = out.noteSoft === true;
+    out.font = UmFont.normalize(s && s.font);
     delete out.splitAt;
     return out;
   }
@@ -50,10 +54,12 @@
   const toolbar = h('div.ed-toolbar');
   const tip = Ed.help('usermix', [
     '見た目は「プレイリスト」（縦長）、「再生画面」（横長）、「ジャケット」（正方形）から選べます。切り替えても、書いた内容はそのまま残ります。',
+    'プレイリストと再生画面の書体は「書体」から、英字と和文を別々に選べます。最初は「iPhone 風」で、iPhone・Mac ではシステムフォント（SF Pro とヒラギノ角ゴ）、ほかの端末では似た Google Fonts（Inter と Noto Sans JP）で出します。',
     '「ジャケット」では曲ごとの画像を地にして、題を重ねた 1200 × 1200 px の画像を作ります。作る曲は「曲」の矢印で選び、「表紙」ではプレイリストの題で作ります。',
-    '書体は「書体」から、いまの題と画像の見本で比べて選べます。Google Fonts のおすすめのほか、端末に入っているフォントの名前や、フォントファイルでも選べます。フォントファイルはこのブラウザの中にだけ保存します。',
+    'ジャケットの書体は「書体」から、いまの題と画像の見本で比べて選べます。Google Fonts のおすすめのほか、端末に入っているフォントの名前や、フォントファイルでも選べます。フォントファイルはこのブラウザの中にだけ保存します。',
     '「まとめて保存」では画像の入った曲のジャケットを、曲順の番号を付けて保存します。',
-    '文字は押してそのまま書けます。アーティストの左の丸い印を押すと、選んだ人が 1 人目、2 人目、2 人の順に替わります。',
+    '文字は押してそのまま書けます。名前・時間・再生位置のほかの欄では Enter で改行できます。アーティストの左の丸い印を押すと、選んだ人が 1 人目、2 人目、2 人の順に替わります。',
+    'ひとことは「表示項目」で半透明にして薄くできます。',
     '印の字と色、2 人の名前は「選んだ人」で変えられます。印の字を空けておくと、名前の 1 字目を使います。',
     '曲の右のボタンで、再生中の曲を選んだり、順番を入れ替えたりします。「並び」で選んだ人ごとにまとめることもできます。',
     '再生中の曲の曲名やアーティストは、曲目の行で書き換えます。再生位置を「1:24」の形で書くと、進み具合のバーに表します。',
@@ -380,8 +386,8 @@
       h('div.um-lead', h('span.um-no'), isNow(i) && eqBars()),
       s.show.art && art(`${tp}.image`, 'um-art'),
       h('div.um-body',
-        ed.text(`${tp}.title`, { cls: 'um-title', ph: '曲名' }),
-        h('div.um-sub', s.show.picker && markBtn(t, tp), ed.text(`${tp}.artist`, { cls: 'um-artist', ph: 'アーティスト' })),
+        ed.text(`${tp}.title`, { cls: 'um-title', ph: '曲名', multi: true }),
+        h('div.um-sub', s.show.picker && markBtn(t, tp), ed.text(`${tp}.artist`, { cls: 'um-artist', ph: 'アーティスト', multi: true })),
         s.show.note && ed.text(`${tp}.note`, { cls: 'um-note', ph: 'ひとこと（選んだわけ・流れた場面）', multi: true }),
         s.show.line && h('div.um-quote', ed.text(`${tp}.line`, { cls: 'um-line', ph: '好きな一節', multi: true }))),
       s.show.time && ed.text(`${tp}.time`, { cls: 'um-time', ph: '0:00', label: '時間' }),
@@ -398,10 +404,11 @@
       return h('span.um-who', badge(i ? 'b' : 'a'), name);
     }));
   }
-  const label = () => ed.text('label', { cls: 'um-label', ph: 'ラベル' });
-  const title = () => ed.text('title', { cls: 'um-title-main', ph: 'プレイリストの題' });
+  // 文の欄は Enter で改行できる(名前・時間・再生位置は 1 行)
+  const label = () => ed.text('label', { cls: 'um-label', ph: 'ラベル', multi: true });
+  const title = () => ed.text('title', { cls: 'um-title-main', ph: 'プレイリストの題', multi: true });
   const intro = () => ed.state.show.intro && ed.text('intro', { cls: 'um-intro', ph: '紹介', multi: true });
-  const foot = () => ed.state.show.foot && ed.text('foot', { cls: 'um-foot', ph: '下の一文' });
+  const foot = () => ed.state.show.foot && ed.text('foot', { cls: 'um-foot', ph: '下の一文', multi: true });
   const meta = () => (ed.state.show.total || ed.state.show.picker) && h('div.um-meta', legend(), total(''));
   /** 曲目の見出し(# ・タイトル・時計)。行と同じ幅の並びにする */
   const colHead = () => h('div.um-colhead', h('span.um-lead', '#'), ed.state.show.art && h('span.um-art-sp'), h('span.um-body', 'タイトル'),
@@ -463,8 +470,9 @@
       sh.addEventListener('input', () => { jacket.fit(); clearTimeout(refitTimer); refitTimer = setTimeout(jacket.after, 250); });
       return sh;
     }
-    const sheet = h('div.mix-sheet' + (player ? '.is-player' : ''), { style: Object.assign(Ed.themeVars(s.theme, s.palette), sheetVars()) },
+    const sheet = h('div.mix-sheet' + (player ? '.is-player' : '') + (s.noteSoft ? '.note-soft' : ''), { style: Object.assign(Ed.themeVars(s.theme, s.palette), sheetVars(), { '--sans': UmFont.plan(s.font).stack }) },
       ...(player ? renderPlayer(s) : renderList(s)));
+    UmFont.ensure(sheet, s.font);   // 選んだ書体を読み込む(読めるまでは代わりの書体)
     sheet.addEventListener('input', (e) => {
       refresh();
       if (e.target.dataset && e.target.dataset.person != null) syncPeople(e.target);
@@ -580,7 +588,8 @@
       }) : [];
       const poss = moving ? [...node.querySelectorAll('.um-pos')].map((el) => Object.assign(at(el), { el })) : [];
       const eqs = [...node.querySelectorAll('.um-eq')].map((e) => Object.assign(at(e), { bars: [...e.children].map((i) => Object.assign(at(i), { color: getComputedStyle(i).backgroundColor })) }));
-      const opts = { pixelRatio: S, skipFonts: true, cacheBust: false, filter: (n) => !(n.classList && n.classList.contains('ed-ui')) };
+      const fonts = await UmFont.exportOptions(node, ed.state.font);   // 選んだ書体の使う字の分(読めなければここで止まる)
+      const opts = Object.assign({ pixelRatio: S, skipFonts: true, cacheBust: false, filter: (n) => !(n.classList && n.classList.contains('ed-ui')) }, fonts);
       const shot = async (el, o) => { const op = Object.assign({}, opts, o); let c = await lib.toCanvas(el, op); if (isSafari) c = await lib.toCanvas(el, op); return c; };
 
       node.classList.add('um-vid-base');
@@ -753,6 +762,20 @@
   }
 
   /* ---------------------------------------------------------------- ツールバー */
+  /** 表示項目(Ed.showPicker と同じ並び)。「ひとこと」の下に、ひとことを薄くする設定を足す */
+  function showPop() {
+    return ed.popover('表示項目', 'eye', () => h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+      SHOW.map(([key, label]) => {
+        const cb = h('input', { type: 'checkbox', checked: ed.state.show[key] !== false });
+        cb.addEventListener('change', () => ed.set('show.' + key, cb.checked, { rerender: true }));
+        const item = h('label.check', cb, label);
+        if (key !== 'note') return item;
+        const soft = h('input', { type: 'checkbox', checked: ed.state.noteSoft, disabled: ed.state.show.note === false });
+        soft.addEventListener('change', () => ed.set('noteSoft', soft.checked, { rerender: true }));
+        cb.addEventListener('change', () => { soft.disabled = !cb.checked; });
+        return [item, h('label.check.um-subcheck', soft, '薄く（半透明）')];
+      })));
+  }
   function renderToolbar() {
     const s = ed.state;
     if (s.layout === 'jacket') return renderJacketToolbar();
@@ -769,7 +792,9 @@
       seg('um-layout', '見た目', LAYOUTS, 'layout'),
       seg('um-order', '並び', ORDERS, 'split'),
       Ed.themePicker(ed, 'theme'),
-      Ed.showPicker(ed, 'show', SHOW),
+      h('button.btn.btn-outline.btn-sm.um-fontbtn', { type: 'button', title: '英字と和文の書体を選びます', onclick: () => UmFont.dialog(ed) },
+        h('span.um-fontbtn-k', '書体'), h('b', UmFont.shortLabel(s.font))),
+      showPop(),
       peoplePop(),
       imp,
       h('span.spacer'),
@@ -813,7 +838,7 @@
   ed.exportPng = async (filename) => {
     if (ed.state.layout === 'jacket') return jacket.exportOne();
     await recReady;
-    return origExport(filename);
+    return origExport(filename, (node) => UmFont.exportOptions(node, ed.state.font));   // 選んだ書体を埋め込む
   };
   jacket = UmJacket.create({ ed, nowIdx: () => nowIdx(), inkOn: (x) => inkOn(x), sheetVars: () => sheetVars() });
   // 読み込んだフォントファイルの名前も先に読む(書体の名前を出すため)
