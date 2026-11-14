@@ -1,5 +1,6 @@
-/* usermovie — 映画のワンシーン。写真に映画の字幕と黒帯を重ねて、画像(PNG)で保存する。
+/* usermovie — 映画のワンシーン。写真に映画の字幕と黒帯を重ねて、画像(PNG)か動画(MP4・GIF)で保存する。
    カット = 写真 1 枚と字幕 1 つ。カットを並べ、1 枚ずつか、縦に並べた 1 枚(会話の流れを見せる)で保存する。
+   動画はカットを順に映して字幕を替えていく。最後にエンドロール(役と名前の行を流す)を付けられる。
    字幕は手で打つか、talklog で保存したログから選ぶ(ログはこのページで読むだけで、保存しない)。
    描くのはすべて canvas。画面・小さな見本・書き出しを同じ drawCut で描き、寸法だけを変える(字の大きさなどは画面の短い辺に対する割合)。
    保存は Ed(IndexedDB の userkit-editor、キー usermovie)。写真は dataURL で state.photos に置き、カットからは id で指す */
@@ -43,10 +44,13 @@
   const JA_FONTS = ['cinecaption', 'biz-udp', 'noto', 'shippori-b1'];
   const EN_FONTS = ['arimo', 'inter', 'atkinson', 'jost', 'eb-garamond', 'courier-prime', 'same'];
   const enFontId = (sub) => (sub.enFont === 'same' ? sub.jaFont : sub.enFont);
-  /** 書体の指定。太字を選んでも太い字形がない書体(しねきゃぷしょんなど)は、字と同じ色の細い線を重ねて太く見せる(fake) */
-  function fontSpec(id, bold) {
-    const f = KitFonts.info(id), want = bold ? 700 : 400, w = KitFonts.nearest(f.weights, want);
-    return { id, w, fake: bold && w < 600, css: (px) => `${w} ${Math.max(1, px).toFixed(2)}px ${KitFonts.stack(id)}` };
+  /**
+   * 書体の指定。太字を選んでも太い字形がない書体(しねきゃぷしょんなど)は、字と同じ色の細い線を重ねて太く見せる(fake)。
+   * italic = 斜体(英語の字幕。斜体の字形がない書体は、ブラウザが字を傾けて代わりにする)
+   */
+  function fontSpec(id, bold, italic) {
+    const f = KitFonts.info(id), want = bold ? 700 : 400, w = KitFonts.nearest(f.weights, want), st = italic ? 'italic ' : '';
+    return { id, w, fake: bold && w < 600, css: (px) => `${st}${w} ${Math.max(1, px).toFixed(2)}px ${KitFonts.stack(id)}` };
   }
 
   /* ================================================================ 字幕の文 */
@@ -188,6 +192,29 @@
     const tk = vTokens(line);
     return tk.reduce((L, k, i) => L + (k.sp ? k.sp * px : k.run ? measure(g, font, k.t) : px) + (i < tk.length - 1 ? track : 0), 0);
   }
+  /** 縦書きの 1 列の字を並べる(字幕とエンドロールで共用)。cx = 列の真ん中、top = 1 字目の上。返り値 { ops, y(最後の字の下), n(字の数) } */
+  function vColumn(g, font, px, line, cx, top, track, fake) {
+    const ops = [], tk = vTokens(line);
+    let y = top;
+    tk.forEach((k, i) => {
+      const gap = i < tk.length - 1 ? track : 0;
+      if (k.sp) { y += k.sp * px + gap; return; }
+      if (k.run) {
+        const L = measure(g, font, k.t);
+        ops.push({ s: k.t, x: cx, y: y + L / 2, font, px, align: 'center', rot: Math.PI / 2, fake });
+        y += L + gap;
+        return;
+      }
+      const op = { s: k.t, x: cx, y: y + px / 2, font, px, align: 'center', fake };
+      if (k.tcy) { const w = measure(g, font, k.t); if (w > px * 0.96) op.sx = (px * 0.96) / w; }
+      else if (V_ROT.has(k.t)) op.rot = Math.PI / 2;
+      else if (V_PUNCT.has(k.t)) { op.dx = px * 0.62; op.dy = -px * 0.6; }
+      else if (V_SMALL.has(k.t)) { op.dx = px * 0.1; op.dy = -px * 0.1; }
+      ops.push(op);
+      y += px + gap;
+    });
+    return { ops, y, n: tk.length };
+  }
   /** 英語の折り返し(幅で)。2 行にするときは長い方の行がいちばん短くなる所で、句読点の後を少し好む */
   function wrapEn(g, font, text, maxW) {
     const paras = String(text || '').replace(/\r/g, '').split('\n').map((t) => t.trim().replace(/\s+/g, ' ')).filter(Boolean);
@@ -219,7 +246,7 @@
     const out = { ops: [], boxes: [], ja: { lines: [], vertical: false, n: 0 }, en: { lines: [] } };
     const jaText = sub.lang !== 'en' ? withName(String(cut.ja || '').trim(), cut.who, sub.name) : '';
     const enText = sub.lang !== 'ja' ? (sub.lang === 'en' && sub.name && cut.who && cut.en.trim() ? `(${cut.who}) ` : '') + String(cut.en || '').trim() : '';
-    const fJa = fontSpec(sub.jaFont, sub.bold), fEn = fontSpec(enFontId(sub), sub.bold);
+    const fJa = fontSpec(sub.jaFont, sub.bold), fEn = fontSpec(enFontId(sub), sub.bold, !!sub.italic);
     const vertical = cut.dir === 'v' && !!jaText;
     const n = clamp(Math.round(num(sub.n, 16)), 6, 30), nv = Math.max(5, Math.round(n * 0.7));
     out.ja.vertical = vertical;
@@ -254,27 +281,9 @@
       const bw = (ja.length - 1) * pitch + jaPx;
       const x0 = sub.vside === 'left' ? P.x + mx + bw - jaPx / 2 : P.x + P.w - mx - jaPx / 2;
       ja.forEach((line, ci) => {
-        const cx = x0 - ci * pitch;
-        let y = top;
-        const tk = vTokens(line);
-        tk.forEach((k, i) => {
-          const gap = i < tk.length - 1 ? tr : 0;
-          if (k.sp) { y += k.sp * jaPx + gap; return; }
-          if (k.run) {
-            const L = measure(g, font, k.t);
-            out.ops.push({ s: k.t, x: cx, y: y + L / 2, font, px: jaPx, align: 'center', rot: Math.PI / 2, fake: fJa.fake });
-            y += L + gap;
-            return;
-          }
-          const op = { s: k.t, x: cx, y: y + jaPx / 2, font, px: jaPx, align: 'center', fake: fJa.fake };
-          if (k.tcy) { const w = measure(g, font, k.t); if (w > jaPx * 0.96) op.sx = (jaPx * 0.96) / w; }
-          else if (V_ROT.has(k.t)) op.rot = Math.PI / 2;
-          else if (V_PUNCT.has(k.t)) { op.dx = jaPx * 0.62; op.dy = -jaPx * 0.6; }
-          else if (V_SMALL.has(k.t)) { op.dx = jaPx * 0.1; op.dy = -jaPx * 0.1; }
-          out.ops.push(op);
-          y += jaPx + gap;
-        });
-        out.boxes.push({ x: cx - jaPx * 0.68, y: top - jaPx * 0.3, w: jaPx * 1.36, h: y - top + jaPx * 0.6 - (tk.length > 1 ? tr : 0) });
+        const cx = x0 - ci * pitch, col = vColumn(g, font, jaPx, line, cx, top, tr, fJa.fake);
+        out.ops.push(...col.ops);
+        out.boxes.push({ x: cx - jaPx * 0.68, y: top - jaPx * 0.3, w: jaPx * 1.36, h: col.y - top + jaPx * 0.6 - (col.n > 1 ? tr : 0) });
       });
     }
 
@@ -365,7 +374,7 @@
   function grade(g, P, look) {
     const v = (k) => clamp(num(look[k], 0) / 100, -1, 1);
     const b = v('bright'), c = v('contrast'), sa = v('sat'), te = v('temp'), tl = clamp(v('teal'), 0, 1), fd = clamp(v('fade'), 0, 1);
-    if (!b && !c && !sa && !te && !tl && !fd) return;
+    if ((!b && !c && !sa && !te && !tl && !fd) || P.w < 1 || P.h < 1) return;
     const im = g.getImageData(P.x, P.y, P.w, P.h), d = im.data;
     const gamma = Math.pow(2, -b * 0.9), cf = c >= 0 ? 1 + c * 1.1 : 1 + c * 0.7, lift = fd * 0.16;
     const lut = new Float32Array(256);
@@ -402,13 +411,12 @@
     g.putImageData(im, 0, 0);
     return (noiseTex = c);
   }
-  /** 周辺減光と粒子(強さ 0〜100)。粒子の細かさは画面の短い辺に合わせる(小さな画面では細かくなりすぎて見えにくい) */
+  /** 周辺減光と粒子(強さ 0〜100) */
   function filmFx(g, P, U, look) {
-    const vg = clamp(num(look.vignette, 0), 0, 100) / 100, gr = clamp(num(look.grain, 0), 0, 100) / 100;
-    g.save();
-    g.beginPath(); g.rect(P.x, P.y, P.w, P.h); g.clip();
+    const vg = clamp(num(look.vignette, 0), 0, 100) / 100;
     if (vg) {
       g.save();
+      g.beginPath(); g.rect(P.x, P.y, P.w, P.h); g.clip();
       g.globalCompositeOperation = 'multiply';
       g.translate(P.x + P.w / 2, P.y + P.h / 2);
       g.scale(P.w / 2, P.h / 2);
@@ -419,14 +427,24 @@
       g.fillRect(-1, -1, 2, 2);
       g.restore();
     }
-    if (gr) {
-      const pat = g.createPattern(noise(), 'repeat'), k = U / 1080;
-      if (pat.setTransform) pat.setTransform(new DOMMatrix([k, 0, 0, k, P.x, P.y]));
-      g.globalCompositeOperation = 'overlay';
-      g.globalAlpha = gr * 0.6;
-      g.fillStyle = pat;
-      g.fillRect(P.x, P.y, P.w, P.h);
-    }
+    grainFx(g, P, U, look, 0);
+  }
+  /**
+   * 粒子。細かさは画面の短い辺に合わせる(小さな画面では細かくなりすぎて見えにくい)。
+   * 動画(MP4)では seed でコマごとに模様の位置をずらし、フィルムのように粒子を動かす
+   */
+  function grainFx(g, P, U, look, seed) {
+    const gr = clamp(num(look.grain, 0), 0, 100) / 100;
+    if (!gr) return;
+    const pat = g.createPattern(noise(), 'repeat'), k = U / 1080;
+    const ox = seed ? (seed * 97) % 256 : 0, oy = seed ? (seed * 61 + 131) % 256 : 0;
+    if (pat.setTransform) pat.setTransform(new DOMMatrix([k, 0, 0, k, P.x - ox * k, P.y - oy * k]));
+    g.save();
+    g.beginPath(); g.rect(P.x, P.y, P.w, P.h); g.clip();
+    g.globalCompositeOperation = 'overlay';
+    g.globalAlpha = gr * 0.6;
+    g.fillStyle = pat;
+    g.fillRect(P.x, P.y, P.w, P.h);
     g.restore();
   }
   /** 写真がないときの地(夕暮れの空と地平)。書き出しにもこのまま出る */
@@ -478,7 +496,15 @@
     const key = [W, H, s.screen, s.picture, ready ? cut.photo : '-', ready ? [cut.x, cut.y, cut.zoom].map((v) => num(v, 0).toFixed(4)).join(',') : '', JSON.stringify(s.look)].join('|');
     let c = layers.get(key);
     if (c) { layers.delete(key); layers.set(key, c); return c; }
-    c = document.createElement('canvas');
+    c = buildLayer(s, cut, W, H, s.look);
+    layers.set(key, c);
+    while (layers.size > 24) layers.delete(layers.keys().next().value);
+    return c;
+  }
+  /** 映像の層を描く(覚えない)。動画は大きな絵を何枚も覚えないよう、これを直接使う。look = 色味(動画では粒子を外して渡すことがある) */
+  function buildLayer(s, cut, W, H, look) {
+    const e = imgEntry(cut.photo), ready = !!(e && e.ready);
+    const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const g = c.getContext('2d', { willReadFrequently: true }), G = geom(s, W, H), P = G.P;
     g.fillStyle = '#000';
@@ -491,10 +517,8 @@
       g.drawImage(e.img, r.x, r.y, r.w, r.h);
       g.restore();
     } else placeholder(g, P);
-    grade(g, P, s.look);
-    filmFx(g, P, G.U, s.look);
-    layers.set(key, c);
-    while (layers.size > 24) layers.delete(layers.keys().next().value);
+    grade(g, P, look);
+    filmFx(g, P, G.U, look);
     return c;
   }
   /** カット 1 枚を g に W×H で描く。返り値は字幕の配置 */
@@ -505,15 +529,145 @@
     return L;
   }
 
+  /* ================================================================ エンドロール
+     行は 左(役・見出し)と右(名前)の 2 つの欄。左だけなら見出し、右だけなら名前を 1 行、両方なら役と名前を左右(縦書きは上下)に並べ、どちらも空なら間。
+     横書きは下から上へ、縦書きは左から右へ流れる(縦書きは右の列から読むので、後の行ほど左に並び、左から入ってくる)。
+     字は映像の四角の中だけに出す。地は黒 */
+  const ROLL_SPEEDS = { slow: { label: 'ゆっくり', v: 0.1 }, normal: { label: 'ふつう', v: 0.14 }, fast: { label: 'はやめ', v: 0.2 } };   // 1 秒に進む長さ(映像の高さに対する割合)
+  const ROLL_FIN = [0.3, 0.7, 1.8, 0.9];   // 最後に出す字: 間・出る・止まる・消える(秒)
+  const rollFontId = (s) => (s.sub.lang === 'en' ? enFontId(s.sub) : s.sub.jaFont);
+  const rollText = (s) => [s.roll.title, s.roll.fin].concat(s.roll.rows.map((r) => (r.a || '') + (r.b || ''))).join('');
+  /** 話者の名前(出てくる順)から、キャストの下書き */
+  function draftRows() {
+    const names = [...new Set(ed.state.cuts.map((c) => String(c.who || '').trim()).filter(Boolean))];
+    return [{ a: 'CAST', b: '' }].concat(names.map((n) => ({ a: '', b: n })));
+  }
+  /**
+   * エンドロールの字を組む。k = 字の大きさの倍率(1 枚の絵に収めるときに縮める)。返り値 { ops, len(流れる向きの長さ) }。
+   * 横書きの op の u は上の端からの距離(x はそのまま)、縦書きの op の u は右の端から左への距離(y はそのまま)
+   */
+  function rollLayout(g, s, G, k) {
+    const R = s.roll, P = G.P, css = fontSpec(rollFontId(s), false).css, ops = [];
+    const px = G.U * 0.046 * k, rp = px * 0.66, hp = px * 0.6, tp = px * 1.45;
+    const C = { name: '#ffffff', role: 'rgba(255,255,255,.74)', head: 'rgba(255,255,255,.58)' };
+    const rows = R.rows.map((r) => ({ a: String(r.a || '').trim(), b: String(r.b || '').trim() }));
+    const title = String(R.title || '').trim();
+    let u = 0;
+    if (R.dir === 'v') {
+      const top = P.y + P.h * 0.12, nameTop = P.y + P.h * 0.34, bottom = P.y + P.h * 0.9;
+      const fit = (p, str, max) => { const L = vLength(g, css(p), p, str, 0); return L > max ? (p * max) / L : p; };
+      const col = (str, p, color, y0, max, cu) => {
+        const q = fit(p, str, max);
+        vColumn(g, css(q), q, str, 0, y0, 0, false).ops.forEach((o) => ops.push(Object.assign(o, { u: cu, color })));
+      };
+      if (title) { col(title, tp, C.name, top, bottom - top, u + tp / 2); u += tp + px * 2; }
+      rows.forEach((r) => {
+        if (!r.a && !r.b) { u += px * 1.3; return; }
+        if (!r.b) { if (u) u += px * 0.5; col(r.a, hp, C.head, top, bottom - top, u + px / 2); u += px * 1.9; return; }
+        if (r.a) col(r.a, rp, C.role, top, nameTop - top - px * 0.5, u + px / 2);
+        col(r.b, px, C.name, nameTop, bottom - nameTop, u + px / 2);
+        u += px * 2;
+      });
+    } else {
+      const cx = P.x + P.w / 2, gut = px * 0.75;
+      const fit = (p, str, max) => { const w = measure(g, css(p), str); return w > max ? (p * max) / w : p; };
+      const put = (str, p, color, x, align, cu) => ops.push({ s: str, x, u: cu, font: css(p), px: p, align, color });
+      const spaced = (str, p, color, cu) => {   // 字間をあけた見出し(真ん中ぞろえ)。小文字の混じる英語は詰める
+        const ch = Array.from(str), tr = /[a-z]/.test(str) ? 0.1 : 0.32, width = (q) => ch.reduce((t, c) => t + measure(g, css(q), c), 0) + q * tr * (ch.length - 1);
+        const w0 = width(p);
+        if (w0 > P.w * 0.9) p *= (P.w * 0.9) / w0;
+        let x = cx - width(p) / 2;
+        ch.forEach((c) => { put(c, p, color, x, 'left', cu); x += measure(g, css(p), c) + p * tr; });
+      };
+      if (title) { const p = fit(tp, title, P.w * 0.9); put(title, p, C.name, cx, 'center', u + p / 2); u += p + px * 2; }
+      rows.forEach((r) => {
+        if (!r.a && !r.b) { u += px * 1.3; return; }
+        if (!r.b) { if (u) u += px * 0.6; spaced(r.a, hp, C.head, u + hp / 2); u += hp + px; return; }
+        if (!r.a) { put(r.b, fit(px, r.b, P.w * 0.9), C.name, cx, 'center', u + px / 2); u += px * 1.75; return; }
+        put(r.a, fit(rp, r.a, P.w * 0.42), C.role, cx - gut, 'right', u + px / 2);
+        put(r.b, fit(px, r.b, P.w * 0.42), C.name, cx + gut, 'left', u + px / 2);
+        u += px * 1.75;
+      });
+    }
+    return { ops, len: ops.reduce((m, o) => Math.max(m, o.u + o.px * 0.6), 0) };
+  }
+  /** 組んだ字を描く。off = 流れた長さ(横書きは上へ、縦書きは右へ) */
+  function paintRoll(g, s, G, L, off) {
+    const P = G.P, v = s.roll.dir === 'v', base = v ? P.x + off : P.y + P.h - off;
+    g.save();
+    g.beginPath(); g.rect(P.x, P.y, P.w, P.h); g.clip();
+    g.textBaseline = 'middle';
+    for (const o of L.ops) {
+      const x = v ? base - o.u : o.x, y = v ? o.y : base + o.u, m = o.px * 4;
+      if (v ? x < P.x - m || x > P.x + P.w + m : y < P.y - m || y > P.y + P.h + m) continue;
+      g.save();
+      g.font = o.font;
+      g.textAlign = o.align;
+      g.fillStyle = o.color;
+      g.translate(x, y);
+      if (o.rot) g.rotate(o.rot);
+      if (o.sx) g.scale(o.sx, 1);
+      g.fillText(o.s, o.dx || 0, o.dy || 0);
+      g.restore();
+    }
+    g.restore();
+  }
+  /** 最後に出す字(真ん中に横書きで) */
+  function paintFin(g, s, G, text, alpha) {
+    const P = G.P, css = fontSpec(rollFontId(s), false).css;
+    let p = G.U * 0.065;
+    const w = measure(g, css(p), text);
+    if (w > P.w * 0.8) p *= (P.w * 0.8) / w;
+    g.save();
+    g.globalAlpha = alpha;
+    g.fillStyle = '#ffffff';
+    g.font = css(p);
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(text, P.x + P.w / 2, P.y + P.h / 2);
+    g.restore();
+  }
+  /** エンドロールの時間割(画面の見本と動画で共用)。返り値 { G, L, sp(1 秒に進む画素), scroll(流れる秒数), fin, dur(全体の秒数) } */
+  function rollPlan(g, s, W, H) {
+    const G = geom(s, W, H), P = G.P, L = rollLayout(g, s, G, 1);
+    const sp = (ROLL_SPEEDS[s.roll.speed] || ROLL_SPEEDS.normal).v * P.h;
+    const scroll = L.ops.length ? ((s.roll.dir === 'v' ? P.w : P.h) + L.len) / sp : 0;
+    const fin = String(s.roll.fin || '').trim();
+    return { G, L, sp, scroll, fin, dur: scroll + (fin ? ROLL_FIN.reduce((a, b) => a + b, 0) : 0) + 0.4 };
+  }
+  /** エンドロールの t 秒目を描く */
+  function drawRollAt(g, s, R, t) {
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, R.G.W, R.G.H);
+    if (t < R.scroll) { paintRoll(g, s, R.G, R.L, t * R.sp); return; }
+    if (!R.fin) return;
+    const [w0, a, hold, z] = ROLL_FIN, u = t - R.scroll - w0;
+    const al = u < 0 ? 0 : u < a ? u / a : u < a + hold ? 1 : u < a + hold + z ? 1 - (u - a - hold) / z : 0;
+    if (al > 0) paintFin(g, s, R.G, R.fin, al);
+  }
+  /** エンドロールを 1 枚の絵に(すべての字を真ん中に収める。字がなければ最後に出す字) */
+  function drawRollStill(g, s, W, H) {
+    const G = geom(s, W, H), P = G.P, span = s.roll.dir === 'v' ? P.w : P.h;
+    let L = rollLayout(g, s, G, 1);
+    if (L.len > span * 0.86) L = rollLayout(g, s, G, (span * 0.86) / L.len);
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, W, H);
+    if (L.ops.length) paintRoll(g, s, G, L, (span + L.len) / 2);
+    else if (String(s.roll.fin || '').trim()) paintFin(g, s, G, String(s.roll.fin).trim(), 1);
+  }
+
   /* ================================================================ 保存の形(Ed) */
   const newCut = (o) => Object.assign({ id: U.uid(), photo: null, x: 0, y: 0, zoom: 1, ja: '', en: '', who: '', dir: 'h' }, o || {});
   function defaults() {
     return {
       title: '',
       screen: '16:9', picture: '2.39',
-      sub: { lang: 'ja', jaFont: 'cinecaption', enFont: 'arimo', bold: false, size: 5, track: 4, color: '#ffffff', edge: 'shadow', pos: 'in', vside: 'right', n: 16, punct: true, name: false },
+      sub: { lang: 'ja', jaFont: 'cinecaption', enFont: 'arimo', bold: false, italic: false, size: 5, track: 4, color: '#ffffff', edge: 'shadow', pos: 'in', vside: 'right', n: 16, punct: true, name: false },
       look: Object.assign({ preset: 'dusk', grain: 22, vignette: 30 }, LOOKS.dusk.v),
       stack: { gap: 'thin' },
+      // エンドロール(rows = [{ a: 役・見出し, b: 名前 }]、dir = 'up' 横書き | 'v' 縦書き)と、動画の設定(形式はこの端末の localStorage)
+      roll: { on: false, title: '', rows: [], dir: 'up', speed: 'normal', fin: 'FIN' },
+      video: { pace: 'normal', trans: 'fade', push: true },
       photos: {},
       cuts: [
         newCut({ ja: 'ここまで来れば、もう誰も追ってこない。', en: 'No one will follow us this far.' }),
@@ -524,8 +678,11 @@
   function migrate(st) {
     const d = defaults(), o = st && typeof st === 'object' ? st : {};
     const cuts = Array.isArray(o.cuts) && o.cuts.length ? o.cuts.map((c) => newCut(Object.assign({}, c, { id: c && c.id ? c.id : U.uid() }))) : d.cuts;
+    const roll = Object.assign(d.roll, o.roll);
+    roll.rows = Array.isArray(roll.rows) ? roll.rows.map((r) => ({ a: String((r && r.a) || ''), b: String((r && r.b) || '') })) : [];
     return Object.assign(d, o, {
       sub: Object.assign(d.sub, o.sub), look: Object.assign(d.look, o.look), stack: Object.assign(d.stack, o.stack),
+      roll, video: Object.assign(d.video, o.video),
       photos: o.photos && typeof o.photos === 'object' ? o.photos : {}, cuts
     });
   }
@@ -533,15 +690,15 @@
   const ed = Ed.create(cfg);
   const baseSet = ed.set;
   ed.set = (p, v, o) => { baseSet(p, v); invalidate(); if (o && o.panel) renderPanel(); };
-  ed.rerender = () => { view.cur = 0; widths.clear(); layers.clear(); renderAll(); };
+  ed.rerender = () => { view.cur = 0; view.roll = false; rollPlay = false; widths.clear(); layers.clear(); renderAll(); };
 
   /* ================================================================ 作業台 */
-  const view = { cur: 0 };
+  const view = { cur: 0, roll: false };   // roll = エンドロールを選んでいる(保存しない)
   let LOG = null;   // 読み込んだ talklog { title, lines: [{ no, name, text, act, nar }], names }。保存しない
   const curCut = () => { const cs = ed.state.cuts; view.cur = clamp(view.cur, 0, cs.length - 1); return cs[view.cur]; };
   const cv = $('screen'), box = $('view'), drop = $('drop'), stage = $('stage');
-  let raf = 0, last = null;
-  function invalidate() { if (!raf) raf = requestAnimationFrame(paint); }
+  let raf = 0, last = null, changed = false;
+  function invalidate() { changed = true; if (!raf) raf = requestAnimationFrame(paint); }
   /** 画面の大きさを作業台に合わせる(書き出しと同じ縦横比)。狭い画面では作業台の高さを画面の形に合わせる(高さは画面の 6 割まで) */
   const narrow = matchMedia('(max-width: 920px)');
   function fitStage() {
@@ -564,6 +721,10 @@
   new ResizeObserver(fitStage).observe(box);
   function paint() {
     raf = 0;
+    const was = changed;
+    changed = false;
+    if (view.roll) { paintRollStage(was); return; }
+    playBtn.hidden = true;
     const s = ed.state, cut = curCut(), g = cv.getContext('2d');
     last = drawCut(g, s, cut, cv.width, cv.height);
     const has = !!(cut.photo && s.photos[cut.photo]);
@@ -573,21 +734,47 @@
     scheduleThumbs();
     needFonts();
   }
+  /* ---------------------------------------------------------------- エンドロールの見本(ふだんは全部を 1 枚に、ボタンで流して見せる) */
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const playBtn = h('button.mov-play', { type: 'button', hidden: true });
+  cv.parentElement.append(playBtn);
+  let rollPlay = false, rollT0 = 0, rollKey = '', rollR = null;
+  function syncPlay() {
+    playBtn.replaceChildren(icon(rollPlay ? 'stop' : 'play', 14), rollPlay ? '止める' : '流してみる');
+    playBtn.setAttribute('aria-pressed', String(rollPlay));
+  }
+  playBtn.addEventListener('click', () => { rollPlay = !rollPlay; rollT0 = performance.now(); syncPlay(); invalidate(); });
+  syncPlay();
+  function paintRollStage(was) {
+    const s = ed.state, g = cv.getContext('2d'), W = cv.width, H = cv.height;
+    drop.hidden = true;
+    cv.classList.remove('has-photo');
+    playBtn.hidden = reduceMotion.matches;
+    if (rollPlay && !reduceMotion.matches) {
+      const key = JSON.stringify([W, H, s.screen, s.picture, s.roll, s.sub.lang, s.sub.jaFont, s.sub.enFont, fontKey]);
+      if (key !== rollKey || !rollR) { rollKey = key; rollR = rollPlan(g, s, W, H); }
+      drawRollAt(g, s, rollR, ((performance.now() - rollT0) / 1000) % rollR.dur);
+      raf = requestAnimationFrame(paint);
+    } else drawRollStill(g, s, W, H);
+    if (was) { scheduleThumbs(); needFonts(); }
+  }
 
   /* ---------------------------------------------------------------- 書体を読む(使う字の分だけ。読めたら描き直す) */
   let fontKey = '', fontFail = false;
   function fontJobs(s) {
     const sub = s.sub, jobs = [], w = (id) => [fontSpec(id, sub.bold).w];
     const ja = s.cuts.map((c) => withName(c.ja || '', c.who, sub.name)).join('') + '（）あア漢', en = s.cuts.map((c) => (c.en || '') + (c.who || '')).join('') + 'Aa()';
-    if (sub.lang !== 'en') jobs.push([sub.jaFont, w(sub.jaFont), ja]);
-    if (sub.lang !== 'ja') jobs.push([enFontId(sub), w(enFontId(sub)), en]);
+    if (sub.lang !== 'en') jobs.push([sub.jaFont, w(sub.jaFont), ja, {}]);
+    if (sub.lang !== 'ja') jobs.push([enFontId(sub), w(enFontId(sub)), en, { italic: !!sub.italic }]);
+    if (s.roll.on) jobs.push([rollFontId(s), [fontSpec(rollFontId(s), false).w], rollText(s) + 'A', {}]);
     return jobs;
   }
+  const loadJobs = (jobs) => Promise.all(jobs.map(([id, ws, t, o]) => KitFonts.load(id, ws, t, o)));
   function needFonts() {
     const jobs = fontJobs(ed.state), key = JSON.stringify(jobs);
     if (key === fontKey) return;
     fontKey = key;
-    Promise.all(jobs.map(([id, ws, t]) => KitFonts.load(id, ws, t))).then((rs) => {
+    loadJobs(jobs).then((rs) => {
       const bad = rs.find((r) => !r.ok);
       if (bad && !fontFail) U.toast(`${bad.why}${bad.hint ? '。' + bad.hint + 'ください' : ''}`.replace('くださいください', 'ください'), 'error');
       fontFail = !!bad;
@@ -607,6 +794,7 @@
     return { x: ((r.w - P.w) / 2) * k, y: ((r.h - P.h) / 2) * k };
   };
   cv.addEventListener('pointerdown', (e) => {
+    if (view.roll) return;
     const cut = curCut();
     if (!cut.photo || !ed.state.photos[cut.photo]) { photoIn.click(); return; }
     cv.setPointerCapture(e.pointerId);
@@ -640,7 +828,7 @@
   cv.addEventListener('pointercancel', endPtr);
   cv.addEventListener('wheel', (e) => {
     const cut = curCut();
-    if (!cut.photo) return;
+    if (view.roll || !cut.photo) return;
     e.preventDefault();
     cut.zoom = clamp(num(cut.zoom, 1) * Math.exp(-e.deltaY * 0.0015), 1, 6);
     ed.dirty();
@@ -653,6 +841,7 @@
   photoIn.addEventListener('change', () => { const f = photoIn.files[0]; photoIn.value = ''; if (f) setPhoto(f); });
   async function setPhoto(file) {
     if (!file || !/^image\//.test(file.type)) return U.toast('画像のファイルを選んでください', 'error');
+    if (view.roll) return U.toast('写真を入れるカットを、下の並びから選んでください');
     try {
       const src = await U.fileToDataUrl(file, 2400, 'image/jpeg');
       const img = await U.loadImage(src), id = U.uid(), cut = curCut();
@@ -689,13 +878,16 @@
   let thumbTimer = 0;
   const thumbSize = () => { const sc = screenOf(ed.state), th = 54, tw = Math.min(110, Math.round(th * sc.w / sc.h)); return [tw, Math.round(tw * sc.h / sc.w)]; };
   function renderStrip() {
-    const cs = ed.state.cuts, [tw, th] = thumbSize();
-    strip.replaceChildren(
+    const cs = ed.state.cuts, [tw, th] = thumbSize(), thumb = () => h('canvas', { width: tw * 2, height: th * 2, style: { width: tw + 'px', height: th + 'px' } });
+    const on = ed.state.roll.on;
+    strip.replaceChildren(...[
       h('div.mov-cuts', { role: 'list', 'aria-label': 'カットの並び' }, cs.map((c, i) => h('button.mov-cut', {
-        type: 'button', role: 'listitem', 'aria-pressed': String(i === view.cur), 'aria-label': `カット ${i + 1}`, 'data-id': c.id,
-        onclick: () => { if (view.cur !== i) { view.cur = i; renderStrip(); renderPanel(); invalidate(); } }
-      }, h('canvas', { width: tw * 2, height: th * 2, style: { width: tw + 'px', height: th + 'px' } }), h('span', String(i + 1))))),
-      h('button.mov-add', { type: 'button', onclick: () => addCut(), title: 'いまのカットの後ろに、同じ写真のカットを足します' }, icon('plus', 16), h('span', 'カットを足す')));
+        type: 'button', role: 'listitem', 'aria-pressed': String(!view.roll && i === view.cur), 'aria-label': `カット ${i + 1}`, 'data-id': c.id,
+        onclick: () => { if (view.roll || view.cur !== i) { view.cur = i; view.roll = false; rollPlay = false; syncPlay(); renderStrip(); renderPanel(); invalidate(); } }
+      }, thumb(), h('span', String(i + 1))))),
+      on && h('button.mov-cut.mov-rolltile', { type: 'button', 'aria-pressed': String(view.roll), 'aria-label': 'エンドロール', 'data-id': 'roll', onclick: selectRoll }, thumb(), h('span', 'END')),
+      h('button.mov-add', { type: 'button', onclick: () => addCut(), title: 'いまのカットの後ろに、同じ写真のカットを足します' }, icon('plus', 16), h('span', 'カットを足す')),
+      !on && h('button.mov-add', { type: 'button', onclick: addRoll, title: 'カットのあとに流すエンドロールを足します' }, icon('plus', 16), h('span', 'エンドロール'))].filter(Boolean));
     thumbKeys.clear();
     scheduleThumbs();
   }
@@ -703,6 +895,11 @@
   function drawThumbs() {
     const s = ed.state, common = JSON.stringify([s.screen, s.picture, s.sub, s.look, fontKey]);
     strip.querySelectorAll('.mov-cut').forEach((b) => {
+      if (b.dataset.id === 'roll') {
+        const cvs = b.querySelector('canvas'), key = common + JSON.stringify(s.roll);
+        if (thumbKeys.get('roll') !== key) { thumbKeys.set('roll', key); drawRollStill(cvs.getContext('2d'), s, cvs.width, cvs.height); }
+        return;
+      }
       const cut = s.cuts.find((c) => c.id === b.dataset.id), cvs = b.querySelector('canvas');
       if (!cut || !cvs) return;
       const e = imgEntry(cut.photo), key = common + JSON.stringify(cut) + (e && e.ready ? 1 : 0);
@@ -712,9 +909,13 @@
     });
   }
   function addCut(o) {
-    const cur = curCut(), c = newCut(Object.assign({ photo: cur.photo, x: cur.x, y: cur.y, zoom: cur.zoom, dir: cur.dir, who: '' }, o || {}));
-    ed.state.cuts.splice(view.cur + 1, 0, c);
-    view.cur += 1;
+    const cs = ed.state.cuts, cur = view.roll ? cs[cs.length - 1] : curCut();   // エンドロールを選んでいるときは最後のカットの後ろに
+    const c = newCut(Object.assign({ photo: cur.photo, x: cur.x, y: cur.y, zoom: cur.zoom, dir: cur.dir, who: '' }, o || {}));
+    ed.state.cuts.splice(view.roll ? ed.state.cuts.length : view.cur + 1, 0, c);
+    view.cur = view.roll ? ed.state.cuts.length - 1 : view.cur + 1;
+    view.roll = false;
+    rollPlay = false;
+    syncPlay();
     ed.dirty();
     renderStrip();
     renderPanel();
@@ -743,6 +944,48 @@
     renderPanel();
     invalidate();
   }
+  /* ---------------------------------------------------------------- エンドロールを選ぶ・足す・外す */
+  function showRoll() { view.roll = true; rollPlay = false; syncPlay(); renderStrip(); renderPanel(); invalidate(); }
+  function selectRoll() { if (!view.roll) showRoll(); }
+  function addRoll() {
+    const R = ed.state.roll;
+    R.on = true;
+    if (!R.rows.some((r) => r.a || r.b) && !String(R.title || '').trim()) R.rows = draftRows();   // 前に書いた字があれば、それを戻す
+    ed.dirty();
+    showRoll();
+  }
+  function removeRoll() {
+    ed.state.roll.on = false;
+    ed.dirty();
+    view.roll = false;
+    rollPlay = false;
+    syncPlay();
+    renderStrip();
+    renderPanel();
+    invalidate();
+    U.toast('エンドロールを外しました。書いた字は残っていて、足し直すと戻ります');
+  }
+  const rowsChanged = () => { ed.dirty(); renderPanel(); invalidate(); };
+  function addRow() {
+    ed.state.roll.rows.push({ a: '', b: '' });
+    rowsChanged();
+    const ins = sideBody.querySelectorAll('.mov-roll-row:last-child input');
+    if (ins[1]) ins[1].focus();
+  }
+  function moveRow(i, d) {
+    const r = ed.state.roll.rows, j = i + d;
+    if (j < 0 || j >= r.length) return;
+    [r[i], r[j]] = [r[j], r[i]];
+    rowsChanged();
+  }
+  function removeRow(i) { ed.state.roll.rows.splice(i, 1); rowsChanged(); }
+  async function redraft() {
+    const R = ed.state.roll;
+    if (R.rows.some((r) => r.a || r.b) && !(await U.confirmDialog({ title: '話者から下書き', message: 'いまの行を消して、カットの話者の名前から作り直します。', okLabel: '作り直す' }))) return;
+    R.rows = draftRows();
+    rowsChanged();
+    if (R.rows.length < 2) U.toast('話者の名前がまだないので、見出しだけを入れました');
+  }
 
   /* ================================================================ 設定の欄 */
   const side = $('side');
@@ -770,15 +1013,15 @@
     return h('div.mov-range', inp, out);
   }
   const check = (label, on, onChange) => h('label.check', h('input', { type: 'checkbox', checked: on, onchange: (e) => onChange(e.target.checked) }), label);
-  function fontButtons(ids, cur, sample, onPick, sameLabel) {
+  function fontButtons(ids, cur, sample, onPick, sameLabel, italic) {
     const g = h('div.mov-fonts', { role: 'group' });
     ids.forEach((id) => {
       const same = id === 'same', f = same ? null : KitFonts.info(id);
       const b = h('button', { type: 'button', 'aria-pressed': String(id === cur), title: same ? '和文と同じ書体で出します' : f.mood },
-        h('b', { style: { fontFamily: same ? 'inherit' : KitFonts.stack(id) } }, same ? sameLabel : sample),
+        h('b', { style: { fontFamily: same ? 'inherit' : KitFonts.stack(id), fontStyle: italic ? 'italic' : 'normal' } }, same ? sameLabel : sample),
         h('small', same ? '和文と同じ' : f.label));
       b.addEventListener('click', () => { g.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); onPick(id); });
-      if (!same) KitFonts.load(id, [400], sample).catch(() => {});
+      if (!same) KitFonts.load(id, [400], sample, { italic: !!italic }).catch(() => {});
       g.append(b);
     });
     return g;
@@ -860,6 +1103,37 @@
     if (en) U.toast('英語の字幕は外しました。分けた 2 つのカットに入れ直してください');
   }
 
+  function secRoll(s) {
+    const R = s.roll, set = (k, v) => ed.set('roll.' + k, v);
+    const text = (path, label, ph) => {
+      const t = h('input', { type: 'text', value: ed.get(path) || '', 'aria-label': label, placeholder: ph || '' });
+      t.addEventListener('input', () => ed.set(path, t.value));
+      return t;
+    };
+    const n = R.rows.length;
+    const rows = h('div.mov-roll-rows', { role: 'list', 'aria-label': '流す字の行' }, R.rows.map((r, i) => h('div.mov-roll-row', { role: 'listitem' },
+      text(`roll.rows.${i}.a`, `${i + 1} 行目の役・見出し`, '役・見出し'),
+      text(`roll.rows.${i}.b`, `${i + 1} 行目の名前`, '名前'),
+      h('button.btn.btn-ghost.btn-icon', { type: 'button', title: '上へ', 'aria-label': `${i + 1} 行目を上へ`, disabled: i === 0, onclick: () => moveRow(i, -1) }, icon('up', 15)),
+      h('button.btn.btn-ghost.btn-icon', { type: 'button', title: '下へ', 'aria-label': `${i + 1} 行目を下へ`, disabled: i === n - 1, onclick: () => moveRow(i, 1) }, icon('down', 15)),
+      h('button.btn.btn-ghost.btn-icon.danger', { type: 'button', title: 'この行を消す', 'aria-label': `${i + 1} 行目を消す`, onclick: () => removeRow(i) }, icon('close', 15)))));
+    return h('section.mov-sec.mov-cutsec',
+      h('div.mov-cuthead',
+        h('h2', 'エンドロール'),
+        h('span.kit-spacer'),
+        h('button.btn.btn-ghost.btn-sm.danger', { type: 'button', onclick: removeRoll, title: 'エンドロールを外します。書いた字は残ります' }, icon('trash', 15), '外す')),
+      field('題', text('roll.title', '題', '映画の題'), '空のままでもかまいません'),
+      field('流す字', h('div.mov-col', rows,
+        h('div.mov-row',
+          h('button.btn.btn-outline.btn-sm', { type: 'button', onclick: addRow }, icon('plus', 15), '行を足す'),
+          h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: redraft, title: 'カットの話者の名前から、キャストの行を作り直します' }, icon('refresh', 15), '話者から下書き')),
+        h('p.hint', '左だけ書いた行は見出しに、右だけ書いた行は名前になります。両方書くと役と名前を並べて出し、どちらも空の行は間になります。'))),
+      field('流し方', seg('流し方', [['up', '横書きで上へ'], ['v', '縦書きで右へ']], R.dir === 'v' ? 'v' : 'up', (v) => set('dir', v))),
+      field('速さ', seg('流れる速さ', Object.entries(ROLL_SPEEDS).map(([k, v]) => [k, v.label]), R.speed in ROLL_SPEEDS ? R.speed : 'normal', (v) => set('speed', v))),
+      field('最後に出す字', text('roll.fin', '最後に出す字', '例: 終・FIN'), '流し終えたあと、真ん中に少しのあいだ出します'),
+      h('p.hint', '動画で保存すると、カットのあとに流れます。画像で保存すると、すべての字を 1 枚に収めます。'));
+  }
+
   function secSub(s) {
     const sub = s.sub, set = (k, v, o) => ed.set('sub.' + k, v, o);
     const jaF = KitFonts.info(sub.jaFont), enId = enFontId(sub);
@@ -876,12 +1150,13 @@
       sub.lang !== 'en' && field('日本語の書体', h('div.mov-col',
         fontButtons(JA_FONTS, sub.jaFont, '字幕', (id) => set('jaFont', id, { panel: true })),
         jaF.credit && h('p.hint', jaF.credit + '。作者の配布条件に沿って同梱しています。'))),
-      sub.lang !== 'ja' && field('英語の書体', fontButtons(EN_FONTS, sub.enFont, 'Ag', (id) => set('enFont', id, { panel: true }), '字A'),
+      sub.lang !== 'ja' && field('英語の書体', fontButtons(EN_FONTS, sub.enFont, 'Ag', (id) => set('enFont', id, { panel: true }), '字A', !!sub.italic),
         enId !== sub.jaFont ? KitFonts.info(enId).mood : ''),
       h('div.grid-2',
         field('大きさ', range('字幕の大きさ', 3, 9, 0.1, num(sub.size, 5), (v) => v.toFixed(1), (v) => set('size', v))),
         field('字間', range('字間', 0, 30, 1, num(sub.track, 4), (v) => `${v}%`, (v) => set('track', v)))),
-      h('div.mov-row', check('太字', !!sub.bold, (v) => set('bold', v))),
+      h('div.mov-row', check('太字', !!sub.bold, (v) => set('bold', v)),
+        sub.lang !== 'ja' && check('英語を斜体にする', !!sub.italic, (v) => set('italic', v, { panel: true }))),
       field('字の色', color),
       field('縁', seg('字の縁', [['shadow', '影'], ['outline', '縁取り'], ['box', '帯'], ['none', 'なし']], sub.edge, (v) => set('edge', v))),
       field('横書きの位置', seg('横書きの字幕の位置', [['in', '映像の下'], ['bar', '下の黒帯']], sub.pos, (v) => set('pos', v)),
@@ -926,20 +1201,24 @@
     const title = h('input', { type: 'text', value: s.title || '', 'aria-label': 'ファイルの名前', placeholder: 'movie' });
     title.addEventListener('input', () => ed.set('title', title.value));
     const btn = (ic, label, fn, cls) => h('button.btn.btn-sm' + (cls || '.btn-outline'), { type: 'button', onclick: (e) => run(e.currentTarget, fn) }, icon(ic, 15), label);
+    const total = s.cuts.length + (s.roll.on ? 1 : 0);
     return sec('保存',
       field('ファイルの名前', title),
       h('div.mov-col',
-        btn('download', 'このカットを PNG で保存', saveOne, '.btn-primary'),
-        s.cuts.length > 1 && btn('download', `全カットを 1 枚ずつ保存（${s.cuts.length} 枚）`, saveEach),
-        s.cuts.length > 1 && h('div.mov-stackrow',
+        btn('download', view.roll ? 'エンドロールを PNG で保存' : 'このカットを PNG で保存', saveOne, '.btn-primary'),
+        total > 1 && btn('download', `${s.roll.on ? 'カットとエンドロール' : '全カット'}を 1 枚ずつ保存（${total} 枚）`, saveEach),
+        total > 1 && h('div.mov-stackrow',
           btn('download', '縦に並べた 1 枚で保存', saveStack),
-          seg('カットの間', [['none', '間なし'], ['thin', '細い間'], ['wide', '広い間']], s.stack.gap, (v) => ed.set('stack.gap', v)))),
-      h('p.hint', 'カットを縦に並べた 1 枚は、会話の流れを見せたいときに使います。'));
+          seg('カットの間', [['none', '間なし'], ['thin', '細い間'], ['wide', '広い間']], s.stack.gap, (v) => ed.set('stack.gap', v))),
+        h('button.btn.btn-sm.btn-outline', { type: 'button', onclick: videoDialog }, icon('video', 15), '動画で保存（MP4・GIF）')),
+      h('p.hint', 'カットを縦に並べた 1 枚は、会話の流れを見せたいときに使います。動画ではカットを順に映して字幕を替えていきます。'));
   }
 
   function renderPanel() {
     const s = ed.state;
-    sideBody.replaceChildren(secCut(s), secSub(s), secScreen(s), secLook(s), secSave(s));
+    if (view.roll && !s.roll.on) view.roll = false;
+    meta = null;
+    sideBody.replaceChildren(view.roll ? secRoll(s) : secCut(s), secSub(s), secScreen(s), secLook(s), secSave(s));
     U.hydrateIcons(sideBody);
     invalidate();
   }
@@ -955,7 +1234,7 @@
   }
   /** 書き出す前に、書体(使う字の分)と写真を待つ。書体が読めなければやめる(黙って代わりの書体で出さない) */
   async function ready(cuts) {
-    const rs = await Promise.all(fontJobs(ed.state).map(([id, ws, t]) => KitFonts.load(id, ws, t)));
+    const rs = await loadJobs(fontJobs(ed.state));
     const bad = rs.find((r) => !r.ok);
     if (bad) throw new Error(`${bad.why}。${bad.hint ? bad.hint + 'ください' : '書体を替えてお試しください'}`);
     widths.clear();
@@ -968,9 +1247,21 @@
     drawCut(c.getContext('2d'), ed.state, cut, W, H);
     return c;
   }
+  function renderRoll(W, H) {
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    drawRollStill(c.getContext('2d'), ed.state, W, H);
+    return c;
+  }
   const baseName = () => U.safeName(ed.state.title, 'movie');
   async function saveOne() {
     const cut = curCut(), sc = screenOf(ed.state);
+    if (view.roll) {
+      await ready([]);
+      const r = await U.saveImage(await toBlob(renderRoll(sc.w, sc.h)), `${baseName()}-end.png`);
+      if (r !== 'aborted') U.toast('画像を保存しました');
+      return;
+    }
     await ready([cut]);
     const blob = await toBlob(renderCut(cut, sc.w, sc.h));
     const r = await U.saveImage(blob, `${baseName()}-${pad2(view.cur + 1)}.png`);
@@ -984,6 +1275,7 @@
       const blob = await toBlob(renderCut(s.cuts[i], sc.w, sc.h));
       files.push(new File([blob], `${baseName()}-${pad2(i + 1)}.png`, { type: 'image/png' }));
     }
+    if (s.roll.on) files.push(new File([await toBlob(renderRoll(sc.w, sc.h))], `${baseName()}-end.png`, { type: 'image/png' }));
     await deliver(files);
   }
   /**
@@ -991,7 +1283,7 @@
    * 大きすぎる画像は端末によって作れないので、面積と高さも抑えて縮める
    */
   async function saveStack() {
-    const s = ed.state, sc = screenOf(s), n = s.cuts.length;
+    const s = ed.state, sc = screenOf(s), n = s.cuts.length + (s.roll.on ? 1 : 0);   // エンドロールは最後の 1 枚
     await ready(s.cuts);
     const gap0 = { none: 0, thin: Math.round(Math.min(sc.w, sc.h) * 0.014), wide: Math.round(Math.min(sc.w, sc.h) * 0.045) }[s.stack.gap] || 0;
     const total = n * sc.h + (n - 1) * gap0, k = Math.min(1280 / sc.w, 1, 16000 / total, Math.sqrt(16e6 / (sc.w * total)));
@@ -1002,6 +1294,7 @@
     g.fillStyle = '#000';
     g.fillRect(0, 0, c.width, c.height);
     s.cuts.forEach((cut, i) => g.drawImage(renderCut(cut, W, H), 0, i * (H + gap)));
+    if (s.roll.on) g.drawImage(renderRoll(W, H), 0, s.cuts.length * (H + gap));
     const r = await U.saveImage(await toBlob(c), `${baseName()}-cuts.png`);
     if (r !== 'aborted') U.toast(k < Math.min(1, 1280 / sc.w) - 0.001 ? `カットが多いので、幅 ${W} に縮めて保存しました` : '画像を保存しました');
   }
@@ -1024,6 +1317,179 @@
       if (i < files.length - 1) await new Promise((r) => setTimeout(r, 350));
     }
     U.toast(`${files.length} 枚を保存しました`);
+  }
+
+  /* ================================================================ 動画で保存(MP4・GIF。音なし)
+     カットを順に映し、字幕を替えていく。映す長さは字幕の字数から決める(ふつうは日本語で 1 秒に 4 字)。
+     つなぎは そのまま・暗転(黒を挟む)・重ねる(前のカットの上に次のカットが現れる。字幕は重なりの真ん中で替わる)。
+     MP4 は写真をゆっくり寄せ、粒子をコマごとに動かす。GIF は軽くするため写真を動かさず、粒子も止める(字幕の替わる所しか変わらない)。
+     エンドロールを付けたら最後に流す。1 コマずつ描くので、重い端末でもコマ落ちしない */
+  const VIDEO = { mp4: { name: 'MP4', fps: 30, long: 1920 }, gif: { name: 'GIF', fps: 12, long: 640 } };
+  const PACES = { slow: { label: 'ゆっくり', cps: 3.2, min: 2.6 }, normal: { label: 'ふつう', cps: 4, min: 2.2 }, fast: { label: 'はやめ', cps: 5.2, min: 1.8 } };
+  const TRANS = { cut: 'そのまま', fade: '暗転', dissolve: '重ねる' };
+  const FADE = 0.45, MIX = 0.6, PUSH = 0.05, GAP = 0.5;   // 黒から出る・黒へ消える秒数、重ねる秒数、寄せる割合、エンドロールの前の黒(秒)
+  const even = (v) => Math.max(2, Math.round(v / 2) * 2);
+  const charsOf = (t) => Array.from(String(t || '').replace(/\s/g, '')).length;
+  const videoSize = (s, fmt) => { const sc = screenOf(s), k = Math.min(1, VIDEO[fmt].long / Math.max(sc.w, sc.h)); return { w: even(sc.w * k), h: even(sc.h * k) }; };
+  /** カットを映す秒数(字幕を読む時間)。日本語は 1 秒に cps 字、英語はその 3.5 倍の字数 */
+  function cutSec(s, cut, pace) {
+    const P = PACES[pace] || PACES.normal;
+    const ja = s.sub.lang !== 'en' ? charsOf(withName(String(cut.ja || '').trim(), cut.who, s.sub.name)) : 0;
+    const en = s.sub.lang !== 'ja' ? String(cut.en || '').trim().length : 0;
+    return Math.round(clamp(0.7 + Math.max(ja / P.cps, en / (P.cps * 3.5)), P.min, 9) * 10) / 10;
+  }
+  /**
+   * 動画の時間割。segs = [{ cut, a, b(映る間), h0, h1(全部見える間), subA, subB(字幕の出る間), outBlack(終わりに黒へ消える) }]、
+   * roll = { a(始まり), R(rollPlan) } か null、T = 全体の秒数
+   */
+  function timeline(s, v, g, W, H) {
+    const tr = TRANS[v.trans] ? v.trans : 'fade', n = s.cuts.length, segs = [];
+    let t = 0;
+    s.cuts.forEach((cut, i) => {
+      const d = cutSec(s, cut, v.pace), first = !i, last = i === n - 1;
+      if (tr === 'cut') { segs.push({ cut, a: t, h0: t, h1: t + d, b: t + d, subA: t, subB: t + d }); t += d; return; }
+      if (tr === 'fade') { segs.push({ cut, a: t, h0: t + FADE, h1: t + FADE + d, b: t + 2 * FADE + d, subA: t + FADE, subB: t + FADE + d, outBlack: true }); t += 2 * FADE + d; return; }
+      const a = t, h0 = a + (first ? FADE : MIX), h1 = h0 + d;   // 重ねる: 最初は黒から、最後は黒へ
+      segs.push({ cut, a, h0, h1, b: last ? h1 + FADE : h1 + MIX, subA: first ? h0 : a + MIX / 2, subB: last ? h1 : h1 + MIX / 2, outBlack: last });
+      t = last ? h1 + FADE : h1;
+    });
+    let roll = null, T = t;
+    if (s.roll.on) {
+      const R = rollPlan(g, s, W, H);
+      if (R.scroll || R.fin) { roll = { a: t + GAP, R }; T = roll.a + R.dur; }
+    }
+    return { segs, roll, T: Math.max(T, 0.5) };
+  }
+  /** 映像の層を、映像の四角の真ん中を中心に z 倍して重ねる(黒帯は動かさない) */
+  function drawPicture(g, layer, P, z, alpha) {
+    g.save();
+    g.globalAlpha = alpha;
+    g.beginPath(); g.rect(P.x, P.y, P.w, P.h); g.clip();
+    if (z > 1.0001) {
+      const cx = P.x + P.w / 2, cy = P.y + P.h / 2;
+      g.translate(cx, cy); g.scale(z, z); g.translate(-cx, -cy);
+    }
+    g.drawImage(layer, P.x, P.y, P.w, P.h, P.x, P.y, P.w, P.h);
+    g.restore();
+  }
+  /** 動画のコマを作る準備。返り値の frame(i) が i コマ目を描いた canvas を返す(どの順に呼んでもよい) */
+  async function videoFrames(fmt) {
+    const s = ed.state, V = VIDEO[fmt], gif = fmt === 'gif', { w: W, h: H } = videoSize(s, fmt), fps = V.fps;
+    await ready(s.cuts);
+    const fc = document.createElement('canvas');
+    fc.width = W; fc.height = H;
+    const g = fc.getContext('2d', { willReadFrequently: gif });
+    g.imageSmoothingQuality = 'high';
+    const G = geom(s, W, H), P = G.P, push = !gif && s.video.push !== false;
+    const moveGrain = !gif && num(s.look.grain, 0) > 0, look = moveGrain ? Object.assign({}, s.look, { grain: 0 }) : s.look;
+    const TL = timeline(s, s.video, g, W, H), N = Math.max(1, Math.ceil(TL.T * fps));
+    // 映っているカットの層と字幕の絵だけを持つ(大きな絵を何枚も覚えない)
+    const pics = new Map(), subs = new Map();
+    const picOf = (sg) => { if (!pics.has(sg)) pics.set(sg, buildLayer(s, sg.cut, W, H, look)); return pics.get(sg); };
+    const subOf = (sg) => {
+      if (!subs.has(sg)) {
+        const c = document.createElement('canvas');
+        c.width = W; c.height = H;
+        const cg = c.getContext('2d');
+        paintSubs(cg, layoutSubs(cg, s, sg.cut, G), s.sub);
+        subs.set(sg, c);
+      }
+      return subs.get(sg);
+    };
+    const frame = (i) => {
+      const t = i / fps, vis = TL.segs.filter((sg) => t >= sg.a && t < sg.b), on = TL.segs.find((sg) => t >= sg.subA && t < sg.subB);
+      [...pics.keys()].forEach((sg) => { if (!vis.includes(sg)) pics.delete(sg); });
+      [...subs.keys()].forEach((sg) => { if (sg !== on) subs.delete(sg); });
+      g.globalAlpha = 1;
+      g.fillStyle = '#000';
+      g.fillRect(0, 0, W, H);
+      vis.forEach((sg) => {
+        const al = t < sg.h0 ? (t - sg.a) / (sg.h0 - sg.a) : sg.outBlack && t > sg.h1 ? 1 - (t - sg.h1) / (sg.b - sg.h1) : 1;
+        drawPicture(g, picOf(sg), P, push ? 1 + (PUSH * (t - sg.a)) / (sg.b - sg.a) : 1, clamp(al, 0, 1));
+      });
+      if (moveGrain && vis.length) grainFx(g, P, G.U, s.look, i + 1);
+      if (on) g.drawImage(subOf(on), 0, 0);
+      if (TL.roll && t >= TL.roll.a) drawRollAt(g, s, TL.roll.R, t - TL.roll.a);
+      return fc;
+    };
+    // GIF の色は、それぞれのカットの真ん中のコマ(12 個まで)とエンドロールのコマから選ぶ
+    const step = Math.ceil(TL.segs.length / 12), sample = TL.segs.filter((_, j) => j % step === 0).map((sg) => Math.floor(((sg.h0 + sg.h1) / 2) * fps));
+    if (TL.roll && TL.roll.R.scroll) sample.push(Math.floor((TL.roll.a + TL.roll.R.scroll / 2) * fps));
+    return { frame, count: N, fps, width: W, height: H, sample, T: TL.T };
+  }
+  async function makeVideo(fmt, onProgress) {
+    if (fmt === 'mp4' && !Mp4.supported()) throw new Error('このブラウザでは MP4 を作れません。GIF をお試しください');
+    const f = await videoFrames(fmt);
+    return (fmt === 'mp4' ? Mp4 : Gif).encode(Object.assign(f, { onProgress }));
+  }
+  const secText = (sec) => { const r = Math.max(1, Math.round(sec)); return r >= 60 ? `${Math.floor(r / 60)} 分 ${r % 60} 秒` : `${r} 秒`; };
+  const VIDEO_KEY = 'userkit:usermovie:video';   // 前に選んだ形式(この端末だけ)
+  /** 「動画で保存」の画面: 形式・カットの長さ・つなぎを選んで作り、見てから保存する */
+  function videoDialog() {
+    let fmt = 'mp4', busy = false, closed = false, url = '';
+    try { if (localStorage.getItem(VIDEO_KEY) === 'gif') fmt = 'gif'; } catch (e) { /* 使えない環境 */ }
+    if (!Mp4.supported()) fmt = 'gif';
+    const s = ed.state, body = h('div.modal-body.mov-vd');
+    const drop = () => { if (url) URL.revokeObjectURL(url); url = ''; };
+    const ctl = U.openDialog({ title: '動画で保存', wide: true, content: body, onClose: () => { closed = true; drop(); } });
+    const setV = (k, v) => { ed.set('video.' + k, v); choose(); };
+    function choose() {
+      drop();
+      const v = s.video, V = VIDEO[fmt], z = videoSize(s, fmt), TL = timeline(s, v, document.createElement('canvas').getContext('2d'), z.w, z.h);
+      const fmtSeg = h('div.seg', { role: 'group', 'aria-label': '形式' }, Object.entries(VIDEO).map(([k, x]) => h('button', {
+        type: 'button', 'aria-pressed': String(fmt === k), disabled: k === 'mp4' && !Mp4.supported(),
+        onclick: () => { fmt = k; try { localStorage.setItem(VIDEO_KEY, k); } catch (e) { /* 使えない環境 */ } choose(); }
+      }, x.name)));
+      const note = `大きさは ${z.w} × ${z.h} px、長さは約 ${secText(TL.T)}${TL.roll ? `（うちエンドロールが ${secText(TL.roll.R.dur)}）` : ''}で、1 秒に ${V.fps} コマです。`
+        + (fmt === 'mp4' ? 'なめらかで、X などにそのまま載せられます。' : '色の数が少ないので少し粗くなりますが、どこでもそのまま動きます。');
+      const go = h('button.btn.btn-primary', { type: 'button' }, icon('video'), '作る');
+      go.addEventListener('click', async () => {
+        if (busy) return;
+        busy = true;
+        go.disabled = true;
+        go.textContent = '準備しています…';
+        try {
+          const blob = await makeVideo(fmt, (p) => { go.textContent = `作っています… ${Math.round(p * 100)}%`; });
+          if (!closed) result(blob, TL.T);
+        } catch (e) {
+          console.error(e);
+          U.toast(e.message || '動画を作れませんでした', 'error');
+          if (!closed) choose();
+        } finally { busy = false; }
+      });
+      body.replaceChildren(...[
+        h('p.modal-lead', `${s.cuts.length} 個のカットを順に映し、字幕を替えていく動画を作ります。${TL.roll ? '最後にエンドロールを流します。' : ''}音は入りません。`),
+        field('形式', fmtSeg),
+        field('カットの長さ', seg('カットの長さ', Object.entries(PACES).map(([k, x]) => [k, x.label]), v.pace in PACES ? v.pace : 'normal', (x) => setV('pace', x)),
+          '長さは字幕の字数に合わせて、カットごとに決めます'),
+        field('つなぎ', seg('カットのつなぎ', Object.entries(TRANS), v.trans in TRANS ? v.trans : 'fade', (x) => setV('trans', x))),
+        fmt === 'mp4' ? check('写真をゆっくり寄せる', v.push !== false, (x) => setV('push', x)) : h('p.hint', 'GIF では写真を動かしません。動かすとファイルがとても重くなるためです。'),
+        h('p.hint', note),
+        TL.T > 140 && h('p.hint.mov-warn', '2 分 20 秒を超える動画は、X に載せられないことがあります。'),
+        fmt === 'gif' && TL.T > 45 && h('p.hint.mov-warn', '長い GIF は重くなります。長い動画は MP4 で作るのがおすすめです。'),
+        !Mp4.supported() && h('p.hint', 'このブラウザでは MP4 を作れないため、GIF だけを選べます。'),
+        h('div.modal-foot', h('button.btn.btn-outline', { type: 'button', onclick: () => ctl.close() }, '閉じる'), go)].filter(Boolean));
+      U.hydrateIcons(body);
+    }
+    function result(blob, T) {
+      drop();
+      url = URL.createObjectURL(blob);
+      const ext = fmt, mb = (blob.size / 1048576).toFixed(1) + ' MB', info = h('p.hint'), name = `${baseName()}.${ext}`;
+      let media;
+      if (ext === 'mp4') {
+        media = h('video.mov-vd-out', { src: url, autoplay: true, loop: true, playsinline: true, controls: true });
+        media.muted = true;
+        media.addEventListener('loadedmetadata', () => { info.textContent = `${media.videoWidth} × ${media.videoHeight} px・${media.duration.toFixed(1)} 秒・MP4・${mb}`; });
+      } else {
+        media = h('img.mov-vd-out', { src: url, alt: '作った GIF' });
+        media.addEventListener('load', () => { info.textContent = `${media.naturalWidth} × ${media.naturalHeight} px・約 ${secText(T)}・GIF・${mb}`; });
+      }
+      body.replaceChildren(media, info, h('div.modal-foot',
+        h('button.btn.btn-outline', { type: 'button', onclick: choose }, '作り直す'),
+        h('button.btn.btn-primary', { type: 'button', onclick: () => U.saveImage(blob, name) }, icon('download'), '保存する')));
+      U.hydrateIcons(body);
+    }
+    choose();
   }
 
   /* ================================================================ talklog から選ぶ(読むだけ。保存しない) */
@@ -1161,7 +1627,9 @@
     '写真を選ぶと、映画の画面のように黒帯と字幕を重ねます。写真はドラッグで動かせ、ホイールかピンチで拡大できます。',
     '字幕は打ち込むか、talklog で保存したトークから選びます。ログはこのページで読むだけで、保存も送信もしません。',
     '長い字幕は 2 行に自動で折り返します。字幕の欄で改行すると、その位置で折り返します。',
-    'カットを足すと、1 枚ずつ保存できるほか、縦に並べた 1 枚にして会話の流れを見せられます。'
+    'カットを足すと、1 枚ずつ保存できるほか、縦に並べた 1 枚にして会話の流れを見せられます。',
+    '「動画で保存」では、カットを順に映して字幕を替えていく動画を、MP4 か GIF で作れます。音は入りません。',
+    'カットの並びの「エンドロール」を押すと、最後に役と名前を流せます。話者の名前から下書きを作ります。'
   ]));
   U.hydrateIcons(document);
   // 確かめ用: canvas(i) = カット i を書き出しの大きさで描いた canvas(書体と写真を待つ)
@@ -1169,6 +1637,10 @@
     ed, view, wrapJa, jaLines, splitText, cleanLine, punctToSpace, layout: () => last, geom,
     canvas: async (i, W, H) => { const s = ed.state, c = s.cuts[i == null ? view.cur : i], sc = screenOf(s); await ready([c]); return renderCut(c, W || sc.w, H || sc.h); },
     refresh: () => { renderAll(); },
+    // 動画: plan(fmt) = 時間割、frames(fmt) = videoFrames の結果(frame(i) で i コマ目)、make(fmt) = Blob
+    plan: (fmt) => { const z = videoSize(ed.state, fmt || 'mp4'); return timeline(ed.state, ed.state.video, document.createElement('canvas').getContext('2d'), z.w, z.h); },
+    frames: (fmt) => videoFrames(fmt || 'mp4'), make: (fmt, onProgress) => makeVideo(fmt || 'mp4', onProgress), cutSec,
+    roll: (W, H) => renderRoll(W || screenOf(ed.state).w, H || screenOf(ed.state).h),
     loadLog: (text, name) => { LOG = buildLog(parseLog(text, name)); renderPanel(); showLog(); }
   };
   ed.load().then(() => { renderAll(); });

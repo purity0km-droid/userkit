@@ -24,15 +24,16 @@
       noVert: true, credit: 'しねきゃぷしょん: chiphead（ひらがなのデザインは雑念の塊）' }
   ];
   /* 字幕用(usermovie)。ジャケットの一覧(CURATED)には出さない。どれも Google Fonts で SIL Open Font License 1.1
-     (2026-11-14 に google/fonts の METADATA.pb で確認。作った画像に OFL はかからず、名前の表示も要らない) */
+     (2026-11-14 に google/fonts の METADATA.pb で確認。作った画像に OFL はかからず、名前の表示も要らない)。
+     ital = 斜体の字形がある(2026-11-14 に css2 の ital で確認)。ない書体を斜体で使うと、ブラウザが字を傾けて代わりにする */
   const MORE = [
     { id: 'biz-udp', family: 'BIZ UDPGothic', label: 'BIZ UDPゴシック', mood: '読みやすい UD 書体', weights: [400, 700] },
-    { id: 'arimo', family: 'Arimo', label: 'Arimo', mood: '定番の字幕（Arial と同じ字幅）', weights: [400, 500, 600, 700], latin: true },
-    { id: 'inter', family: 'Inter', label: 'Inter', mood: '今どきのサンセリフ', weights: [400, 500, 600, 700, 800], latin: true },
-    { id: 'atkinson', family: 'Atkinson Hyperlegible Next', label: 'Atkinson Hyperlegible', mood: '見分けやすさ重視', weights: [400, 500, 600, 700, 800], latin: true },
-    { id: 'jost', family: 'Jost', label: 'Jost', mood: '幾何学的なサンセリフ', weights: [400, 500, 600, 700], latin: true },
-    { id: 'eb-garamond', family: 'EB Garamond', label: 'EB Garamond', mood: 'クラシックなセリフ', weights: [400, 500, 600, 700, 800], serif: true, latin: true },
-    { id: 'courier-prime', family: 'Courier Prime', label: 'Courier Prime', mood: 'タイプライター', weights: [400, 700], latin: true }
+    { id: 'arimo', family: 'Arimo', label: 'Arimo', mood: '定番の字幕（Arial と同じ字幅）', weights: [400, 500, 600, 700], latin: true, ital: true },
+    { id: 'inter', family: 'Inter', label: 'Inter', mood: '今どきのサンセリフ', weights: [400, 500, 600, 700, 800], latin: true, ital: true },
+    { id: 'atkinson', family: 'Atkinson Hyperlegible Next', label: 'Atkinson Hyperlegible', mood: '見分けやすさ重視', weights: [400, 500, 600, 700, 800], latin: true, ital: true },
+    { id: 'jost', family: 'Jost', label: 'Jost', mood: '幾何学的なサンセリフ', weights: [400, 500, 600, 700], latin: true, ital: true },
+    { id: 'eb-garamond', family: 'EB Garamond', label: 'EB Garamond', mood: 'クラシックなセリフ', weights: [400, 500, 600, 700, 800], serif: true, latin: true, ital: true },
+    { id: 'courier-prime', family: 'Courier Prime', label: 'Courier Prime', mood: 'タイプライター', weights: [400, 700], latin: true, ital: true }
   ];
   /* 縦書き用の字形(vert)がない書体では、縦書きで位置や向きが変わる字(句読点・かっこ・長音・小さい仮名)を端末の書体に任せる。
      ファイルには手を加えず、縦書き用の別の名前(family + '-v')を、その字を外した unicode-range で登録する */
@@ -150,7 +151,7 @@
   }
 
   /* ---------------------------------------------------------------- 読み込み */
-  const cssUrl = (family, w) => `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}:wght@${w}&display=swap`;
+  const cssUrl = (family, w, ital) => `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}:${ital ? 'ital,wght@1,' : 'wght@'}${w}&display=swap`;
   const linked = new Map();
   function link(url) {
     if (!linked.has(url)) {
@@ -164,11 +165,11 @@
     return linked.get(url);
   }
   /**
-   * 書体を使える状態にする。ws = 使う太さの配列、text = 使う字。
+   * 書体を使える状態にする。ws = 使う太さの配列、text = 使う字、o.italic = 斜体の字形を読む(斜体の字形がある Google Fonts の書体だけ)。
    * 返り値 { ok, why, hint }。ok が false なら代わりの書体で出ている(why に理由、hint にすること。どちらも句点なし)
    */
-  async function load(id, ws, text) {
-    const f = info(id), sample = text || 'あA';
+  async function load(id, ws, text, o) {
+    const f = info(id), sample = text || 'あA', it = !!(o && o.italic && f.ital), st = it ? 'italic ' : '';
     if (f.kind === 'local') return hasLocal(f.family) ? { ok: true } : { ok: false, why: `この端末に「${f.family}」が見つかりません` };
     if (f.kind === 'file') {
       await fileIndex();
@@ -181,10 +182,10 @@
     }
     const wl = [...new Set(ws.map((w) => nearest(f.weights, w)))];
     try {
-      await Promise.all(wl.map((w) => link(cssUrl(f.family, w))));
-      await Promise.all(wl.map((w) => document.fonts.load(`${w} 40px ${quote(f.family)}`, sample)));
+      await Promise.all(wl.map((w) => link(cssUrl(f.family, w, it))));
+      await Promise.all(wl.map((w) => document.fonts.load(`${st}${w} 40px ${quote(f.family)}`, sample)));
     } catch (e) { return { ok: false, why: '書体を読み込めませんでした', hint: '通信できる状態でお試しください' }; }
-    const ok = wl.every((w) => document.fonts.check(`${w} 40px ${quote(f.family)}`, sample));
+    const ok = wl.every((w) => document.fonts.check(`${st}${w} 40px ${quote(f.family)}`, sample));
     return ok ? { ok: true } : { ok: false, why: '書体を読み込めませんでした', hint: '通信できる状態でお試しください' };
   }
 

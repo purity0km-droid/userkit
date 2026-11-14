@@ -1,6 +1,6 @@
 /* userkit 共通: 短いアニメーション GIF を作る(usermix が使う。Mp4.encode と同じ呼び方)。
-   Gif.encode({ width, height, fps, count, frame(i) → canvas(2d), onProgress(0〜1) }) → Blob(image/gif)。
-   色は 256 色。最初と真ん中のコマから色を選び(メディアンカット)、規則的な網(ベイヤー)でぼかす。
+   Gif.encode({ width, height, fps, count, frame(i) → canvas(2d), onProgress(0〜1), sample }) → Blob(image/gif)。
+   色は 256 色。最初と真ん中のコマ(sample にコマの番号の配列を渡せばそのコマ)から色を選び(メディアンカット)、規則的な網(ベイヤー)でぼかす。
    網は場所で決まるので、動かない所は毎コマ同じ色の番号になる。前のコマと違う四角だけを書き足し、
    四角の中でも前のコマと同じ画素は透明(番号 255)にして軽くする(動く所が上下に離れていても大きくならない) */
 (function () {
@@ -104,9 +104,12 @@
   async function encode(o) {
     const { width: W, height: H, fps, count: N } = o, delay = Math.max(2, Math.round(100 / fps));
     const read = async (i) => { const c = await o.frame(i); return c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data; };
-    // 色は最初と真ん中のコマから選ぶ(動く物の色もそろう)
+    // 色は最初と真ん中のコマから選ぶ(動く物の色もそろう)。写真が替わる動画(usermovie)は、それぞれの写真のコマを渡してもらう
     const TP = 255;   // 透明に使う番号(色は 255 色まで)
-    const pal = quantize(N > 2 ? [await read(Math.floor(N / 2)), await read(0)] : [await read(0)], TP);
+    const picks = Array.isArray(o.sample) && o.sample.length ? o.sample.filter((i) => i >= 0 && i < N) : N > 2 ? [Math.floor(N / 2), 0] : [0];
+    const samples = [];
+    for (const i of picks.length ? picks : [0]) samples.push(await read(i));
+    const pal = quantize(samples, TP);
     const near = mapper(pal.slice());   // 透明の番号は選ばない
     while (pal.length < 256) pal.push([0, 0, 0]);
     const out = bytes();

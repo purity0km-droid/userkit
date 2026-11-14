@@ -33,6 +33,13 @@
 .mov-cut[aria-pressed="true"] span{background:#ff8fc4;color:#2b1020}
 .mov-add{flex:none;display:inline-flex;align-items:center;gap:5px;min-height:40px;padding:0 12px;border:1px dashed rgba(255,255,255,.4);border-radius:10px;background:none;color:rgba(255,255,255,.86);font-size:12px;font-weight:700;white-space:nowrap}
 .mov-add:hover{background:rgba(255,255,255,.08)}
+.mov-rolltile span{letter-spacing:.06em}
+/* エンドロールを流して見るボタン(画面の右下) */
+.mov-play{position:absolute;right:10px;bottom:10px;display:inline-flex;align-items:center;gap:5px;min-height:32px;padding:0 12px;border:1px solid rgba(255,255,255,.35);border-radius:999px;
+  background:rgba(0,0,0,.6);color:#fff;font-size:12px;font-weight:700;line-height:1;white-space:nowrap}
+.mov-play:hover{background:rgba(0,0,0,.78)}
+.mov-play[hidden]{display:none}
+.mov-play .icon{fill:currentColor}
 
 /* ===== 設定の欄 */
 .mov-side{display:flex;flex-direction:column;padding:0}
@@ -77,6 +84,18 @@
 .mov-chips button[aria-pressed="true"]{border-color:var(--primary);background:var(--primary);color:#fff}
 .mov-stackrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .mov-sec .mov-col>.btn{align-self:flex-start}
+/* エンドロールの行(役・見出し / 名前 / 上へ・下へ・消す) */
+.mov-roll-rows{display:flex;flex-direction:column;gap:6px}
+.mov-roll-rows:empty{display:none}
+.mov-roll-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) auto auto auto;gap:4px;align-items:center}
+.mov-roll-row input{min-width:0}
+.mov-roll-row .btn-icon{min-height:30px;width:30px}
+
+/* ===== 動画で保存 */
+.mov-vd{gap:12px}
+.mov-vd .seg{flex-wrap:wrap}
+.mov-vd-out{display:block;max-width:100%;max-height:62vh;margin:0 auto;border-radius:10px;background:#111}
+.mov-warn{color:#8a5a12}
 
 /* ===== talklog から選ぶ */
 dialog.modal.mov-log-dlg{width:min(860px,calc(100vw - 24px));max-height:calc(100vh - 32px)}
