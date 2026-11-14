@@ -3148,10 +3148,13 @@
       const t = typeOf(it);
       if (t === 'store') { const run = runsOf(it, (o) => typeOf(o) === 'hall')[0]; if (run) { const ed = mid(run); put(ed, { k: 'slide', into: ed.into, hinge: 0 }); } }
       if (t === 'ev') { const run = runsOf(it, (o) => typeOf(o) === 'hall' || isOutdoor(typeOf(o), key))[0]; if (run) { const ed = mid(run); put(ed, { k: 'evdoor', into: ed.into, hinge: 0 }); } }
-      // 屋上の階段室の戸。折り返し階段は上り口の側(it.turn)に
+      // 屋上の階段室の戸。折り返し階段は上り口の側(it.turn)に。直階段は降り口(縦なら上の端、横なら左の端)のますの前、なければ横に(2026-11-14 回り段)
       if (t === 'stairs' && key === 'R') {
-        const runs = runsOf(it, (o) => isOutdoor(typeOf(o), key)), run = (it.turn && runs.find((rn) => rn[0].side === it.turn)) || runs[0];
-        if (run) { const ed = run[run.length - 1]; put(ed, { k: 'swing', into: -ed.into, hinge: 0 }); }
+        const runs = runsOf(it, (o) => isOutdoor(typeOf(o), key)), v = it.h >= it.w, all = runs.flat();
+        const front = (x) => (v ? x.side === 't' : x.side === 'l'), side = (x) => (v ? (x.side === 'l' || x.side === 'r') && x.pos === it.y : (x.side === 't' || x.side === 'b') && x.pos === it.x);
+        const run = (it.turn && runs.find((rn) => rn[0].side === it.turn)) || runs[0];
+        const ed = it.turn ? run && run[run.length - 1] : all.find(front) || all.find(side) || (run && run[run.length - 1]);
+        if (ed) put(ed, { k: 'swing', into: -ed.into, hinge: 0 });
       }
     });
     // 窓: 地下と、窓のないと書いた部屋は付けない。南の外壁と、テラスに面した辺を先に
@@ -3461,6 +3464,39 @@
     // どの壁にも戸や開口があれば、戸や開口の割合がいちばん少ない壁に(開き戸の壁は後に)。設備が戸の前に来にくいように
     return SIDES.slice().sort((a, b) => blocked[a] / len[a] - blocked[b] / len[b] || swing.has(a) - swing.has(b) || len[b] - len[a])[0];
   }
+  /* ---------- 直階段の回り段と切断線(2026-11-14。Fable と相談) ---------- */
+  /**
+   * 階 k の直階段(st と同じ所。列はどの階も同じ所)の端 end('up' 上り口・'dn' 降り口)の形。
+   * null = 直(前が廊下か扉。横にも廊下がないときも)、0・1 = その側の廊下へ 30° ずつ 3 段で回す(0 は縦の列の左・横の列の上、1 は右・下)。両横に廊下なら 'hall' の側
+   */
+  function stairTurn(s, k, st, end, A0) {
+    if (!k || !s.plan.floors[k]) return null;
+    const A = A0 || analyze(s, k), vert = st.h >= st.w;
+    const [ex, ey] = end === 'up' ? (vert ? [st.x, st.y + st.h - 1] : [st.x + st.w - 1, st.y]) : [st.x, st.y];
+    const front = end === 'up' ? (vert ? [0, 1] : [1, 0]) : (vert ? [0, -1] : [-1, 0]);
+    // 乗り降りできる隣: 扉のある辺か、壁のない廊下・屋上の床
+    const nb = ([dx, dy]) => {
+      const X = ex + dx, Y = ey + dy, o = A.at(X, Y), e = dx ? `v${dx > 0 ? X : ex},${ey}` : `h${ex},${dy > 0 ? Y : ey}`, op = A.open.get(e);
+      if (op && op.k !== 'window') return o || {};
+      return !A.walls.get(e) && o && /^(hall|deck)/.test(o.id) ? o : null;
+    };
+    if (nb(front)) return null;
+    const sd = (vert ? [[-1, 0], [1, 0]] : [[0, -1], [0, 1]]).map(nb);
+    if (sd[0] && sd[1]) return sd[1].id === 'hall' ? 1 : 0;
+    return sd[0] ? 0 : sd[1] ? 1 : null;
+  }
+  /**
+   * 直階段の描き方(切断線の作法)。上の階がある階は上り口から切断線まで(最下階は切断線の先を薄く直で)、
+   * 中間の階は切断線の先が下の階から来た階段の降り口、最上階は切断線なしで全体。形は階段 1 本ごとに、上り口は下の階・降り口は上の階の割り付けで決める。
+   * 戻り値 { lower, upper, open }: lower・upper は { U, D(stairTurn の形), faint }、open はこの階で乗り降りする [上り口, 降り口] の側
+   */
+  function stairShow(s, key, it, A) {
+    const keys = floorKeys(s.bld), i = keys.indexOf(key), above = i > 0 ? keys[i - 1] : null, below = i < keys.length - 1 ? keys[i + 1] : null;
+    const up = above && { U: stairTurn(s, key, it, 'up', A), D: stairTurn(s, above, it, 'dn') };
+    const dn = below && { U: stairTurn(s, below, it, 'up'), D: stairTurn(s, key, it, 'dn', A) };
+    if (!up) return { lower: dn || { U: null, D: null }, upper: null, open: [null, dn ? dn.D : null] };
+    return { lower: up, upper: dn || { U: up.U, D: null, faint: true }, open: [up.U, dn ? dn.D : null] };
+  }
   /**
    * 部屋の設備(浴槽・便器・洗面台・キッチン・収納の棒など)と、furn のときは家具を描く。
    * 名前を書くのに向いた残りの所 [x, y, w, h] を返す
@@ -3518,30 +3554,73 @@
       if (i > 0) { const q = pt(u * 0.62, cu + sg * 0.25 * lw); g.fillText('UP', q[0], q[1]); }
       if (i < keys.length - 1) { const q = pt(u * 0.62, cd - sg * 0.25 * lw); g.fillText('DN', q[0], q[1]); }
     } else if (t === 'stairs') {
-      // 段と、上る向きの矢印
-      const vert = hh >= w;
-      g.globalAlpha = 0.6;
-      g.beginPath();
-      if (vert) for (let p = y + u * 0.4; p < y + hh - 2; p += u * 0.36) { g.moveTo(x + 2, p); g.lineTo(x + w - 2, p); }
-      else for (let p = x + u * 0.4; p < x + w - 2; p += u * 0.36) { g.moveTo(p, y + 2); g.lineTo(p, y + hh - 2); }
+      // 直階段(上り口は縦なら下の端・横なら右の端)。前が廊下でない端は横の廊下へ 3 段回し、切断線の作法で描く(stairShow)。
+      // a は上り口の辺からの距離、c は列を横切る位置(縦の列は左から、横の列は上から)
+      const sh = stairShow(s, key, it, A), lo = sh.lower, hi = sh.upper;
+      const vert = hh >= w, L = vert ? hh : w, C = vert ? w : hh, K = Math.tan(Math.PI / 6), rr = u / 2;
+      const pt = (a, c) => (vert ? [x + c, y + hh - a] : [x + w - a, y + c]);
+      const seg = (a1, c1, a2, c2) => { const p = pt(a1, c1), q = pt(a2, c2); g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]); };
+      const poly = (P) => P.forEach(([a, c], k) => { const p = pt(a, c); if (k) g.lineTo(p[0], p[1]); else g.moveTo(p[0], p[1]); });
+      // 段の線: 直の所は 0.25 ますほどで等分(け上げ 190 mm ほど)。回り段は内側の角(廊下の側で直の所との境)から 30°・60° の線。廊下に面する辺は出入り口なので引かない
+      const treads = (U, D) => {
+        const a0 = U === null ? 0 : u, a1 = D === null ? L : L - u, n = Math.max(1, Math.round((a1 - a0) / (u * 0.25))), step = (a1 - a0) / n;
+        for (let k = 1; k < n; k++) seg(a0 + k * step, 2, a0 + k * step, C - 2);
+        if (U !== null) { const cs = U ? C : 0, sg = U ? -1 : 1; seg(u, cs, 0, cs + sg * K * u); seg(u, cs, u - K * C, C - cs); seg(u, 2, u, C - 2); }
+        if (D !== null) { const cs = D ? C : 0, sg = D ? -1 : 1; seg(L - u, cs, L, cs + sg * K * u); seg(L - u, cs, L - u + K * C, C - cs); seg(L - u, 2, L - u, C - 2); }
+      };
+      // 上る向きの矢印の点: from・to が null なら上り口・降り口まで(回り段は内側の角を中心に半径 0.5 ますの弧)
+      const walk = (U, D, from, to) => {
+        const P = [];
+        if (from !== null) P.push(pt(from, C / 2));
+        else if (U === null) P.push(pt(u * 0.3, C / 2));
+        else { const cs = U ? C : 0, sg = U ? -1 : 1; for (let d = 17.5; d < 90; d += 6) { const th = (d * Math.PI) / 180; P.push(pt(u - rr * Math.cos(th), cs + sg * rr * Math.sin(th))); } P.push(pt(u, C / 2)); }
+        if (to !== null) P.push(pt(to, C / 2));
+        else if (D === null) P.push(pt(L - u * 0.35, C / 2));
+        else { const cs = D ? C : 0, sg = D ? -1 : 1; for (let d = 0; d <= 72; d += 6) { const th = (d * Math.PI) / 180; P.push(pt(L - u + rr * Math.sin(th), cs + sg * rr * Math.cos(th))); } }
+        return P;
+      };
+      const arrow = (P, root) => {
+        g.beginPath(); g.moveTo(P[0][0], P[0][1]); P.slice(1).forEach((p) => g.lineTo(p[0], p[1])); g.stroke();
+        if (root) circle(P[0][0], P[0][1], u * 0.06, false);
+        const tp = P[P.length - 1], bk = P[P.length - 2], dl = Math.hypot(tp[0] - bk[0], tp[1] - bk[1]) || 1, ux = (tp[0] - bk[0]) / dl, uy = (tp[1] - bk[1]) / dl, ah = u * 0.16;
+        g.beginPath();
+        g.moveTo(tp[0] - ux * ah - uy * ah * 0.6, tp[1] - uy * ah + ux * ah * 0.6); g.lineTo(tp[0], tp[1]); g.lineTo(tp[0] - ux * ah + uy * ah * 0.6, tp[1] - uy * ah - ux * ah * 0.6);
+        g.stroke();
+      };
+      if (!hi) {
+        // 最上階: 切断線なしで全体
+        g.globalAlpha = 0.6; g.beginPath(); treads(lo.U, lo.D); g.stroke();
+        g.globalAlpha = 0.85; arrow(walk(lo.U, lo.D, null, null), true);
+      } else {
+        // 切断線: 2.5 ます目あたりの斜めの破断線。手前は上る階段、先は下から来た階段(最下階は薄く直で、矢印なし)
+        const cm = Math.min(L - u * 1.2, u * 2.5);
+        const brk = [[cm - u * 0.3, 0], [cm + u * 0.03, C / 2 - u * 0.12], [cm - u * 0.03, C / 2 + u * 0.12], [cm + u * 0.3, C]];
+        const clip = (near) => { g.beginPath(); poly((near ? [[0, 0]] : [[L, 0]]).concat(brk, near ? [[0, C]] : [[L, C]])); g.closePath(); g.clip(); };
+        g.save(); clip(true); g.globalAlpha = 0.6; g.beginPath(); treads(lo.U, lo.D); g.stroke(); g.restore();
+        g.save(); clip(false); g.globalAlpha = hi.faint ? 0.25 : 0.6; g.beginPath(); treads(hi.U, hi.D); g.stroke(); g.restore();
+        g.globalAlpha = 0.85;
+        g.beginPath(); poly(brk); g.stroke();
+        arrow(walk(lo.U, lo.D, null, cm - u * 0.22), true);
+        if (!hi.faint) arrow(walk(hi.U, hi.D, cm + u * 0.25, null), false);
+      }
+      // 廊下との境: 直の所は手すりの線で閉じ、この階で乗り降りする回り段のますの辺だけ開ける
+      const n = Math.round(L / u);
+      g.globalAlpha = 0.9; g.beginPath();
+      for (let k = 0; k < n; k++) [0, 1].forEach((sd) => {
+        if ((k === 0 && sh.open[0] === sd) || (k === n - 1 && sh.open[1] === sd)) return;
+        const cx = vert ? it.x : it.x + it.w - 1 - k, cy = vert ? it.y + it.h - 1 - k : it.y;
+        const [dx, dy] = vert ? [sd ? 1 : -1, 0] : [0, sd ? 1 : -1], X = cx + dx, Y = cy + dy, o = A.at(X, Y);
+        const e = dx ? `v${dx > 0 ? X : cx},${cy}` : `h${cx},${dy > 0 ? Y : cy}`;
+        if (o && /^(hall|deck)/.test(o.id) && !A.walls.get(e) && !A.open.get(e)) seg(k * u, sd ? C - 1 : 1, k * u + u, sd ? C - 1 : 1);
+      });
       g.stroke();
-      g.globalAlpha = 0.85;
-      const [ax, ay, bx, by] = vert ? [x + w / 2, y + hh - u * 0.3, x + w / 2, y + u * 0.35] : [x + w - u * 0.3, y + hh / 2, x + u * 0.35, y + hh / 2];
-      g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
-      circle(ax, ay, u * 0.06, false);
-      const ah = u * 0.16;
-      g.beginPath();
-      if (vert) { g.moveTo(bx - ah * 0.6, by + ah); g.lineTo(bx, by); g.lineTo(bx + ah * 0.6, by + ah); }
-      else { g.moveTo(bx + ah, by - ah * 0.6); g.lineTo(bx, by); g.lineTo(bx + ah, by + ah * 0.6); }
-      g.stroke();
-      // 上の階があれば矢印の先に UP、下の階があれば根元に DN
-      const keys = floorKeys(s.bld), i = keys.indexOf(key), fs = Math.max(7, u * 0.24);
+      // UP は上り口、DN は降り口に書く(回り段なら外側の角から、字の幅の向きに 0.36・高さの向きに 0.28 ます。外壁にかからない所)
+      const keys = floorKeys(s.bld), i = keys.indexOf(key), fs = Math.max(7, u * 0.24), oa = vert ? 0.28 : 0.36, oc = vert ? 0.36 : 0.28;
+      const far = (sd) => (sd ? 0 : C) + (sd ? 1 : -1) * u * oc, D0 = hi ? hi.D : lo.D;
       g.globalAlpha = 1;
       g.fillStyle = ink; g.font = `700 ${fs}px ${FONT[style]}`; g.textAlign = 'center'; g.textBaseline = 'middle';
-      const side = vert ? [x + w * 0.76, 0] : [0, y + hh * 0.76];
-      // UP は下の階の上り口(矢印の根元)、DN は上の階の降り口(矢印の先)に書く
-      if (i > 0) g.fillText('UP', vert ? side[0] : ax - u * 0.25, vert ? ay - u * 0.25 : side[1]);
-      if (i < keys.length - 1) g.fillText('DN', vert ? side[0] : bx + u * 0.25, vert ? by + u * 0.25 : side[1]);
+      if (i > 0) { const q = lo.U !== null ? pt(u * oa, far(lo.U)) : pt(u * 0.55, C * 0.76); g.fillText('UP', q[0], q[1]); }
+      if (i < keys.length - 1) { const q = D0 !== null ? pt(L - u * oa, far(D0)) : pt(L - u * 0.6, C * 0.76); g.fillText('DN', q[0], q[1]); }
     } else if (t === 'ev') {
       g.globalAlpha = 0.55;
       g.beginPath(); g.moveTo(x + u * 0.25, y + u * 0.25); g.lineTo(x + w - u * 0.25, y + hh - u * 0.25); g.moveTo(x + w - u * 0.25, y + u * 0.25); g.lineTo(x + u * 0.25, y + hh - u * 0.25); g.stroke();
