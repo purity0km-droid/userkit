@@ -791,16 +791,17 @@
     const bld = s.bld, keys = floorKeys(bld), multi = keys.length > 1, min = footMin(bld);
     const zones = hallZones(roomsOn(s, keys[0]), bld, linksOf(s));
     const base = (BUILDINGS.find(([name]) => name === bld.type) || [0, 0, [10, 9]])[2], ratio = zones ? HALL_RATIO : base[0] / base[1];
-    // 階段の列の幅(案 C は奥行き)。エレベーターのある折り返し階段は、列が 2 ますになるので 3
-    const coreN = turnStairs(bld) && bld.ev ? 3 : 2, coreW = multi && v.core !== 'top' ? coreN : 0, coreD = multi && v.core === 'top' ? coreN : 0;
+    // 階段の列の幅(案 C は奥行き)。折り返し階段は、列が 2 ますになるので 3(2026-11-14 D1)
+    const coreN = turnStairs(bld) ? 3 : 2, coreW = multi && v.core !== 'top' ? coreN : 0, coreD = multi && v.core === 'top' ? coreN : 0;
     // 2 階以上で、玄関も LDK もなく廊下から入る部屋が 3 つ以上ある階(個室の階)は、中廊下(案 A・B は横に 1 行、案 C は縦に 1 列)の分も見込む
     const cellsOn = (k) => roomsOn(s, k).reduce((sum, r) => sum + cellsOf(r), 0);
     const roomy = (k) => { const list = roomsOn(s, k); return multi && k !== 'R' && !list.some((r) => r.type === 'entry' || PASS_ROOM.has(r.type)) && list.filter((r) => !INNER.has(r.type)).length >= 3; };
     const needAt = (W, D) => Math.max(4, ...keys.map((k) => cellsOn(k) + (roomy(k) ? (v.core === 'top' ? D - coreD : W - coreW) : 0)));
     const need = Math.max(4, ...keys.map(cellsOn));   // 縦横比の重さに使う部屋の広さ
     const nearCells = zones ? zones.near.reduce((sum, r) => sum + cellsOf(r), 0) : 0;
-    // EV のない直階段の家は列を階段と WC で切るので、列と廊下は 2×4 ます(WC は部屋の広さに数えてある。2026-11-13)
-    const cutCore = multi && !turnStairs(bld) && !bld.ev ? 8 : 0;
+    // 列を切る家は、列と廊下を核の長さだけ見込む(WC は部屋の広さに数えてある)。EV のない直階段は 2×4 ます(2026-11-13)、
+    // 折り返し階段は 3 ×(階段 3＋踊り場 1、EV があれば +2)(2026-11-14 D1)
+    const cutCore = !cutHome(bld) ? 0 : turnStairs(bld) ? 3 * ((bld.ev ? 2 : 0) + 4) : 8;
     const out = [];
     const range = (fixed) => (fixed ? [clamp(fixed, min, FOOT_MAX)] : Array.from({ length: FOOT_MAX - min + 1 }, (_, i) => min + i));
     range(bld.footW).forEach((W) => range(bld.footD).forEach((D) => {
@@ -859,7 +860,9 @@
     // 1.5 帖以下のシャワールームも 1×4 ます(0.91 × 3.64 m)の帯にはしない(名前も入らない。2026-11-13 公開前の見直し)
     if (x.bath && x.weight <= 1.5 && asp > 3) c += SLIM_COST;
     // トイレは 1×2〜2×2 ます。3 ます以上の長さは細長い(Fable 2026-11-12 の目安)
-    if (x.toilet && Math.max(r.w, r.h) >= 3) c += TOILET_LONG_COST;
+    // 折り返し階段の家の列を切った範囲(ctx.livingHall・entryHalls)では、長いほど重く(1×6 の帯のトイレにしない。2026-11-14 D1 の 23A。
+    // ほかの家にも効かせると、平屋の N5A で 6 帖の洋室が 4×2 になったので絞った)
+    if (x.toilet && Math.max(r.w, r.h) >= 3) c += TOILET_LONG_COST * (ctx.livingHall || ctx.entryHalls ? Math.max(r.w, r.h) - 2 : 1);
     // 6 帖以上の居室(書いた広さか描いた広さ)は幅 2 ます(1.82 m)以下にしない(2×6 の寝室・2×8 の書庫など。Fable 2026-11-13、縦横比の条件は再精査で外した)
     if (x.habit && (x.weight >= 6 || a >= 12) && Math.min(r.w, r.h) <= 2) c += SLIM_ROOM_COST;
     // 4 帖以上の居室と LDK は縦横比 2 まで(5×2 の書斎など。Fable 2026-11-13)
@@ -888,7 +891,10 @@
     // 廊下を通す住まいの玄関(stub)は、廊下の脇の下の端でないと形ごと使えないので、ほかの部屋より強く廊下に寄せる
     // 廊下を通す住まい(ctx.hallCost)のトイレ・洗面所は、LDK やキッチンから入らないよう廊下に寄せる(分け方を決める段階で。2026-11-13 公開前の見直し)。
     // 玄関のある側の帯の下の端で廊下の近く(玄関の脇)なら、玄関から入れるので重くしない(接しているかは割り付けのあとに確かめる)
-    if ((x.hall || x.south) && !touchesHall(r, ctx)) c += x.south ? (x.stub ? 2 * ENTRY_COST : ENTRY_HALL_COST) : x.wet && ctx.hallCost ? (byEntry(r, ctx) ? 0 : WET_HALL_COST) : ctx.hallCost || 25;
+    // ctx.entryHalls があれば、玄関はその廊下(核の横の廊下)に接する(中廊下の先の玄関にしない。2026-11-14 D1)
+    // ctx.livingHall なら、LDK の組は廊下に接する(居室や客間の向こうの LDK にしない。折り返し階段の家の奥の範囲。2026-11-14 D1)。
+    // ctx.guestHall なら、客間は廊下に接する(屋敷の客間は家族の居間を通さず玄関から通す。Fable 2026-11-14 D1)
+    if ((x.hall || x.south) && !touchesHall(r, x.south && ctx.entryHalls ? Object.assign({}, ctx, { halls: ctx.entryHalls }) : ctx)) c += x.south ? (x.stub ? 2 * ENTRY_COST : ENTRY_HALL_COST) : (ctx.livingHall && (x.type === 'ldk-group' || LIVING.has(x.type))) || (ctx.guestHall && x.type === 'guest') ? CUT_HABIT_COST : x.wet && ctx.hallCost ? (byEntry(r, ctx) ? 0 : WET_HALL_COST) : ctx.hallCost || 25;
     // 玄関は南(下)の端で外に面し、幅 1 ます(0.91 m)の帯にしない(玄関ドアが付かない・通路にしか見えない)
     // ctx.entryOut なら、玄関は南の端でなく外壁のどこか(案 C の列を切った手前の範囲。Fable 2026-11-13)
     if (x.south && (ctx.entryOut ? !(r.x === 0 || r.y === 0 || r.x + r.w === ctx.W || r.y + r.h === ctx.D) : r.y + r.h !== ctx.bottom)) c += a * 4 + ENTRY_COST;
@@ -1001,14 +1007,14 @@
   }
   const STORE_LEN = 4;   // 階段の列の余りを収納にする広さ(ます目)。2 帖まで(長い物入れにしない)
   /**
-   * 階段の列の start から end までの余り。屋上は屋上の床。keep(EV・折り返し階段の家)なら STORE_LEN まで廊下に面した収納にして、その先は空き、ほかは全部空き。
-   * place(id, 位置, 長さ) で置き場所を作る。deep は列の幅(折り返し階段とエレベーターの列は 2)
+   * 階段の列の start から end までの余り。屋上は屋上の床。keep(列を切らない EV の直階段の家)なら STORE_LEN まで廊下に面した収納にして、その先は空き、ほかは全部空き。
+   * 列を切る家(EV のない直階段・折り返し階段)は、書いていない収納を列に置かない(あとで部屋が吸うか、収納の候補になる。2026-11-13 列を切る、折り返し階段は 2026-11-14 D1)。
+   * place(id, 位置, 長さ) で置き場所を作る。deep は列の幅
    */
   function coreRest(roof, start, end, place, deep, keep) {
     if (start >= end) return [];
     if (roof) return [place('deck-core', start, end - start)];
     if (keep) { const len = Math.min(end - start, STORE_LEN / (deep || 1)), rest = [place('store', start, len)]; if (start + len < end) rest.push(place('empty-core', start + len, end - start - len)); return rest; }
-    // EV のない直階段の家は、書いていない収納を列に置かない。余りは空き(あとで部屋が吸うか、収納の候補になる。2026-11-13 列を切る)
     return [place('empty-core', start, end - start)];
   }
   /* ---------- 1 階だけの住まいの廊下 ---------- */
@@ -1618,47 +1624,45 @@
   }
   // 折り返し階段にする建物(マンション一棟の RC 造は EV の横の折り返しがふつう、屋敷は踊り場つきの折り返し。2026-11-13 ユーザーが採用)
   const turnStairs = (bld) => floorKeys(bld).length > 1 && (bld.type === 'マンション一棟' || bld.type === '屋敷');
+  // 列を核で切る家: EV のない直階段の家(2026-11-13)と、折り返し階段の家(EV のある家も。2026-11-14 D1)。
+  // EV のある直階段の家は切らない(EV が列と廊下の 2 ます幅を使うので、核の先へ廊下が通らない)
+  const cutHome = (bld) => floorKeys(bld).length > 1 && (turnStairs(bld) || !bld.ev);
   /**
-   * 折り返し階段の列 { out, region, edge }。階段は 2×3 ます(1.82 × 2.73 m)で、上り口と降り口が同じ端(turn の辺)。
-   * 外側の列を上って奥の踊り場で折り返し、廊下の側の列から降り口へ出る(up = 上る列。0 = 左か上)。上り口の前は踊り場の廊下(hall-land)。
-   * 案 A・B: エレベーターがなければ、列と廊下の 2 ます幅の上の端に階段、その下に踊り場と廊下。あれば列を 2 ます幅にして EV・階段・踊り場を並べ、横に廊下。
-   * 案 C: 上の 2 行に階段(右が上り口)と踊り場。エレベーターがあれば EV・階段・踊り場の下に 1 行の廊下
+   * 折り返し階段の核と列 { out, L, hall, region, edge }(D1。2026-11-14 Fable と相談)。幅 2 ますの列に 踊り場(hall-land)・階段・[EV 2×2]・[1 帖の WC] を並べ、
+   * 列の横に幅 1 の廊下。階段は 2×3 ます(1.82 × 2.73 m)で、上り口と降り口が踊り場の側(turn の辺)。外側の列を上って奥で折り返し、内側の列から降りる(up = 上る列)。
+   * 核は玄関の側の端に寄せる: 案 A・B は下の端(下から 踊り場 → 階段 → EV → WC)、案 C は左の端 end 'l'(左から 階段 → 踊り場 → EV → WC)か
+   * 右の端 'r'(右から 踊り場 → 階段 → EV → WC)。WC は奥の端なので、WC の有無で階段と EV の所は変わらない(どの階も同じ所)。L は核の長さ。
+   * cut なら核だけを返し(廊下 hall は核の長さ。残りは layoutCut が部屋に)、cut でなければ列の余り(空き。屋上は屋上の床)と端から端までの廊下も out に入れる
    */
-  function layoutTurnCore(bld, v, W, D, roof, wc) {
-    const out = [], hallId = roof ? 'deck-hall' : 'hall', landId = roof ? 'deck-land' : 'hall-land', ev = bld.ev;
+  function layoutTurnCore(bld, v, W, D, roof, wc, end, cut) {
+    const ev = bld.ev, L = (ev ? 2 : 0) + 4 + (wc ? 1 : 0), out = [];
+    const hallId = roof ? 'deck-hall' : 'hall', landId = roof ? 'deck-land' : 'hall-land';
     if (v.core === 'top') {
-      if (ev) {
-        out.push({ id: 'ev', x: 0, y: 0, w: 2, h: 2 }, { id: 'stairs', x: 2, y: 0, w: 3, h: 2, turn: 'r', up: 0 }, { id: landId, x: 5, y: 0, w: 1, h: 2 });
-        let x = 6;
-        if (wc) { out.push({ id: wc.id, x, y: 0, w: 1, h: 2 }); x += 1; }
-        out.push(...coreRest(roof, x, W, (id, p, len) => ({ id, x: p, y: 0, w: len, h: 2 }), 2, true));
-        out.push({ id: hallId, x: 0, y: 2, w: W, h: 1 });
-        return { out, region: { x: 0, y: 3, w: W, h: D - 3 }, edge: { edgeY: 3 } };
+      const r = end === 'r', x0 = r ? W - L : 0;
+      if (!r) {
+        out.push({ id: 'stairs', x: 0, y: 0, w: 3, h: 2, turn: 'r', up: 0 }, { id: landId, x: 3, y: 0, w: 1, h: 2 });
+        let x = 4;
+        if (ev) { out.push({ id: 'ev', x, y: 0, w: 2, h: 2 }); x += 2; }
+        if (wc) out.push({ id: wc.id, x, y: 0, w: 1, h: 2 });
+      } else {
+        out.push({ id: landId, x: W - 1, y: 0, w: 1, h: 2 }, { id: 'stairs', x: W - 4, y: 0, w: 3, h: 2, turn: 'r', up: 0 });
+        let x = W - 4;
+        if (ev) { x -= 2; out.push({ id: 'ev', x, y: 0, w: 2, h: 2 }); }
+        if (wc) out.push({ id: wc.id, x: x - 1, y: 0, w: 1, h: 2 });
       }
-      out.push({ id: 'stairs', x: 0, y: 0, w: 3, h: 2, turn: 'r', up: 0 }, { id: landId, x: 3, y: 0, w: 1, h: 1 });
-      let x = 4;
-      if (wc) { out.push({ id: wc.id, x, y: 0, w: 2, h: 1 }); x += 2; }
-      out.push(...coreRest(roof, x, W, (id, p, len) => ({ id, x: p, y: 0, w: len, h: 1 }), 1, true));
-      out.push({ id: hallId, x: 3, y: 1, w: W - 3, h: 1 });
-      return { out, region: { x: 0, y: 2, w: W, h: D - 2 }, edge: { edgeY: 2 } };
+      const hall = { id: hallId, x: cut ? x0 : 0, y: 2, w: cut ? L : W, h: 1 };
+      const rest = (a, b) => coreRest(roof, a, b, (id, p, len) => ({ id, x: p, y: 0, w: len, h: 2 }));
+      if (!cut) out.push(...rest(0, x0), ...rest(x0 + L, W), hall);
+      return { out, L, hall, region: { x: 0, y: 3, w: W, h: D - 3 }, edge: { edgeY: 3 } };
     }
-    const left = v.core === 'left';
-    if (ev) {
-      const cx = left ? 0 : W - 2, hx = left ? 2 : W - 3;
-      out.push({ id: 'ev', x: cx, y: 0, w: 2, h: 2 }, { id: 'stairs', x: cx, y: 2, w: 2, h: 3, turn: 'b', up: left ? 0 : 1 }, { id: landId, x: cx, y: 5, w: 2, h: 1 });
-      let y = 6;
-      if (wc) { out.push({ id: wc.id, x: cx, y, w: 2, h: 1 }); y += 1; }
-      out.push(...coreRest(roof, y, D, (id, p, len) => ({ id, x: cx, y: p, w: 2, h: len }), 2, true));
-      out.push({ id: hallId, x: hx, y: 0, w: 1, h: D });
-      return { out, region: { x: left ? 3 : 0, y: 0, w: W - 3, h: D }, edge: { edgeX: left ? 3 : W - 3 } };
-    }
-    const cx = left ? 0 : W - 1, hx = left ? 1 : W - 2;
-    out.push({ id: 'stairs', x: Math.min(cx, hx), y: 0, w: 2, h: 3, turn: 'b', up: left ? 0 : 1 }, { id: landId, x: cx, y: 3, w: 1, h: 1 });
-    let y = 4;
-    if (wc) { out.push({ id: wc.id, x: cx, y, w: 1, h: 2 }); y += 2; }
-    out.push(...coreRest(roof, y, D, (id, p, len) => ({ id, x: cx, y: p, w: 1, h: len }), 1, true));
-    out.push({ id: hallId, x: hx, y: 3, w: 1, h: D - 3 });
-    return { out, region: { x: left ? 2 : 0, y: 0, w: W - 2, h: D }, edge: { edgeX: left ? 2 : W - 2 } };
+    const left = v.core === 'left', cx = left ? 0 : W - 2, hx = left ? 2 : W - 3, y0 = D - L;
+    out.push({ id: landId, x: cx, y: D - 1, w: 2, h: 1 }, { id: 'stairs', x: cx, y: D - 4, w: 2, h: 3, turn: 'b', up: left ? 0 : 1 });
+    let y = D - 4;
+    if (ev) { y -= 2; out.push({ id: 'ev', x: cx, y, w: 2, h: 2 }); }
+    if (wc) out.push({ id: wc.id, x: cx, y: y - 1, w: 2, h: 1 });
+    const hall = { id: hallId, x: hx, y: cut ? y0 : 0, w: 1, h: cut ? L : D };
+    if (!cut) out.push(...coreRest(roof, 0, y0, (id, p, len) => ({ id, x: cx, y: p, w: 2, h: len })), hall);
+    return { out, L, hall, region: { x: left ? 3 : 0, y: 0, w: W - 3, h: D }, edge: { edgeX: left ? 3 : W - 3 } };
   }
   /**
    * 入り口のない部屋を、縦か横に同じ幅で並んだ隣の部屋と入れ替えて直す(list を書き換える)。
@@ -1755,13 +1759,39 @@
    * 列(階段 4 ＋ その階の 1 帖の WC 2)と横の廊下を玄関側の端の長さ L だけにし、残りの L 字の範囲を、
    * 手前 N(列と廊下の横)と奥 F(列の先、全幅。案 C は全高)の 2 つの長方形に分けて部屋を置く。
    * F の部屋の入り口は廊下の突き当たり。F に廊下から入る部屋が 2 つ以上なら、F の N 側の 1 行(案 C は 1 列)を廊下にする(L 字の廊下)。
+   * 折り返し階段の家は、列を幅 2 の核(layoutTurnCore。踊り場・階段・EV・WC)と横の廊下にして同じように切る(2026-11-14 D1)。
    * end: 案 A・B は 'b'(下の端)、案 C は 'l'・'r'。戻り値 { out, cost, cut } か null
    */
   function layoutCut(s, v, W, D, wide, units, items, base, wc, end) {
-    const L = 4 + (wc ? 2 : 0), top = v.core === 'top';
+    const top = v.core === 'top', tc = turnStairs(s.bld) ? layoutTurnCore(s.bld, v, W, D, false, wc, end, true) : null;
+    const L = tc ? tc.L : 4 + (wc ? 2 : 0);
     if ((top ? W : D) - L < 3) return null;
     let col, hall, N, F, nEdge, rightN, rightF, packF, packN, branch, Fb, jIdx;
-    if (!top) {
+    if (tc && !top) {
+      // 折り返し階段・案 A・B: 核は下の端の幅 2 の列(踊り場が下)、廊下はその横。N は廊下の横、F は核の先の全幅
+      const left = v.core === 'left';
+      col = tc.out; hall = tc.hall;
+      N = { x: left ? 3 : 0, y: D - L, w: W - 3, h: L };
+      F = { x: 0, y: 0, w: W, h: D - L };
+      nEdge = tc.edge;
+      rightN = rightF = !left;
+      packN = {}; packF = { toBottom: true };
+      branch = { id: 'hall-branch', x: 0, y: D - L - 1, w: W, h: 1 };
+      Fb = { x: 0, y: 0, w: W, h: D - L - 1 };
+      jIdx = hall.x;
+    } else if (tc) {
+      // 折り返し階段・案 C: 核は上の 2 行の左か右の端、廊下はその下の 1 行。N は廊下の下、F は核の先の全高
+      const r = end === 'r';
+      col = tc.out; hall = tc.hall;
+      N = { x: hall.x, y: 3, w: L, h: D - 3 };
+      F = { x: r ? 0 : L, y: 0, w: W - L, h: D };
+      nEdge = tc.edge;
+      rightN = rightF = r;
+      packN = { packTop: true, entryOut: true }; packF = { packTop: true };
+      branch = { id: 'hall-branch', x: r ? W - L - 1 : L, y: 0, w: 1, h: D };
+      Fb = { x: r ? 0 : L + 1, y: 0, w: W - L - 1, h: D };
+      jIdx = 2;
+    } else if (!top) {
       const left = v.core === 'left', cx = left ? 0 : W - 1, hx = left ? 1 : W - 2, bot = end !== 't', y0 = bot ? D - L : 0;
       col = [{ id: 'stairs', x: cx, y: bot ? D - 4 : 0, w: 1, h: 4 }];
       if (wc) col.push({ id: wc.id, x: cx, y: bot ? D - 6 : 4, w: 1, h: 2 });
@@ -1795,7 +1825,9 @@
     const habitIn = (list) => list.some((u) => kidsOf(u).some((x) => x.habit));
     const shortOf = (r) => Math.min(r.w, r.h);
     // F に廊下から入る組の数(LDK があれば、水回りでない部屋は LDK から入れる)
-    const needF = (list) => { const liv = list.some(isLiving); return list.filter((u) => u.hall && (isLiving(u) || !liv || kidsOf(u).some((x) => WET_SIDE.has(x.type)))).length; };
+    // 折り返し階段の家(屋敷・マンション一棟)の客間も、LDK からでなく廊下から入る(Fable 2026-11-14 D1)
+    const guest = (x) => !!tc && x.type === 'guest';
+    const needF = (list) => { const liv = list.some(isLiving); return list.filter((u) => u.hall && (isLiving(u) || !liv || kidsOf(u).some((x) => WET_SIDE.has(x.type) || guest(x)))).length; };
     const needN = (list) => list.filter((u) => u.hall || mustN(u)).length;
     const cands = [];
     const masks = [];
@@ -1821,8 +1853,9 @@
     let best = null;
     cands.slice(0, BRANCH_TRIES).forEach(({ A, B, br }) => {
       const halls = br ? [hall, branch] : [hall];
-      const pN = Object.assign({}, base, nEdge, packN, { halls });
-      const pF = Object.assign({}, base, packF, { halls });
+      // 折り返し階段の家は、玄関を核の横の廊下に接するように(上り口のすぐ前に)。手前の範囲の廊下から入る部屋も廊下に寄せる(2026-11-14 D1)
+      const pN = Object.assign({}, base, nEdge, packN, { halls }, tc ? { entryHalls: [hall], hallCost: HALL_TOUCH, guestHall: true } : {});
+      const pF = Object.assign({}, base, packF, { halls }, tc ? { livingHall: true, guestHall: true } : {});
       const fN = expandGroups(fill(N, A, pN, rightN, 'empty-n', wide), A, pN, wide);
       const fF = expandGroups(fill(br ? Fb : F, B, pF, rightF, 'empty-f', wide), B, pF, wide);
       let rooms = fN.out.concat(fF.out), hallObjs = [hall], cells = L;
@@ -1835,8 +1868,9 @@
           if (!x || !x.hall || sharesEdge(o, hall)) return;
           for (let i = 0; i < span; i++) if (sharesEdge(o, at(i))) { lo = Math.min(lo, i); hi = Math.max(hi, i); }
         });
+        // 折り返し階段は上り口も降り口も核の中の踊り場にあるので、列の側の端まで通さなくてよい
         const colSide = top ? (end === 'r' ? span - 1 : 0) : (v.core === 'left' ? 0 : span - 1);
-        if (!wc) { lo = Math.min(lo, colSide); hi = Math.max(hi, colSide); }
+        if (!wc && !tc) { lo = Math.min(lo, colSide); hi = Math.max(hi, colSide); }
         const b2 = top ? { id: 'hall-branch', x: branch.x, y: lo, w: 1, h: hi - lo + 1 } : { id: 'hall-branch', x: lo, y: branch.y, w: hi - lo + 1, h: 1 };
         hallObjs = [hall, b2];
         cells += hi - lo + 1;
@@ -1849,7 +1883,9 @@
       if (ent && !(ent.x === 0 || ent.y === 0 || ent.x + ent.w === W || ent.y + ent.h === D)) return;
       // 手前の範囲の余り(上に階が載ると外にできず、納戸の候補になる)は 4 ますを超える分を重く
       const nLeft = fN.out.filter((o) => /^empty/.test(o.id)).reduce((a, o) => a + o.w * o.h, 0);
-      const cut = cutOffCount(rooms.concat(hallObjs), items) + (entryApart(list, items) ? APART_CUT : 0);
+      // 客間が廊下にも玄関にも(続き間の)和室にも接しなければ、通り抜けに数える(LDK からしか入れない客間にしない)
+      const guestCut = rooms.filter((o) => { const x = items.find((it) => it.id === o.id); return x && guest(x) && !hallObjs.concat(col).some((h) => isHall(h.id) && sharesEdge(o, h)) && !rooms.some((q) => q !== o && ['entry', 'washitsu'].includes((items.find((it) => it.id === q.id) || {}).type) && sharesEdge(o, q)); }).length;
+      const cut = cutOffCount(rooms.concat(hallObjs), items) + (entryApart(list, items) ? APART_CUT : 0) + guestCut;
       const plan = { out: list, cost: fN.cost + fF.cost + cells * BRANCH_CELL + Math.max(0, nLeft - 4) * N_LEFT + cut * CUT_FOOT, cut };
       if (!best || betterFloor(plan, best)) best = plan;
     });
@@ -1868,17 +1904,21 @@
     const roof = key === 'R';
     // 1 帖ほどのトイレは、階段の列の階段の先に置く(どの階も同じ所なので上下に重なる)
     const smallWc = (r) => r.type === 'toilet' && (r.tatami || ROOMS.toilet[2]) <= 1.5;
-    const wc = multi && !roof ? list.find(smallWc) : null;
+    let wc = multi && !roof ? list.find(smallWc) : null;
     if (wc) list.splice(list.indexOf(wc), 1);
-    // どこかの階の列にトイレがあれば、トイレのない階はその所を収納にして、列の使う長さを全部の階でそろえる(残りの欠き込みがそろう)
-    // EV のない直階段の家は、トイレのない階に store-w を置かない(列を切るので。Fable 2026-11-13)。EV・折り返し階段の家は列の収納を今のまま(keepCol)
-    const keepCol = multi && (!!ev || turnStairs(bld));
+    // どこかの階の列にトイレがあれば、トイレのない階はその所を収納にして、列の使う長さを全部の階でそろえる(残りの欠き込みがそろう)。
+    // 列を切る家(EV のない直階段・折り返し階段)は、トイレのない階に store-w を置かない(2026-11-13、折り返し階段は 2026-11-14 D1)。EV の直階段の家は列の収納を今のまま(keepCol)
+    const keepCol = multi && !cutHome(bld);
     const wcSlot = keepCol && !roof && !wc && floorKeys(bld).some((k) => k !== 'R' && roomsOn(s, k).some(smallWc)) ? { id: 'store-w' } : null;
+    const tEnd = end ? end[0] : v.core === 'top' ? 'l' : 'b';
+    let tCore = null;
     if (multi && turnStairs(bld)) {
-      const core = layoutTurnCore(bld, v, W, D, roof, wc || wcSlot);
-      out.push(...core.out);
-      region = core.region;
-      if (!roof) Object.assign(pref, core.edge, { halls: core.out.filter((o) => isHall(o.id)) });
+      tCore = layoutTurnCore(bld, v, W, D, roof, wc, tEnd, false);
+      // 列に WC まで入らない短い足もとは、WC をほかの部屋と同じに置く
+      if (wc && tCore.L > (v.core === 'top' ? W : D)) { list.push(wc); wc = null; tCore = layoutTurnCore(bld, v, W, D, roof, null, tEnd, false); }
+      out.push(...tCore.out);
+      region = tCore.region;
+      if (!roof) Object.assign(pref, tCore.edge, { halls: tCore.out.filter((o) => isHall(o.id)) });
     } else if (multi && v.core === 'top') {
       // 北(上)の端の 1 行に、エレベーター(左端の 2×2)・直階段(4×1)・トイレ・収納を並べ、その下に廊下。屋上は階段室だけ
       const ex = ev ? 2 : 0;
@@ -1905,8 +1945,10 @@
       if (!roof) pref.edgeX = left ? 2 : W - 2;
     }
     const hasEntry = list.some((r) => r.type === 'entry');
+    // 2 階建て以上で、洗面所のない階の 1.5 帖以下の浴室(シャワールーム)は、洗面所と組にならないので廊下から入る(居室の奥にしない。2026-11-14 D1 の 23 の 2 階)
+    const loneShower = (r) => multi && r.type === 'bath' && (r.tatami || ROOMS.bath[2]) <= 1.5 && !list.some((x) => x.type === 'wash');
     const toItem = (r) => ({
-      id: r.id, type: r.type, weight: r.tatami || ROOMS[r.type][2], south: r.type === 'entry', cand: !!r.cand, hall: !INNER.has(r.type), noSlim: NO_SLIM.has(r.type),
+      id: r.id, type: r.type, weight: r.tatami || ROOMS[r.type][2], south: r.type === 'entry', cand: !!r.cand, hall: !INNER.has(r.type) || loneShower(r), noSlim: NO_SLIM.has(r.type),
       habit: isHabit(r),
       outdoor: r.type === 'terrace' || r.type === 'garden', far: hasEntry && (r.type === 'terrace' || r.type === 'garden'), toilet: r.type === 'toilet',
       wetNear: hasEntry && !multi && (ROOMS[r.type][1] === 'wet' || r.type === 'kitchen'), bath: r.type === 'bath', forBath: r.forBath,
@@ -1939,12 +1981,12 @@
       if (br) br.cut = cutAll(br.out);
       if (br && (br.cut < best.cut || (br.cut === best.cut && br.cost + BRANCH_MARGIN < best.cost))) best = br;
     }
-    // EV のない直階段の家は、列を階段と WC で切った形と比べる(通り抜けの少ない方、同じなら軽い方。2026-11-13)。
-    // 切らない形には、長い廊下と列の余りの分を足す
+    // 列を切る家は、列を核(直階段は階段と WC、折り返し階段は踊り場・階段・EV・WC)で切った形と比べる(通り抜けの少ない方、同じなら軽い方。2026-11-13、折り返し階段は 2026-11-14 D1)。
+    // 切らない形には、長い廊下と列の余りの分を足す(折り返し階段の列は幅 2)
     let fin = { out: out.concat(best.out), cost: best.cost + best.cut * CUT_FOOT, cut: best.cut, items };
-    if (end && !/0$/.test(end) && !ev && !turnStairs(bld)) {
-      const L = 4 + (wc ? 2 : 0), span = v.core === 'top' ? W : D;
-      fin.cost += (span - L) * (BRANCH_CELL + COL_EMPTY) + darkRooms(fin.out, items, W, D) * DARK_COST;
+    if (end && !/0$/.test(end) && cutHome(bld)) {
+      const L = tCore ? tCore.L : 4 + (wc ? 2 : 0), span = v.core === 'top' ? W : D;
+      fin.cost += (span - L) * (BRANCH_CELL + (tCore ? 2 : 1) * COL_EMPTY) + darkRooms(fin.out, items, W, D) * DARK_COST;
       const base = { bottom: D, anchors, W, D };
       // WC は列に入れる形と、ほかの部屋と同じに置く形(列は階段だけ。L = 4)の両方を試す
       const tries = [[units, items, wc]];
@@ -2007,8 +2049,8 @@
   function absorbFloor(s, key, list, W, D) {
     const rooms = new Map(roomsOn(s, key).map((r) => [r.id, r]));
     const items = list.map((o) => Object.assign({}, o));
-    // EV のない直階段の家は、列の余り(empty-core)と切った廊下の端(empty-t)も、外や屋根にしない印 I にする(外形の凹み角を増やさない。2026-11-13)
-    const colInner = floorKeys(s.bld).length > 1 && !turnStairs(s.bld) && !s.bld.ev;
+    // 列を切る家は、列の余り(empty-core)と切った廊下の端(empty-t)も、外や屋根にしない印 I にする(外形の凹み角を増やさない。2026-11-13、折り返し階段は 2026-11-14 D1)
+    const colInner = cutHome(s.bld);
     const innerId = (id) => /^empty-in/.test(id) || (colInner && /^empty-(core|t\d)/.test(id));
     const m = gridOf(items, W, D).map((o) => (o && innerId(o.id) ? 'I' : o && /^empty/.test(o.id) ? 'E' : o));
     if (!m.includes('E') && !m.includes('I')) return items;
@@ -2135,7 +2177,8 @@
     });
     const solid = (key, i) => { const c = kinds[key][i]; return c !== 'E' && c !== 'O' && c !== 'R'; };
     const under = (key, i) => { const c = kinds[key][i]; return c !== 'O' && c !== 'R'; };
-    const smallNotch = ups.length > 1 && !turnStairs(bld) && !bld.ev;
+    // 列を切る家(EV のない直階段・折り返し階段)は、小さな欠き込みを候補に戻す(2026-11-13、折り返し階段は 2026-11-14 D1)
+    const smallNotch = ups.length > 1 && cutHome(bld);
     if (!keepsBox(bld)) ups.forEach((key, n) => {
       const m = kinds[key], seen = new Array(W * D).fill(false), q = [];
       // 上の階に部屋がある所は外にも屋根にもしない(部屋が宙に浮くので)
@@ -2190,6 +2233,16 @@
       // 地下は外形を引っ込めないので、つながった候補を 1 つの形にまとめる(名前は合わせた広さで 1 回。Fable 2026-11-13)
       // EV のない直階段の家は、地上の階も、列の頭と切った廊下の端などのつながった候補を 1 つにまとめる(小さな収納がばらばらに並ばないように)
       if (key.startsWith('B') || smallNotch) groupSpares(add);
+      // 折り返し階段の家で、玄関と廊下の両方に接する候補(つながった物はまとめて、12 帖まで)は、玄関ホール・階段ホールに当たるので「ホール」(Fable 2026-11-14 D1 の 23A・23C)
+      if (turnStairs(bld)) {
+        const typeOfIt = (o) => (s.rooms.find((r) => r.id === o.id) || {}).type;
+        const ent = items.filter((o) => typeOfIt(o) === 'entry'), halls = items.filter((o) => isHall(o.id)), groups = new Map();
+        if (ent.length) add.filter((o) => /^spare/.test(o.id)).forEach((o) => { const g = o.grp || o.id; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(o); });
+        groups.forEach((list) => {
+          const touch = (arr) => list.some((q) => arr.some((o) => sharesEdge(q, o)));
+          if (list.reduce((a, q) => a + q.w * q.h, 0) <= 24 && touch(ent) && touch(halls)) list.forEach((q) => { q.name = 'ホール'; });
+        });
+      }
       floors[key] = items.concat(add);
     });
     // 屋上: すぐ下の階の外・屋根の上は外にする
@@ -2221,7 +2274,7 @@
     };
     // EV のない直階段の家は、廊下の端のますを、そこに接する物(部屋・階段の要るます・ほかの廊下)がほかの廊下のますにも接している間、1 つずつ切る。
     // 部屋ごとに廊下に接するますが 1 つ(階段・玄関に近い所)残るので、扉はそこに付く(Fable 2026-11-13)
-    if (floorKeys(s.bld).length > 1 && !turnStairs(s.bld) && !s.bld.ev && key !== undefined) return trimHalls2(s, list, W, D, key, m, needs);
+    if (cutHome(s.bld) && key !== undefined) return trimHalls2(s, list, W, D, key, m, needs);
     const out = [];
     list.forEach((h) => {
       if (h.id !== 'hall' && h.id !== 'hall-branch') { out.push(h); return; }
@@ -2333,6 +2386,30 @@
       const host = ['bath', 'wash'].map((tp) => out.find((o) => { const r = rooms.get(o.id); return r && r.type === tp && unsized(r) && fits(o) && o.w * o.h + len <= WET_TRIM_MAX; })).find(Boolean);
       Object.assign(t, horiz ? { x: fromA ? t.x : t.x + len, w: keep } : { y: fromA ? t.y : t.y + len, h: keep });
       if (host) Object.assign(host, { x: Math.min(host.x, rest.x), y: Math.min(host.y, rest.y), w: horiz ? host.w : host.w + 1, h: horiz ? host.h + 1 : host.h });
+      else out.push(Object.assign({ id: `empty-wc-${t.id}` }, rest));
+    });
+    // 折り返し階段の家は、書いた広さを超えた長さ 3 以上のトイレ(2×3 など)も、廊下・玄関の側の端を書いた広さだけ残して縮める。
+    // 余りは辺いっぱいに接して長方形のままになる書いていない浴室・洗面所へ、なければ空き(隣が吸うか候補になる。Fable 2026-11-14 D1 の 4C・9B)
+    if (turnStairs(s.bld)) out.filter((t) => { const r = rooms.get(t.id); return r && !r.cand && r.type === 'toilet' && Math.max(t.w, t.h) >= 3 && Math.min(t.w, t.h) >= 2 && t.w * t.h > cellsOf(r) + 1; }).forEach((t) => {
+      const r = rooms.get(t.id), horiz = t.w > t.h, short = horiz ? t.h : t.w, n = horiz ? t.w : t.h;
+      const keep = Math.max(2, Math.ceil(cellsOf(r) / short)), len = n - keep;
+      if (len <= 0) return;
+      const part = (from, l) => (horiz ? { x: t.x + from, y: t.y, w: l, h: t.h } : { x: t.x, y: t.y + from, w: t.w, h: l });
+      const touchesWalk = (q) => {
+        for (let y = q.y; y < q.y + q.h; y++) for (let x = q.x; x < q.x + q.w; x++) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const o = at(x + dx, y + dy); if (o && o !== t && walk(o)) return true; }
+        return false;
+      };
+      const a = touchesWalk(part(0, keep)), b = touchesWalk(part(n - keep, keep));
+      if (!a && !b) return;
+      const rest = a ? part(keep, len) : part(0, len);
+      Object.assign(t, a ? part(0, keep) : part(len, keep));
+      const host = out.find((o) => {
+        const q = rooms.get(o.id);
+        if (!q || !['bath', 'wash'].includes(q.type) || !unsized(q) || o.w * o.h + rest.w * rest.h > WET_TRIM_MAX) return false;
+        return (o.x === rest.x && o.w === rest.w && (o.y + o.h === rest.y || o.y === rest.y + rest.h)) || (o.y === rest.y && o.h === rest.h && (o.x + o.w === rest.x || o.x === rest.x + rest.w));
+      });
+      if (host && host.x === rest.x && host.w === rest.w) Object.assign(host, { y: Math.min(host.y, rest.y), h: host.h + rest.h });
+      else if (host) Object.assign(host, { x: Math.min(host.x, rest.x), w: host.w + rest.w });
       else out.push(Object.assign({ id: `empty-wc-${t.id}` }, rest));
     });
     return out;
@@ -2459,6 +2536,50 @@
   /** 図に記録した住戸の窓の面(古い保存と住戸でない建物は null) */
   const facesOf = (s) => (s.plan && s.plan.faces && UNIT_TYPES.has(s.bld.type) ? { faces: s.plan.faces, corner: s.plan.corner } : null);
   /**
+   * 列を切らない 2 階以上の家(EV のある直階段)で、廊下の端から続く、列の収納(と空き・候補)にしか接しないますを、
+   * そこにしか通じない列の収納ごと外す(収納にしか行かない廊下の尾。Fable 2026-11-14 D1 の 08A)。外したますは、上の階が建物なら収納の候補、
+   * 下の階が建物なら屋根、どちらでもなければ外(地下は候補)。足もとを選んだあとにだけかける(足もとの選び方を変えない)。floors を書き換える
+   */
+  function dropStoreTails(s, floors, W, D) {
+    const keys = floorKeys(s.bld).filter((k) => k !== 'R'), ups = keys.filter((k) => /^\d+$/.test(k)).sort((a, b) => a - b);
+    const grids = {};
+    keys.forEach((k) => { grids[k] = gridOf(floors[k] || [], W, D); });
+    const solid = (k, i) => { const o = grids[k] && grids[k][i]; return !!o && !/^(empty|out|roof|spare)/.test(o.id); };
+    const weak = (o) => !o || /^(store|empty|out|roof|spare)/.test(o.id);
+    keys.forEach((key) => {
+      const list = floors[key] || [], m = grids[key], at = (x, y) => (x < 0 || y < 0 || x >= W || y >= D ? null : m[y * W + x]);
+      const drop = new Set(), keepHalls = [];
+      list.forEach((h) => {
+        if (h.id !== 'hall' && h.id !== 'hall-branch') return;
+        const vert = h.h >= h.w, n = vert ? h.h : h.w, cell = (i) => (vert ? [h.x, h.y + i] : [h.x + i, h.y]);
+        const live = (i) => { const [x, y] = cell(i); return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const o = at(x + dx, y + dy); return o && o !== h && !weak(o); }); };
+        let a = 0, b = n - 1;
+        while (a <= b && !live(a)) a++;
+        while (b >= a && !live(b)) b--;
+        if (a > b || (a === 0 && b === n - 1)) { keepHalls.push(h); return; }
+        for (let i = 0; i < n; i++) if (i < a || i > b) { const [x, y] = cell(i); drop.add(y * W + x); }
+        keepHalls.push(vert ? Object.assign({}, h, { y: h.y + a, h: b - a + 1 }) : Object.assign({}, h, { x: h.x + a, w: b - a + 1 }));
+      });
+      if (!drop.size) return;
+      // 残る廊下に接しなくなった列の収納も外す
+      const stores = list.filter((o) => /^store/.test(o.id) && !keepHalls.some((hl) => isHall(hl.id) && sharesEdge(o, hl)) && !list.some((q) => isHall(q.id) && q.id !== 'hall' && q.id !== 'hall-branch' && sharesEdge(o, q)));
+      stores.forEach((o) => { for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) drop.add(y * W + x); });
+      const n = ups.indexOf(key), mark = new Array(W * D).fill('');
+      drop.forEach((i) => {
+        const above = n >= 0 && ups.slice(n + 1).some((k) => solid(k, i)), below = n > 0 && solid(ups[n - 1], i);
+        mark[i] = n < 0 || above ? 'S' : below ? 'R' : 'O';
+      });
+      const rest = list.filter((o) => o.id !== 'hall' && o.id !== 'hall-branch' && !stores.includes(o)).concat(keepHalls.filter((h) => isHall(h.id)));
+      const add = [];
+      rectsOf(mark, W, D, (c) => c === 'O').forEach((q, i) => add.push(Object.assign({ id: `out-st${i}` }, q)));
+      rectsOf(mark, W, D, (c) => c === 'R').forEach((q, i) => add.push(Object.assign({ id: `roof-st${i}` }, q)));
+      rectsOf(mark, W, D, (c) => c === 'S').forEach((q, i) => add.push(Object.assign({ id: `spare-st${i}`, name: storeName(q, rest, s) }, q)));
+      floors[key] = rest.concat(add);
+      // 上の階から順に見るので、下の階の「上の階が建物か」に外した所を反映する
+      grids[key] = gridOf(floors[key], W, D);
+    });
+  }
+  /**
    * 案を作る: 階ごとに { id, x, y, w, h } の並び。id は部屋の id か、決まった物の名前(stairs など)。
    * 足もとは候補を実際に割り付けて選ぶ。指定の広さから 1 畳を超えてずれる部屋が残ったら、もっと広く探し直す。
    * 方角が書いてあり、北の向きが自動(s.northAuto が false でない)なら、北の向きも 4 つ試して選び、s.north を書き換える
@@ -2479,9 +2600,9 @@
     const tried = [];   // 足もとごとのいちばん軽い重さ(探し直す足もとを絞るため)
     // 直階段の列(2 階以上で折り返し階段でない家)。案 A・B は玄関を下の端に寄せるので、階段を先に下の端へ
     const straight = floorKeys(s.bld).length > 1 && !turnStairs(s.bld), rev = straight && v.core !== 'top';
-    // EV のない直階段の家は、列の端を決めて割り付ける(案 A・B は下、案 C は左と右を試す)
+    // 列を切る家(EV のない直階段・折り返し階段。2026-11-14 D1)は、列の端を決めて割り付ける(案 A・B は下、案 C は左と右を試す)
     // 方角を書いた家は、切らない形(末尾 0)も全体で比べ、方角の位置関係を守れる方を選ぶ(切る形は方角を見ずに割り付けるため。11A・15A・15B)
-    const ends0 = straight && !s.bld.ev ? (v.core === 'top' ? ['l', 'r'] : ['b']) : [null];
+    const ends0 = cutHome(s.bld) ? (v.core === 'top' ? ['l', 'r'] : ['b']) : [null];
     const ends = compass && ends0[0] ? ends0.concat(ends0.map((e) => e + '0')) : ends0;
     const search = (wide, only) => {
       let best = null;
@@ -2517,7 +2638,7 @@
           let cost = plan.cost;
           if (compass && !hallHome) cost += brokenLinks(s, plan.floors, { foot: [W, D], north }).filter((l) => isCompass(l.b)).length * LINK_COST;
           // 方角を書いた 2 階以上の家で、階段の列が南の辺に来る向きは、位置関係 1 つ分重く(11A。Fable 2026-11-13)
-          if (compass && straight && { left: 3, right: 1, top: 0 }[v.core] === (north + 2) % 4) cost += LINK_COST;
+          if (compass && floorKeys(s.bld).length > 1 && { left: 3, right: 1, top: 0 }[v.core] === (north + 2) % 4) cost += LINK_COST;
           footBest = Math.min(footBest, cost);
           if (!best || cost < best.cost) best = { W, D, floors: plan.floors, cost, north };
         });
@@ -2550,6 +2671,8 @@
       if (more.cost < best.cost && offRooms(s, more.floors).length < offRooms(s, best.floors).length) best = more;
     }
     if (norths.length > 1 || (!compass && auto)) s.north = best.north;
+    // 列を切らない 2 階以上の家(EV のある直階段)は、選んだ案だけ、収納にしか行かない廊下の尾を収納ごと外す(足もとの選び方は変えない)
+    if (floorKeys(s.bld).length > 1 && !cutHome(s.bld)) dropStoreTails(s, best.floors, best.W, best.D);
     // バルコニーなどを外に付ける(図の範囲が広がることがある。body は建物の足もと)
     const fin = attachOutdoor(s, best.floors, best.W, best.D, best.north);
     return Object.assign({ variant: vi, foot: [fin.W, fin.D], body: [best.W, best.D], floors: fin.floors }, unitFaces(s, fin.floors, best.north));
@@ -2958,11 +3081,14 @@
     const acrossEd = (ed) => { const [x, y] = ed.e.slice(1).split(',').map(Number); return ed.e[0] === 'h' ? (ed.into > 0 ? [x, y - 1] : [x, y]) : (ed.into > 0 ? [x - 1, y] : [x, y]); };
     // EV のない直階段の家の廊下に開く扉は、玄関(なければ階段の降り口、それもなければ上り口)に近い端に(Fable 2026-11-13)
     const anchor = (() => {
-      if (floorKeys(s.bld).length < 2 || turnStairs(s.bld) || s.bld.ev) return null;
+      if (!cutHome(s.bld)) return null;
       const e = real.find((o) => typeOf(o) === 'entry');
       if (e) return [e.x + e.w / 2, e.y + e.h / 2];
       const st = real.find((o) => o.id === 'stairs');
       if (!st) return null;
+      // 折り返し階段は上り口も降り口も踊り場の側(2026-11-14 D1)
+      const land = st.turn && real.find((o) => o.id === 'hall-land');
+      if (land) return [land.x + land.w / 2, land.y + land.h / 2];
       const keys = floorKeys(s.bld), fi = keys.indexOf(key), v = st.h >= st.w;
       return fi < keys.length - 1 ? [st.x + 0.5, st.y + 0.5] : v ? [st.x + 0.5, st.y + st.h - 0.5] : [st.x + st.w - 0.5, st.y + 0.5];
     })();
