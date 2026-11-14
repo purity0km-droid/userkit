@@ -45,7 +45,8 @@
   const HISTORY_MAX = 60;
 
   /* ================================================================ 状態 */
-  const images = [];   // {id,name,src,w,h,rgba,gray,masks,undo,redo,comp,dirty,thumb,detecting}
+  // {id,name,src,w,h,ow,oh(元の寸法),rgba,gray,masks,undo,redo,comp,dirty,ver,blob,blobVer,thumb,detecting,cut,splits}
+  const images = [];
   let cur = null;
   let selectedId = null;
   const view = { scale: 1, tx: 0, ty: 0 };
@@ -55,6 +56,14 @@
   const mk = (w, hgt) => { const c = document.createElement('canvas'); c.width = Math.max(1, w); c.height = Math.max(1, hgt); return c; };
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const selMask = () => (cur && selectedId ? cur.masks.find((m) => m.id === selectedId) : null);
+  const shrinkPct = (w, ow) => Math.min(99, Math.round((w / ow) * 100));
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  /** kit.js に無い絵(はさみ)。U.icon と同じ形の svg */
+  function scissorsIcon(size) {
+    const s = icon('', size);
+    s.innerHTML = '<circle cx="6.5" cy="6.5" r="2.5"/><circle cx="6.5" cy="17.5" r="2.5"/><path d="M8.6 8 20 18M8.6 16 20 6"/>';
+    return s;
+  }
 
   function getRGBA(e) {
     if (!e.rgba) {
@@ -253,7 +262,8 @@
     }
     return e.comp;
   }
-  const changed = (e) => { e = e || cur; if (!e) return; e.dirty = true; scheduleRender(); updateThumb(e); };
+  // ver は囲みを変えるたびに増やす(保存用の PNG を作り直すかの目印)
+  const changed = (e) => { e = e || cur; if (!e) return; e.dirty = true; e.ver++; scheduleRender(); updateThumb(e); };
 
   /* ================================================================ 履歴 */
   const snap = (masks) => masks.map((m) => Object.assign({}, m, { _c: null, pts: m.pts ? m.pts.map((p) => p.slice()) : undefined }));
@@ -316,6 +326,7 @@
   const autoBox = h('input', { type: 'checkbox', checked: settings.auto });
   const invertBox = h('input', { type: 'checkbox', checked: settings.invert });
   const threshIn = h('input', { type: 'range', min: 0.6, max: 0.95, step: 0.01, value: settings.threshold, 'aria-label': '見つける厳しさ' });
+  const sizeInfo = h('p.side-hint.size-info');
 
   const side = h('aside.mask-side',
     h('section.side-card',
@@ -339,7 +350,9 @@
     h('section.side-card',
       h('h2', '保存'),
       h('label.check', outlineBox, '囲みの枠を表示する(保存画像には入りません)'),
+      sizeInfo,
       h('button.btn.btn-primary.full', { type: 'button', onclick: saveCurrent }, icon('download'), 'この画像を保存'),
+      h('button.btn.btn-outline.btn-sm.full', { type: 'button', onclick: openSplit }, scissorsIcon(), '分けて保存…'),
       h('button.btn.btn-outline.btn-sm.full', { type: 'button', onclick: saveAll }, 'すべての画像を保存')));
 
   const work = h('div.mask-work', { hidden: true }, toolbar, h('div.mask-body', stage, side));
@@ -411,6 +424,7 @@
         const url = URL.createObjectURL(f);
         const img = await U.loadImage(url);
         let src = img, w = img.naturalWidth, hh = img.naturalHeight;
+        const ow = w, oh = hh;
         if (w * hh > MAX_AREA) {
           const s = Math.sqrt(MAX_AREA / (w * hh));
           w = Math.floor(w * s); hh = Math.floor(hh * s);
@@ -418,11 +432,12 @@
           c.getContext('2d').drawImage(img, 0, 0, w, hh);
           src = c;
           URL.revokeObjectURL(url);
-          U.toast('大きな画像なので、少し縮小して読み込みました');
+          U.toast(`大きな画像なので、${shrinkPct(w, ow)}% に縮小して読み込みました（${ow} × ${oh} → ${w} × ${hh} px）`);
         }
         const e = {
           id: U.uid(), name: (f.name || 'image').replace(/\.[^.]+$/, ''), src, url: src === img ? url : null,
-          w, h: hh, rgba: null, gray: null, masks: [], undo: [], redo: [], comp: null, dirty: true, thumb: null, detecting: false
+          w, h: hh, ow, oh, rgba: null, gray: null, masks: [], undo: [], redo: [], comp: null, dirty: true, ver: 0,
+          blob: null, blobVer: -1, thumb: null, detecting: false, cut: null, splits: null
         };
         images.push(e);
         added.push(e);
@@ -464,7 +479,15 @@
     renderThumbs();
     refreshSide();
     updateHistoryButtons();
+    updateSizeInfo();
     requestAnimationFrame(() => { resizeCanvas(); fitView('width'); });
+  }
+  function updateSizeInfo() {
+    if (!cur) { sizeInfo.textContent = ''; return; }
+    const t = `この画像: ${cur.w} × ${cur.h} px`;
+    sizeInfo.textContent = cur.ow !== cur.w
+      ? `${t}（元は ${cur.ow} × ${cur.oh} px。${shrinkPct(cur.w, cur.ow)}% に縮小して読み込みました）`
+      : t;
   }
   async function removeImage(e) {
     if (e.masks.length && !(await U.confirmDialog({ title: '画像を閉じる', message: `「${e.name}」を一覧から外しますか? 隠した内容も消えます。`, okLabel: '外す', danger: true }))) return;
@@ -1095,25 +1118,562 @@
 
   /* ================================================================ 保存 */
   const toBlob = (c) => new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('保存用の画像を作れませんでした'))), 'image/png'));
-  const outName = (e) => `masked_${U.safeName(e.name, 'image')}.png`;
+  /** 保存するファイル名。分けたときは masked_名前_01.png のように番号を付ける */
+  const outName = (e, i, n) => `masked_${U.safeName(e.name, 'image')}${i == null ? '' : '_' + String(i + 1).padStart(Math.max(2, String(n).length), '0')}.png`;
+  const pngFile = (blob, name) => new File([blob], name, { type: 'image/png' });
+  /** 合成した画像の PNG。囲みを変えていなければ前に作った物を使う(押すたびに待たせない) */
+  async function compBlob(e) {
+    if (e.blob && e.blobVer === e.ver) return e.blob;
+    const v = e.ver;
+    const b = await toBlob(getComposite(e));
+    if (e.ver === v) { e.blob = b; e.blobVer = v; }
+    return b;
+  }
+
+  /**
+   * 保存する。スマホは共有シート(「画像を保存」で写真に入る)、パソコンは 1 枚ずつダウンロード。
+   * 共有シートは押した直後でないと開けないので、ファイルは先に作り終えてから渡す。
+   * 作るのに時間がかかって断られたときは、「保存する」を押し直してもらう
+   */
+  async function deliver(files) {
+    if (U.isTouch() && navigator.canShare && navigator.canShare({ files })) {
+      try { await navigator.share({ files }); return 'shared'; } catch (err) {
+        if (err && err.name === 'AbortError') return 'aborted';
+        if (err && err.name === 'NotAllowedError') return shareAgain(files);
+      }
+    }
+    return downloadFiles(files);
+  }
+  function shareAgain(files) {
+    return new Promise((resolve) => {
+      let result = 'aborted';
+      const ok = h('button.btn.btn-primary', { type: 'button', onclick: () => {
+        // 押した直後に呼ぶ(await を挟まない)
+        navigator.share({ files }).then(() => { result = 'shared'; ctl.close(); }, async (err) => {
+          if (!err || err.name !== 'AbortError') {
+            try { result = await downloadFiles(files); } catch (e2) { U.toast(e2.message, 'error'); }
+          }
+          ctl.close();
+        });
+      } }, icon('download'), '保存する');
+      const body = h('div.modal-body',
+        h('p.confirm-msg', `${files.length > 1 ? `${files.length} 枚の画像` : '画像'}の準備ができました。「保存する」を押すと、共有の画面が開きます。`),
+        h('div.modal-foot',
+          h('button.btn.btn-outline', { type: 'button', onclick: () => ctl.close() }, 'キャンセル'),
+          ok));
+      const ctl = U.openDialog({ title: '画像を保存', content: body, onClose: () => resolve(result) });
+    });
+  }
+  /** パソコンなど: 1 枚ずつダウンロード(続けると、ブラウザが複数のダウンロードを許すか聞くことがある) */
+  async function downloadFiles(files) {
+    try {
+      for (let i = 0; i < files.length; i++) {
+        if (i) await sleep(350);
+        U.downloadBlob(files[i], files[i].name);
+      }
+    } catch (err) {
+      if (files.length !== 1) throw err;
+      showLongPress(files[0]);
+      return 'preview';
+    }
+    // スマホでダウンロードが効かないときの逃げ道(kit.js の saveImage と同じ)
+    if (files.length === 1 && U.isTouch()) showLongPress(files[0]);
+    return 'downloaded';
+  }
+  function showLongPress(blob) {
+    const url = URL.createObjectURL(blob);
+    U.openDialog({
+      title: '画像を保存', wide: true, onClose: () => URL.revokeObjectURL(url),
+      content: h('div.modal-body.longpress',
+        h('p.modal-lead', '保存されない場合は、画像を長押し（パソコンは右クリック）して「画像を保存」を選んでください。'),
+        h('img', { src: url, alt: '保存する画像' }))
+    });
+  }
+  const savedToast = (r, n) => { if (r === 'downloaded' || r === 'shared') U.toast(n > 1 ? `${n}枚を保存しました` : '保存しました'); };
+
   async function saveCurrent() {
     if (!cur) return;
     try {
-      const r = await U.saveImage(await toBlob(getComposite(cur)), outName(cur));
-      if (r === 'downloaded' || r === 'shared') U.toast('保存しました');
-    } catch (e) { U.toast(e.message, 'error'); }
+      const e = cur;
+      savedToast(await deliver([pngFile(await compBlob(e), outName(e))]), 1);
+    } catch (err) { U.toast(err.message, 'error'); }
   }
   async function saveAll() {
     if (!images.length) return;
     try {
       const files = [];
-      for (const e of images) files.push(new File([await toBlob(getComposite(e))], outName(e), { type: 'image/png' }));
-      if (U.isTouch() && navigator.canShare && navigator.canShare({ files })) {
-        try { await navigator.share({ files }); return; } catch (err) { if (err.name === 'AbortError') return; }
+      for (const e of images) files.push(pngFile(await compBlob(e), outName(e)));
+      savedToast(await deliver(files), files.length);
+    } catch (err) { U.toast(err.message, 'error'); }
+  }
+
+  /* ================================================================ 分けて保存 */
+  // 長いスクショを吹き出しの間で切り、何枚かに分けて保存する。
+  // 切る位置は元の画像の見た目だけで決める(囲みには左右されない)。片は合成した画像から切り出す
+  const SPLIT_ASPECT = 16 / 9;  // 初めの枚数: スマホの 1 画面(幅 × 16/9)ずつ
+  const QUIET = 0.5;            // 行の明るさの変化(隣の画素との差の平均)がこれ未満なら静かな行。暗い単色の地の見本で決めた
+  const GAP_MIN = 12;           // 静かな行が 12px 以上続けば吹き出しの間
+  const LINE_RATIO = 0.25;      // 前後の文字の行の変化量の 1/4 未満なら、行の間の谷
+  const SPLIT_MIN = 48;         // 自動で置くときの片の高さの下限
+  const NUDGE_MIN = 8;          // 手で動かすときの、隣の切れ目との間の下限
+  const SPLIT_MAX_N = 40;
+  const KIND = { gap: '空白', line: '行の間', weak: '確かめて' };
+  const maxPieces = (e) => clamp(Math.floor(e.h / SPLIT_MIN), 1, SPLIT_MAX_N);
+  const startPieces = (e) => clamp(Math.ceil(e.h / (e.w * SPLIT_ASPECT)), 2, maxPieces(e));
+
+  /** 行ごとの変化量と、切れ目の候補(静かな帯の真ん中)。画像ごとに 1 度だけ数える */
+  function cutInfo(e) {
+    if (e.cut) return e.cut;
+    const w = e.w, H = e.h;
+    const act = new Float32Array(H);
+    if (e.gray) {
+      const g = e.gray;
+      for (let y = 0; y < H; y++) {
+        let s = 0;
+        for (let i = y * w, end = i + w - 1; i < end; i++) s += Math.abs(g[i + 1] - g[i]);
+        act[y] = w > 1 ? s / (w - 1) : 0;
       }
-      for (const f of files) { U.downloadBlob(f, f.name); await new Promise((r) => setTimeout(r, 350)); }
-      U.toast(`${files.length}枚を保存しました`);
-    } catch (e) { U.toast(e.message, 'error'); }
+    } else {
+      // 灰色の画像(照合用)をまだ作っていなければ、作らずに数える(大きな画像でメモリを食わないように)
+      const p = getRGBA(e);
+      for (let y = 0; y < H; y++) {
+        let s = 0, j = y * w * 4;
+        let prev = 0.299 * p[j] + 0.587 * p[j + 1] + 0.114 * p[j + 2];
+        for (let x = 1; x < w; x++) {
+          j += 4;
+          const v = 0.299 * p[j] + 0.587 * p[j + 1] + 0.114 * p[j + 2];
+          s += Math.abs(v - prev);
+          prev = v;
+        }
+        act[y] = w > 1 ? s / (w - 1) : 0;
+      }
+    }
+    // 地に模様がある(背景が画像の)ときは静かな行の値も上がるので、下から 1 割の行に合わせてしきい値を上げる
+    const sorted = act.slice().sort();
+    const quiet = Math.max(QUIET, sorted[Math.floor(H * 0.1)] * 1.6);
+    // 吹き出しの中の行間は、吹き出しの縁やアイコンがあるので 0 にはならない。前後 24px の文字の行より十分に静かな行を「谷」とみなす
+    const calm = new Float32Array(H);
+    for (let y = 0; y < H; y++) {
+      let pk = 0;
+      for (let k = Math.max(0, y - 24), k2 = Math.min(H - 1, y + 24); k <= k2; k++) if (act[k] > pk) pk = act[k];
+      calm[y] = Math.max(quiet, pk * LINE_RATIO);
+    }
+    // 行ごとの質(2 = 吹き出しの間、1 = 行の間、0 = それ以外)と、谷ごとの候補 1 つ
+    const kindAt = new Uint8Array(H);
+    const good = [];
+    for (let y = 0; y < H;) {
+      if (act[y] >= calm[y]) { y++; continue; }
+      let y2 = y;
+      while (y2 < H && act[y2] < calm[y2]) y2++;
+      // 谷 [y, y2) の中で、地と同じくらい静かな行が GAP_MIN 以上続く所が吹き出しの間
+      let gy = -1, glen = 0, floor = Infinity;
+      for (let a = y; a < y2;) {
+        if (act[a] < floor) floor = act[a];
+        if (act[a] >= quiet) { a++; continue; }
+        let b = a;
+        while (b < y2 && act[b] < quiet) b++;
+        if (b - a >= GAP_MIN) {
+          kindAt.fill(2, a, b);
+          if (b - a > glen) { glen = b - a; gy = (a + b) >> 1; }
+        }
+        a = b;
+      }
+      // 谷の底(いちばん静かな行の近く)は行の間。坂の途中は文字の端にかかるので含めない
+      const lim = floor * 1.5 + 0.3;
+      let f0 = -1, f1 = -1;
+      for (let a = y; a < y2; a++) {
+        if (act[a] > lim) continue;
+        if (!kindAt[a]) kindAt[a] = 1;
+        if (act[a] === floor) { if (f0 < 0) f0 = a; f1 = a; }
+      }
+      let fy = (f0 + f1) >> 1;
+      if (!kindAt[fy]) fy = f0;
+      good.push(gy >= 0 ? { y: gy, kind: 'gap' } : { y: fy, kind: 'line' });
+      y = y2;
+    }
+    // 静かな行が無い所(写真など)でも切れるように、32px ごとに一番変化の少ない行も候補にする
+    const weak = [];
+    for (let y0 = 0, gi = 0; y0 < H; y0 += 32) {
+      const y1 = Math.min(H, y0 + 32);
+      while (gi < good.length && good[gi].y < y0) gi++;
+      if (gi < good.length && good[gi].y < y1) continue;
+      let best = y0;
+      for (let y = y0 + 1; y < y1; y++) if (act[y] < act[best]) best = y;
+      weak.push({ y: best, kind: 'weak' });
+    }
+    return (e.cut = { act, quiet, kindAt, good: good.map((c) => c.y), cands: good.concat(weak).sort((a, b) => a.y - b.y) });
+  }
+  /** y で切ったときの質: 空白(吹き出しの間・段落の間) / 行の間 / 確かめて(文字や絵にかかっているかも) */
+  function cutKind(e, y) {
+    const { kindAt } = cutInfo(e);
+    if (y <= 0 || y >= e.h) return 'weak';
+    return ['weak', 'line', 'gap'][kindAt[y]];
+  }
+
+  /**
+   * n 枚に分ける切れ目を自動で選ぶ。高さのそろい具合と切れ目の質の合計がいちばん小さい組を、動的計画法でまとめて選ぶ
+   * (前から順に切ると、最後の 1 枚だけ短く残る)
+   */
+  function autoSplits(e, n) {
+    const H = e.h;
+    if (n <= 1) return [];
+    const { cands, act, quiet } = cutInfo(e);
+    const T = H / n;
+    const minH = Math.min(Math.max(SPLIT_MIN, T * 0.35), T), maxH = T * 2.5;
+    const c = cands.filter((x) => x.y >= minH && x.y <= H - minH);
+    const m = c.length;
+    const pen = c.map((x) => (x.kind === 'gap' ? 0 : x.kind === 'line' ? 0.25 : 1.5 + Math.min(4, act[x.y] / quiet) * 0.25));
+    const piece = (hh) => ((hh - T) / T) ** 2 * 4;
+    // cost[j]: いまの段の切れ目を c[j] に置いたときの、そこまでの最小のコスト。back[k][j]: その 1 つ前の切れ目
+    let cost = new Float64Array(m).fill(Infinity);
+    for (let j = 0; j < m; j++) if (c[j].y <= maxH) cost[j] = piece(c[j].y) + pen[j];
+    const back = [null];
+    for (let k = 1; k < n - 1; k++) {
+      const next = new Float64Array(m).fill(Infinity);
+      const from = new Int32Array(m).fill(-1);
+      let lo = 0;
+      for (let j = 0; j < m; j++) {
+        while (lo < j && c[j].y - c[lo].y > maxH) lo++;
+        for (let i = lo; i < j && c[j].y - c[i].y >= minH; i++) {
+          const v = cost[i] + piece(c[j].y - c[i].y);
+          if (v < next[j]) { next[j] = v; from[j] = i; }
+        }
+        if (from[j] >= 0) next[j] += pen[j];
+      }
+      back.push(from);
+      cost = next;
+    }
+    let best = Infinity, bj = -1;
+    for (let j = 0; j < m; j++) {
+      const rest = H - c[j].y;
+      if (cost[j] === Infinity || rest < minH || rest > maxH) continue;
+      const v = cost[j] + piece(rest);
+      if (v < best) { best = v; bj = j; }
+    }
+    // 組めないとき(候補が足りない)は等分
+    if (bj < 0) return Array.from({ length: n - 1 }, (_, i) => Math.round((H * (i + 1)) / n));
+    const ys = [];
+    for (let k = n - 2, j = bj; k >= 0; k--) { ys.push(c[j].y); j = k ? back[k][j] : -1; }
+    return ys.reverse();
+  }
+  /** 前の候補(dir<0)・次の候補(dir>0)。吹き出しの間と行の間だけ。lo〜hi の外は選ばない */
+  function stepCut(e, y, dir, lo, hi) {
+    const good = cutInfo(e).good;
+    if (dir < 0) { for (let i = good.length - 1; i >= 0; i--) if (good[i] < y && good[i] > lo) return good[i]; }
+    else { for (const v of good) if (v > y && v < hi) return v; }
+    return null;
+  }
+
+  function openSplit() {
+    const e = cur;
+    if (!e) return;
+    if (maxPieces(e) < 2) return U.toast('この画像は短いので分けられません', 'error');
+    // 探している間は囲みが変わるので、終わってから
+    if (e.detecting) return U.toast('登録した名前・アイコンを探しています。探し終わってから開いてください', 'error');
+    const W = e.w, H = e.h;
+    const comp = getComposite(e);
+    cutInfo(e);
+    // 切れ目は画像に持たせる(閉じて囲みを直しても残る)
+    if (!e.splits) e.splits = autoSplits(e, startPieces(e));
+    const pieces = new Map();   // "y0:y1" → { blob, url }。開いている間だけ持つ
+    let ready = null, gen = 0, buildTimer = 0, closed = false;
+    const VIEW_H = 150;         // 切れ目の札の拡大の高さ(css px)
+
+    const countOut = h('b.sp-count');
+    const minusBtn = h('button.btn.btn-outline.btn-icon', { type: 'button', title: '1 枚減らす', 'aria-label': '1 枚減らす', onclick: () => setCount(e.splits.length) }, icon('minus'));
+    const plusBtn = h('button.btn.btn-outline.btn-icon', { type: 'button', title: '1 枚増やす', 'aria-label': '1 枚増やす', onclick: () => setCount(e.splits.length + 2) }, icon('plus'));
+    const sizes = h('p.sp-sizes');
+    const mapCv = h('canvas.sp-map-cv');
+    const map = h('div.sp-map', { title: 'タップした所に切れ目を足します' }, mapCv);
+    const cards = h('div.sp-cards');
+    const grid = h('div.sp-pieces');
+    const saveLabel = h('span');
+    const saveBtn = h('button.btn.btn-primary', { type: 'button', onclick: saveSplit }, icon('download'), saveLabel);
+    const body = h('div.modal-body.sp-body',
+      h('p.modal-lead', '切れ目は空白や行の間を選んで自動で置きました。文字にかかっていないか、切れ目ごとに確かめてください。'),
+      h('div.sp-bar',
+        h('span.sp-label', '枚数'), minusBtn, countOut, plusBtn,
+        h('small.sp-note', '枚数を変えると、切れ目を置き直します')),
+      sizes,
+      h('div.sp-main', h('div.sp-side', map, h('small.sp-map-hint', 'タップで切れ目を足す')), cards),
+      h('h3.sp-h', '保存する画像'),
+      grid,
+      h('p.side-hint', '画像を長押し（パソコンは右クリック）しても、1 枚ずつ保存できます。'),
+      h('div.modal-foot',
+        h('button.btn.btn-outline', { type: 'button', onclick: () => ctl.close() }, '閉じる'),
+        saveBtn));
+    const ctl = U.openDialog({
+      title: '分けて保存', content: body, wide: true,
+      onClose: () => {
+        closed = true;
+        clearTimeout(buildTimer);
+        for (const p of pieces.values()) URL.revokeObjectURL(p.url);
+        pieces.clear();
+      }
+    });
+    ctl.dlg.classList.add('sp-dlg');
+
+    const bounds = () => [0, ...e.splits, H];
+    function setCount(n) {
+      n = clamp(n, 2, maxPieces(e));
+      if (n === e.splits.length + 1) return;
+      e.splits = autoSplits(e, n);
+      renderAll();
+    }
+    function renderAll() {
+      updateBar();
+      drawMap();
+      renderCards();
+      scheduleBuild();
+    }
+    function updateBar() {
+      const n = e.splits.length + 1, b = bounds();
+      countOut.textContent = `${n} 枚`;
+      minusBtn.disabled = n <= 2;
+      plusBtn.disabled = n >= maxPieces(e);
+      const hs = [];
+      for (let k = 0; k < n; k++) hs.push(b[k + 1] - b[k]);
+      sizes.textContent = `1 枚の大きさ: 幅 ${W} px × 高さ ${hs.join(' / ')} px`;
+    }
+
+    /* ---------- 縮図(全体の位置の目安) ---------- */
+    let mapScale = 1, mapX = 0;
+    function drawMap() {
+      const narrow = window.innerWidth < 600;
+      const maxH = Math.min(window.innerHeight * 0.55, 480), maxW = narrow ? 40 : 72;
+      mapScale = Math.min(maxH / H, maxW / W);
+      const iw = Math.max(1, Math.round(W * mapScale)), ih = Math.max(1, Math.round(H * mapScale));
+      const cw2 = Math.max(iw, narrow ? 36 : 44);
+      mapX = Math.round((cw2 - iw) / 2);
+      const d = window.devicePixelRatio || 1;
+      mapCv.width = Math.round(cw2 * d); mapCv.height = Math.round(ih * d);
+      mapCv.style.width = cw2 + 'px'; mapCv.style.height = ih + 'px';
+      const x = mapCv.getContext('2d');
+      x.setTransform(d, 0, 0, d, 0, 0);
+      x.clearRect(0, 0, cw2, ih);
+      x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+      x.drawImage(comp, mapX, 0, iw, ih);
+      for (const y of e.splits) {
+        const yy = Math.round(y * mapScale) + 0.5;
+        x.fillStyle = 'rgba(255,255,255,.9)';
+        x.fillRect(0, yy - 2, cw2, 3);
+        x.fillStyle = '#6d5dfc';
+        x.fillRect(0, yy - 1, cw2, 1.6);
+      }
+    }
+    map.addEventListener('click', (ev) => {
+      const r = mapCv.getBoundingClientRect();
+      const y = Math.round((ev.clientY - r.top) / mapScale);
+      if (y <= 0 || y >= H) return;
+      // 近くに切れ目があれば、その札へ
+      const near = e.splits.findIndex((v) => Math.abs(v - y) * mapScale < 8);
+      if (near >= 0) return focusCard(near);
+      // 近くの候補に吸い付ける(縮図の 12px 以内)
+      const good = cutInfo(e).good;
+      let ny = y, bd = 12 / mapScale;
+      for (const v of good) if (Math.abs(v - y) < bd) { bd = Math.abs(v - y); ny = v; }
+      const b = bounds();
+      let k = 0;
+      while (b[k + 1] <= ny) k++;
+      if (ny - b[k] < NUDGE_MIN || b[k + 1] - ny < NUDGE_MIN) return;
+      if (e.splits.length + 1 >= SPLIT_MAX_N) return U.toast(`分けられるのは ${SPLIT_MAX_N} 枚までです`, 'error');
+      e.splits.splice(k, 0, ny);
+      renderAll();
+      focusCard(k);
+    });
+
+    /* ---------- 切れ目の札 ---------- */
+    function focusCard(i) {
+      const el = cards.children[i];
+      if (!el) return;
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      el.classList.remove('flash');
+      void el.offsetWidth;
+      el.classList.add('flash');
+    }
+    function renderCards() {
+      cards.replaceChildren(...e.splits.map((_, i) => makeCard(i)));
+      [...cards.children].forEach((el) => el._draw());
+    }
+    function makeCard(i) {
+      const cv = h('canvas.sp-cv');
+      const grip = h('span.sp-grip', { title: '上下にドラッグして動かす' });
+      const view = h('div.sp-view', { tabindex: 0, role: 'slider', 'aria-label': `切れ目 ${i + 1}。上下の矢印キーで動かせます` }, cv, grip);
+      const kindEl = h('span.sp-kind');
+      const posEl = h('small.sp-pos');
+      const prevBtn = h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => step(-1) }, icon('up'), '前の候補');
+      const nextBtn = h('button.btn.btn-ghost.btn-sm', { type: 'button', onclick: () => step(1) }, icon('down'), '次の候補');
+      const card = h('section.sp-card',
+        h('div.sp-head', h('b', `切れ目 ${i + 1}`), h('small', `${i + 1} 枚目と ${i + 2} 枚目の間`), kindEl, posEl),
+        view,
+        h('div.sp-tools', prevBtn, nextBtn,
+          h('button.btn.btn-ghost.btn-sm.sp-del', { type: 'button', onclick: () => { e.splits.splice(i, 1); renderAll(); } }, icon('trash'), 'この切れ目を消す')));
+      const lim = () => {
+        const b = bounds();
+        return { lo: b[i] + NUDGE_MIN, hi: b[i + 2] - NUDGE_MIN };
+      };
+      let center = e.splits[i];
+      let s = 1;
+      function draw() {
+        const y = e.splits[i];
+        const vw = view.clientWidth || 300;
+        s = Math.min(1.5, vw / W);
+        const R = VIEW_H / 2 / s;
+        // 線が枠の端に寄ったら、拡大の範囲を追わせる
+        if (Math.abs(y - center) > R * 0.85) center = y - Math.sign(y - center) * R * 0.85;
+        const d = window.devicePixelRatio || 1;
+        cv.width = Math.round(vw * d); cv.height = Math.round(VIEW_H * d);
+        cv.style.height = VIEW_H + 'px';
+        const x = cv.getContext('2d');
+        x.setTransform(1, 0, 0, 1, 0, 0);
+        x.fillStyle = '#e8e6f0';
+        x.fillRect(0, 0, cv.width, cv.height);
+        const sy0 = clamp(Math.floor(center - R - 2), 0, H), sy1 = clamp(Math.ceil(center + R + 2), 0, H);
+        const ox = Math.max(0, (vw - W * s) / 2);
+        x.setTransform(s * d, 0, 0, s * d, ox * d, (VIEW_H / 2 - center * s) * d);
+        x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+        if (sy1 > sy0) x.drawImage(comp, 0, sy0, W, sy1 - sy0, 0, sy0, W, sy1 - sy0);
+        // 切れ目の線と、上下の片の番号
+        x.setTransform(d, 0, 0, d, 0, 0);
+        const ly = Math.round(VIEW_H / 2 + (y - center) * s) + 0.5;
+        x.fillStyle = 'rgba(255,255,255,.92)';
+        x.fillRect(0, ly - 2.5, vw, 5);
+        x.strokeStyle = '#6d5dfc'; x.lineWidth = 2; x.setLineDash([7, 4]);
+        x.beginPath(); x.moveTo(0, ly); x.lineTo(vw, ly); x.stroke();
+        x.setLineDash([]);
+        x.font = '700 10px "Noto Sans JP", sans-serif';
+        const tag = (t, ty) => {
+          const tw = x.measureText(t).width + 10;
+          x.fillStyle = 'rgba(52,38,74,.72)';
+          if (x.roundRect) { x.beginPath(); x.roundRect(4, ty, tw, 15, 7); x.fill(); } else x.fillRect(4, ty, tw, 15);
+          x.fillStyle = '#fff';
+          x.fillText(t, 9, ty + 11);
+        };
+        if (ly - 19 > 0) tag(`↑ ${i + 1}`, ly - 19);
+        if (ly + 19 < VIEW_H) tag(`↓ ${i + 2}`, ly + 4);
+        grip.style.top = ly + 'px';
+        const k = cutKind(e, y);
+        kindEl.className = 'sp-kind k-' + k;
+        kindEl.textContent = KIND[k];
+        posEl.textContent = `上から ${y} px`;
+        const { lo, hi } = lim();
+        prevBtn.disabled = stepCut(e, y, -1, lo, hi) == null;
+        nextBtn.disabled = stepCut(e, y, 1, lo, hi) == null;
+      }
+      card._draw = draw;
+      function moveTo(ny, recenter) {
+        const { lo, hi } = lim();
+        ny = clamp(Math.round(ny), lo, hi);
+        if (recenter) center = ny;
+        if (ny === e.splits[i] && !recenter) return;
+        e.splits[i] = ny;
+        draw();
+        updateBar();
+        drawMap();
+        scheduleBuild();
+      }
+      function step(dir) {
+        const { lo, hi } = lim();
+        const ny = stepCut(e, e.splits[i], dir, lo, hi);
+        if (ny != null) moveTo(ny, true);
+      }
+      // ドラッグ: マウス・ペンは拡大のどこでも、指はつまみだけ(拡大の上で指を動かすとダイアログが流れるように)
+      let drag = null;
+      view.addEventListener('pointerdown', (ev) => {
+        if (ev.pointerType === 'touch' && ev.target !== grip) return;
+        if (ev.button > 0) return;
+        ev.preventDefault();
+        view.focus({ preventScroll: true });
+        try { view.setPointerCapture(ev.pointerId); } catch (err) { /* 合成イベントなど */ }
+        drag = { id: ev.pointerId, sy: ev.clientY, y0: e.splits[i] };
+        card.classList.add('dragging');
+      });
+      view.addEventListener('pointermove', (ev) => {
+        if (!drag || ev.pointerId !== drag.id) return;
+        moveTo(drag.y0 + (ev.clientY - drag.sy) / s, false);
+      });
+      const end = (ev) => {
+        if (!drag || ev.pointerId !== drag.id) return;
+        drag = null;
+        card.classList.remove('dragging');
+        moveTo(e.splits[i], true);
+      };
+      view.addEventListener('pointerup', end);
+      view.addEventListener('pointercancel', end);
+      view.addEventListener('keydown', (ev) => {
+        if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+        ev.preventDefault();
+        const n = ev.shiftKey ? 10 : 1;
+        moveTo(e.splits[i] + (ev.key === 'ArrowUp' ? -n : n), true);
+      });
+      return card;
+    }
+    // 幅が変わったら描き直す(スマホの向きを変えたときなど)
+    const ro = new ResizeObserver(() => { if (!closed) { drawMap(); [...cards.children].forEach((el) => el._draw()); } });
+    ro.observe(cards);
+    ctl.dlg.addEventListener('close', () => ro.disconnect());
+
+    /* ---------- 片の PNG を先に作っておく(保存を押したらすぐ共有シートを開けるように) ---------- */
+    function scheduleBuild() {
+      ready = null;
+      saveBtn.disabled = true;
+      saveLabel.textContent = '準備しています…';
+      grid.classList.add('stale');
+      clearTimeout(buildTimer);
+      buildTimer = setTimeout(build, 300);
+    }
+    async function build() {
+      const my = ++gen;
+      const b = bounds(), list = [];
+      try {
+        for (let k = 0; k + 1 < b.length; k++) {
+          const y0 = b[k], y1 = b[k + 1], key = y0 + ':' + y1;
+          let p = pieces.get(key);
+          if (!p) {
+            saveLabel.textContent = `準備しています…（${k + 1} / ${b.length - 1}）`;
+            // 1 枚ずつ作って、すぐ canvas を手放す(大きな画像でメモリが山にならないように)
+            const c = mk(W, y1 - y0);
+            c.getContext('2d').drawImage(comp, 0, y0, W, y1 - y0, 0, 0, W, y1 - y0);
+            let blob;
+            try { blob = await toBlob(c); } finally { c.width = c.height = 0; }
+            if (closed) return;
+            p = { blob, url: URL.createObjectURL(blob) };
+            pieces.set(key, p);
+          }
+          if (my !== gen) return;   // 作っている間に切れ目が動いた
+          list.push({ key, y0, y1, blob: p.blob, url: p.url });
+        }
+      } catch (err) {
+        if (!closed && my === gen) { saveLabel.textContent = '保存用の画像を作れませんでした'; U.toast(err.message, 'error'); }
+        return;
+      }
+      const keep = new Set(list.map((p) => p.key));
+      for (const [k, p] of pieces) if (!keep.has(k)) { URL.revokeObjectURL(p.url); pieces.delete(k); }
+      ready = list.map((p, k) => Object.assign(p, { file: pngFile(p.blob, outName(e, k, list.length)) }));
+      renderPieces();
+      grid.classList.remove('stale');
+      saveBtn.disabled = false;
+      saveLabel.textContent = `まとめて保存（${ready.length} 枚）`;
+    }
+    function renderPieces() {
+      grid.replaceChildren(...ready.map((p, k) => h('figure.sp-piece',
+        h('img', { src: p.url, alt: `${k + 1} 枚目` }),
+        h('figcaption',
+          h('b', String(k + 1).padStart(2, '0')),
+          h('small', `${W} × ${p.y1 - p.y0}`),
+          h('button.link-btn', { type: 'button', onclick: async () => {
+            try { savedToast(await deliver([p.file]), 1); } catch (err) { U.toast(err.message, 'error'); }
+          } }, '保存')))));
+    }
+    async function saveSplit() {
+      if (!ready) return;
+      try {
+        // ここで await を挟まずに共有シートを開く
+        savedToast(await deliver(ready.map((p) => p.file)), ready.length);
+      } catch (err) { U.toast(err.message, 'error'); }
+    }
+
+    renderAll();
   }
 
   /* ================================================================ 起動 */
@@ -1124,5 +1684,8 @@
   U.hydrateIcons(document);
 
   // 動作確認・デバッグ用 (コンソールから状態を見る)
-  window.__usermask = { images, view, templates: () => templates, settings, detect: (m) => detect(cur, m), get cur() { return cur; } };
+  window.__usermask = {
+    images, view, templates: () => templates, settings, detect: (m) => detect(cur, m), get cur() { return cur; },
+    split: { open: openSplit, auto: (n) => autoSplits(cur, n), info: () => cutInfo(cur), kind: (y) => cutKind(cur, y) }
+  };
 })();

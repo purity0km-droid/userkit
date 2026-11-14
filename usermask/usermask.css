@@ -82,11 +82,66 @@
 .tpl-status:empty { display: none; }
 .tpl-preview { max-width: 100%; max-height: 160px; align-self: center; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .none { padding: 4px 0; }
+.size-info { font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* ---------- 分けて保存 ---------- */
+dialog.modal.sp-dlg { width: min(940px, calc(100vw - 24px)); }
+.sp-body { gap: 12px; }
+.sp-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.sp-label { font-size: 13px; font-weight: 700; }
+.sp-count { min-width: 3.2em; text-align: center; font-size: 15px; font-variant-numeric: tabular-nums; }
+.sp-note { font-size: 11.5px; color: var(--muted); margin-left: 6px; }
+.sp-sizes { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sp-main { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: start; }
+.sp-side { position: sticky; top: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.sp-map { padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: #e8e6f0; cursor: copy; }
+.sp-map-cv { display: block; }
+.sp-map-hint { font-size: 10.5px; color: var(--muted); writing-mode: vertical-rl; letter-spacing: .1em; }
+.sp-cards { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.sp-card { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.sp-card.flash { animation: sp-flash 1s ease-out; }
+@keyframes sp-flash { from { box-shadow: 0 0 0 4px rgba(109, 93, 252, .45); } to { box-shadow: 0 0 0 4px rgba(109, 93, 252, 0); } }
+.sp-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; }
+.sp-head small { color: var(--muted); font-size: 11.5px; }
+.sp-head .sp-pos { margin-left: auto; font-variant-numeric: tabular-nums; }
+.sp-kind { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+.sp-kind.k-gap { background: #d9f3ef; color: #0f766e; }
+.sp-kind.k-line { background: var(--soft); color: var(--primary-dark); }
+.sp-kind.k-weak { background: #fdecc8; color: #8a4b00; }
+.sp-view { position: relative; border-radius: 8px; overflow: hidden; touch-action: pan-y; cursor: ns-resize; outline: none; }
+.sp-view:focus-visible { box-shadow: 0 0 0 3px rgba(109, 93, 252, .4); }
+.sp-cv { display: block; width: 100%; }
+/* 指で動かすつまみ(拡大の右端、線の上) */
+.sp-grip {
+  position: absolute; right: 6px; width: 44px; height: 30px; margin-top: -15px; border-radius: 999px; touch-action: none;
+  background: #6d5dfc; box-shadow: 0 2px 8px rgba(40, 20, 70, .35); cursor: ns-resize;
+}
+.sp-grip::before, .sp-grip::after { content: ""; position: absolute; left: 14px; right: 14px; height: 2px; border-radius: 2px; background: #fff; }
+.sp-grip::before { top: 11px; }
+.sp-grip::after { top: 17px; }
+.sp-card.dragging .sp-grip { background: var(--primary-dark); }
+.sp-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.sp-tools .sp-del { margin-left: auto; color: var(--danger); }
+.sp-h { font-size: 14px; margin-top: 4px; }
+.sp-pieces { display: flex; flex-wrap: wrap; gap: 10px; transition: opacity .15s; }
+.sp-pieces.stale { opacity: .45; }
+.sp-piece { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.sp-piece img { display: block; height: 140px; width: auto; max-width: 160px; object-fit: contain; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.sp-piece figcaption { display: flex; align-items: baseline; gap: 6px; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.sp-piece figcaption small { color: var(--muted); }
 
 @media (max-width: 960px) {
   .mask-body { grid-template-columns: 1fr; }
   .mask-stage { height: 62vh; min-height: 320px; }
   .seg .lbl { display: none; }
+}
+@media (max-width: 600px) {
+  /* 分けて保存: 切れ目の札の拡大をなるべく広く */
+  .sp-main { gap: 8px; }
+  .sp-map { padding: 2px; }
+  .sp-card { padding: 8px; gap: 6px; }
+  .sp-tools .btn-sm { padding: 0 8px; }
+  .sp-piece img { height: 110px; max-width: 120px; }
 }
 @media (max-width: 760px) {
   .mask-app { padding: 10px 10px 4px; }
