@@ -184,12 +184,156 @@
 .is-player .um-quote { background: var(--t-bg); }
 .is-player .um-foot { margin-top: auto; }
 
+/* ================================================================ レコード(表示項目の「レコード」)
+   ジャケット(.um-jacket)の後ろから盤(.um-rec)がのぞく。--j はジャケットの一辺、--d は盤の直径(JS が書く)。
+   盤は canvas 2 枚(回る層 .um-rec-rot・動かない層 .um-rec-fix)。画面では回る層を CSS で回し、書き出しでは止める */
+.um-sleeve { position: relative; flex: none; width: calc(var(--j) - 10px + var(--d) / 2); height: var(--j); }
+.um-sleeve > .um-jacket { position: relative; z-index: 1; width: var(--j); }
+.um-sleeve > .um-rec { position: absolute; left: calc(var(--j) - 10px - var(--d) / 2); top: calc((var(--j) - var(--d)) / 2); }
+.um-rec { flex: none; position: relative; border-radius: 50%; background: #0c0b10; box-shadow: 0 24px 44px -22px rgba(0, 0, 0, .75); }
+.um-rec.mini { box-shadow: 0 6px 14px -6px rgba(0, 0, 0, .6); }
+.um-rec canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.um-rec-rot { animation: um-spin 2s linear infinite; }
+@keyframes um-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .um-rec-rot { animation: none; } }
+.exporting .um-rec-rot { animation: none; }
+/* ジャケットの影を盤の上にも落とす */
+.um-sleeve > .ump-art { box-shadow: 8px 0 22px -6px rgba(0, 0, 0, .55), 0 28px 50px -22px rgba(0, 0, 0, .7); }
+.um-sleeve > .um-cover .ed-img { box-shadow: 8px 0 22px -6px rgba(0, 0, 0, .5), 0 26px 48px -24px rgba(20, 16, 40, .6); }
+.um-head.has-rec { grid-template-columns: auto minmax(0, 1fr); }
+
+/* 動画の書き出し(JS がシートに付ける)。下の絵では盤の中身・ジャケット・動く物を隠し、上の絵ではジャケットだけを残す */
+.um-vid-base .um-rec canvas, .um-vid-base .um-jacket, .um-vid-base .um-eq > i,
+.um-vid-prog .um-bar > i, .um-vid-prog .um-pos { visibility: hidden; }
+.mix-sheet.um-vid-top { background: none !important; }
+.um-vid-top * { visibility: hidden; }
+.um-vid-top .um-jacket, .um-vid-top .um-jacket * { visibility: visible; }
+/* 動画で保存の画面 */
+.um-vd .seg { margin: 4px 0 2px; }
+.um-vd-out { display: block; max-width: 100%; max-height: 62vh; margin: 0 auto; border-radius: 10px; background: #111; }
+
+/* ================================================================ ジャケット(.is-jacket・600px 四方。jacket.js)
+   地の絵(.jk-bg)→ 暗さ(.jk-shade。--dk)→ 左の帯(.jk-obi)→ 型ごとの文字。--pl は文字の左の余白(帯があれば帯の分も)。
+   書体は --jk-font、太さは 題 --jk-w・ほか --jk-w2、色は --jk-color(縁取りは --jk-outline)、帯は --jk-band(字は --jk-band-ink)。
+   題の字の大きさは JS が書く(2 行までに収める) */
+.mix-sheet.is-jacket { position: relative; width: 600px; height: 600px; padding: 0; display: block; overflow: hidden; gap: 0;
+  background: #15131b; color: var(--jk-color); font-family: var(--jk-font); --pl: 44px; }
+.is-jacket.has-obi { --pl: 100px; }
+.is-jacket .ed-text { --ph: rgba(255, 255, 255, .6); overflow-wrap: normal; }
+.is-jacket .ed-text:focus { background: rgba(0, 0, 0, .3); }
+.jk-ph { position: absolute; inset: 0; display: grid; place-items: center; background: linear-gradient(140deg, var(--t-main), var(--t-deeper)); }
+.jk-ph span { font-size: 300px; font-weight: 800; line-height: 1; color: rgba(255, 255, 255, .14); }
+.is-jacket:not(.no-img) .jk-ph { display: none; }
+.jk-bg { position: absolute; inset: 0; overflow: hidden; }
+.jk-bg .ed-img { --img-r: 0px; background: transparent; }
+.jk-bg .ed-img-ph { color: rgba(255, 255, 255, .75); }
+.jk-shade, .jk-foot, .jk-top, .jk-mid, .jk-bot, .jk-vt, .jk-bl, .jk-line, .jk-tb { pointer-events: none; }
+.jk-shade { position: absolute; inset: 0; }
+.is-jacket .ed-text, .jk-bandbox, .jk-obi { pointer-events: auto; }
+
+/* 文字 */
+.jk-title { font-weight: var(--jk-w); line-height: 1.14; letter-spacing: .01em; word-break: auto-phrase; }
+.jk-artist { font-weight: var(--jk-w2); font-size: 19px; line-height: 1.45; letter-spacing: .06em; margin-top: 10px; opacity: .92; }
+.jk-credit { font-weight: var(--jk-w2); font-size: 12px; line-height: 1.5; letter-spacing: .26em; opacity: .86; }
+.fx-shadow :is(.jk-title, .jk-artist, .jk-credit) { text-shadow: 0 2px 14px rgba(0, 0, 0, .55), 0 1px 3px rgba(0, 0, 0, .45); }
+.fx-stroke :is(.jk-title, .jk-artist, .jk-credit) { text-shadow:
+  .045em 0 0 var(--jk-outline), -.045em 0 0 var(--jk-outline), 0 .045em 0 var(--jk-outline), 0 -.045em 0 var(--jk-outline),
+  .032em .032em 0 var(--jk-outline), -.032em .032em 0 var(--jk-outline), .032em -.032em 0 var(--jk-outline), -.032em -.032em 0 var(--jk-outline); }
+.fx-glow :is(.jk-title, .jk-artist, .jk-credit) { text-shadow: 0 0 .2em var(--jk-color), 0 0 .55em var(--jk-color), 0 0 1.2em rgba(0, 0, 0, .35); }
+.jk-bandbox :is(.jk-title, .jk-artist, .jk-credit) { text-shadow: none; }
+
+/* 重ね: 左下に題・アーティスト・クレジット */
+.jk-overlay .jk-shade { background: linear-gradient(to top, rgb(0 0 0 / calc(var(--dk) * 2.4)) 0%, rgb(0 0 0 / var(--dk)) 38%, rgb(0 0 0 / 0) 68%); }
+.jk-foot { position: absolute; left: var(--pl); right: 44px; bottom: 40px; display: flex; flex-direction: column; align-items: flex-start; }
+.jk-foot > .ed-text, .jk-foot > div { max-width: 100%; }
+.jk-foot .jk-title { width: 100%; }
+.jk-foot .jk-credit { margin-top: 20px; }
+/* 下帯: 下に帯を敷き、その中に題とアーティスト。クレジットは帯の右 */
+.jk-band .jk-shade { background: rgb(0 0 0 / calc(var(--dk) * .6)); }
+.jk-bandbox { position: absolute; left: 0; right: 0; bottom: 0; min-height: 108px; padding: 18px 36px 18px var(--pl); display: flex; align-items: center; gap: 18px;
+  background: var(--jk-band); }
+.jk-tb { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.jk-tb .jk-title { width: 100%; }
+.jk-bandbox .jk-artist { margin-top: 4px; font-size: 15px; }
+.jk-bandbox .jk-credit { flex: none; align-self: flex-end; max-width: 40%; text-align: right; }
+/* 中央: 題を真ん中に大きく、アーティストは上、クレジットは下 */
+.jk-center .jk-shade { background: radial-gradient(circle at 50% 50%, rgb(0 0 0 / calc(var(--dk) * 1.5)), rgb(0 0 0 / calc(var(--dk) * .8)) 72%); }
+.jk-top { position: absolute; top: 40px; left: var(--pl); right: 44px; display: flex; justify-content: center; text-align: center; }
+.jk-top .jk-artist { margin: 0; font-size: 15px; letter-spacing: .32em; }
+.jk-mid { position: absolute; left: var(--pl); right: 44px; top: 50%; transform: translateY(-50%); display: flex; justify-content: center; text-align: center; }
+.jk-mid .jk-title { width: 100%; text-align: center; }
+.jk-bot { position: absolute; left: var(--pl); right: 44px; bottom: 36px; display: flex; justify-content: center; text-align: center; }
+/* 縦書き: 題は右端に縦書き、アーティストとクレジットは左下に横書き */
+.jk-vertical .jk-shade { background: linear-gradient(to left, rgb(0 0 0 / calc(var(--dk) * 2)) 0%, rgb(0 0 0 / calc(var(--dk) * .6)) 40%, rgb(0 0 0 / 0) 70%),
+  linear-gradient(to top, rgb(0 0 0 / calc(var(--dk) * 1.6)), rgb(0 0 0 / 0) 32%); }
+.jk-vt { position: absolute; top: 44px; right: 40px; bottom: 44px; display: flex; justify-content: flex-end; }
+.jk-vt .jk-title { font-family: var(--jk-font-v); writing-mode: vertical-rl; height: 100%; line-height: 1.18; letter-spacing: .08em; }
+.jk-bl { position: absolute; left: var(--pl); bottom: 40px; max-width: 50%; display: flex; flex-direction: column; align-items: flex-start; }
+.jk-bl .jk-artist { margin: 0; font-size: 17px; }
+.jk-bl .jk-credit { margin-top: 8px; }
+/* 極小: 下の端に曲名とアーティストを小さく 1 行(絵が主役) */
+.jk-minimal .jk-shade { background: linear-gradient(to top, rgb(0 0 0 / calc(var(--dk) * 1.8)), rgb(0 0 0 / 0) 24%); }
+.jk-line { position: absolute; left: var(--pl); right: 36px; bottom: 28px; display: flex; align-items: baseline; gap: 16px; }
+.jk-tl { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.jk-tl .jk-title { flex: 0 1 auto; min-width: 0; white-space: nowrap; }
+.jk-tl .jk-artist { flex: 0 1 auto; margin: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jk-sep { opacity: .6; font-size: 13px; }
+.jk-line .jk-credit { flex: none; }
+/* 左の帯(CD の帯): 縦書きの字 */
+.jk-obi { position: absolute; left: 0; top: 0; bottom: 0; z-index: 2; width: 56px; display: flex; justify-content: center; padding: 28px 0;
+  background: var(--jk-band); color: var(--jk-band-ink); box-shadow: 2px 0 12px rgba(0, 0, 0, .28); }
+.jk-obi-text { font-family: var(--jk-font-v); writing-mode: vertical-rl; max-height: 100%; overflow: hidden; font-size: 17px; font-weight: var(--jk-w2); line-height: 1.2; letter-spacing: .24em; }
+.jk-obi .ed-text { --ph: currentColor; }
+/* 書き出しでは空の欄を場所ごと省く */
+.is-jacket.exporting :is(.jk-artist, .jk-credit, .jk-obi-text).is-empty { display: none; }
+.is-jacket.exporting .jk-tl:has(> .jk-artist.is-empty) .jk-sep { display: none; }
+
+/* ジャケットのツールバー(2 段目) */
+.um-jk-bar { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding-top: 10px; margin-top: 2px; border-top: 1px solid var(--line, #e3e0fb); }
+.jk-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.jk-k, .um-jk-bar label > span { font-size: 12px; font-weight: 700; color: var(--muted, #6b6478); white-space: nowrap; }
+.um-jk-bar .seg button { padding: 5px 10px; font-size: 12.5px; }
+.jk-name { max-width: 13em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; }
+.jk-step { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 1px solid var(--line, #e3e0fb); background: #fff; color: inherit; }
+.jk-font { gap: 6px; }
+.jk-font b { max-width: 10em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jk-range, .jk-sel, .jk-check { display: inline-flex; align-items: center; gap: 6px; }
+.jk-range input { width: 92px; }
+.jk-range output { min-width: 2.6em; font-size: 12px; font-variant-numeric: tabular-nums; }
+.jk-sel select { width: auto; min-width: 4.6em; min-height: 0; height: 30px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--line, #e3e0fb); background: #fff; font: inherit; font-size: 12.5px; }
+.jk-check { font-size: 12.5px; font-weight: 700; }
+.jk-sw { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 4px; border-radius: 999px; border: 1px solid var(--line, #e3e0fb); background: #fff; font: inherit; font-size: 12px; font-weight: 700; color: var(--muted, #6b6478); cursor: pointer; }
+.jk-sw i { width: 20px; height: 20px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .15); }
+.jk-note { flex-basis: 100%; margin: 0; font-size: 12px; font-weight: 700; color: #b4542c; }
+/* 狭い画面では操作の段で高くなるので、上に貼り付けない(絵が隠れないように) */
+@media (max-width: 760px) { .ed-toolbar:has(.um-jk-bar) { position: static; } }
+/* 書体を選ぶ画面(見本の並び) */
+.jk-fd { display: flex; flex-direction: column; gap: 12px; }
+.jk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 12px; }
+.jk-cell { display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 12px; border: 1px solid var(--line, #e3e0fb); background: #fff; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.jk-cell:hover { border-color: var(--accent, #6d5dfc); }
+.jk-cell.on { border-color: var(--accent, #6d5dfc); box-shadow: 0 0 0 2px var(--accent, #6d5dfc); }
+.jk-cell-sheet { width: 162px; height: 162px; overflow: hidden; border-radius: 6px; align-self: center; }
+.jk-cell-sheet > .mix-sheet { zoom: .27; }
+.jk-cell-name b { display: block; font-size: 12.5px; }
+.jk-cell-name small { font-size: 11px; color: var(--muted, #6b6478); }
+.jk-fd-sec h3 { margin: 4px 0 6px; font-size: 13.5px; }
+.jk-fd-row { display: flex; gap: 8px; }
+.jk-fd-row input { flex: 1; min-width: 0; }
+.jk-files { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.jk-files li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+.jk-files small { color: var(--muted, #6b6478); }
+.jk-fails { margin: 0; padding-left: 1.2em; font-size: 13px; line-height: 1.7; }
+/* まとめて保存で描く場所(画面の外) */
+.jk-host { position: fixed; left: -10000px; top: 0; width: 600px; pointer-events: none; }
+
 /* ================================================================ ツールバー */
 .ed-toolbar .um-layout button, .ed-toolbar .um-order button { padding: 5px 11px; font-size: 12.5px; }
 .um-seg-k { align-self: center; padding: 0 4px 0 8px; font-size: 12px; font-weight: 700; color: var(--muted); }
 .um-shape { display: inline-block; flex: none; border: 1.6px solid currentColor; border-radius: 2.5px; }
 .um-shape.list { width: 9px; height: 13px; }
 .um-shape.player { width: 15px; height: 10px; background: linear-gradient(to right, currentColor 42%, transparent 42%); }
+.um-shape.jacket { width: 12px; height: 12px; background: linear-gradient(to top, currentColor 30%, transparent 30%); }
 /* 選んだ人のパネル */
 .um-pp { display: flex; flex-direction: column; gap: 10px; width: 300px; }
 .um-pp-row { display: flex; align-items: center; gap: 10px; }
@@ -224,4 +368,6 @@
 .exporting .um-group:not(:has(.um-row:not(.is-blank))) { display: none; }
 .exporting .um-mirror.is-empty::before { content: ""; }
 .exporting .um-head:has(> .um-cover > .ed-img:not(.has-img)) { grid-template-columns: minmax(0, 1fr); }
+.exporting .um-head > .um-sleeve:has(> .um-cover > .ed-img:not(.has-img)) { display: none; }
+.exporting .um-head:has(> .um-sleeve > .um-cover > .ed-img:not(.has-img)) { grid-template-columns: minmax(0, 1fr); }
 .exporting .um-meta:not(:has(.um-total:not(.is-empty))):not(:has(.um-who-name:not(.is-empty))) { display: none; }

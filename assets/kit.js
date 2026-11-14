@@ -90,6 +90,7 @@
     snap: '<rect x="5.5" y="2.5" width="13" height="19" rx="1.5"/><rect x="7.5" y="4.5" width="9" height="10.5" rx=".5"/><path d="M9 18h6"/>',
     plan: '<rect x="3.5" y="4.5" width="17" height="15" rx="1"/><path d="M12 4.5v5M12 13.5v6M12 13.5h4M16 13.5a4 4 0 0 0-4-4"/>',
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+    video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10.5 5-3v9l-5-3"/>',
     music: '<path d="M9 17.5V6l11-2.5V15"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="15" r="2.5"/><path d="M9 9.5 20 7"/>',
     scroll: '<path d="M18 16V5a2 2 0 0 0-2-2H5"/><path d="M5 3a2 2 0 0 0-2 2v1.5h4V5a2 2 0 0 0-2-2z"/><path d="M7 6.5V19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1.5H11V19a2 2 0 0 1-2 2"/><path d="M10.5 8.5h4.5M10.5 12h4.5"/>',
     help: '<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2-2.5 3.6M12 16.8h.01"/>'
@@ -321,8 +322,8 @@
       desc: '2人(または1人)のキャラシートを作って、画像で保存します。userprofのプロフィールも読み込めます。' },
     { id: 'userline', group: 'make', label: 'タイムラインペアカード', icon: 'timeline', out: ['PNG'],
       desc: 'プロフィール・年表・まとめ・関係を1枚に載せた、タイムライン風のカードを作って画像で保存します。レイアウトは縦長と横長から選べます。' },
-    { id: 'usermix', group: 'make', label: 'プレイリスト', icon: 'music', out: ['PNG'],
-      desc: '2人のための曲を並べたプレイリストを作って、画像で保存します。選んだ人の印と、選んだわけや好きな一節を、曲ごとに添えられます。見た目は音楽アプリ風のプレイリストの画面と再生画面から選べます。' },
+    { id: 'usermix', group: 'make', label: 'プレイリスト', icon: 'music', out: ['PNG', 'MP4', 'GIF'],
+      desc: '2人のための曲を並べたプレイリストを作って、画像で保存します。選んだ人の印と、選んだわけや好きな一節を、曲ごとに添えられます。見た目は音楽アプリ風のプレイリストの画面と再生画面から選べ、曲ごとのジャケットも作れます。レコードが回る短い動画（MP4・GIF）でも保存できます。' },
     { id: 'usersns', group: 'make', label: 'SNS風画面', icon: 'phone', out: ['PNG'],
       desc: 'セットログ風のVlog画面(2〜4人)、インスタ風の投稿・ストーリー、LINE風のトーク、Twitter風のプロフィール・リプ画面を切り替えて作り、画像で保存します。' },
     { id: 'usercard', group: 'make', label: 'ホロカード', icon: 'card', out: ['PNG', 'MP4'],

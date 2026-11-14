@@ -38,7 +38,7 @@
 
   /* ================================================================ 本体 */
   function create(cfg) {
-    // cfg: { app, version, width, defaults(), migrate(state), render(ed) → Node, mount }
+    // cfg: { app, version, width, defaults(), migrate(state, 保存したときの版), render(ed) → Node, mount }
     const store = U.kv('userkit-editor');
     const ed = { state: cfg.defaults(), cfg };
     let saveTimer = 0;
@@ -74,7 +74,7 @@
     ed.load = async () => {
       try {
         const r = await store.get(cfg.app);
-        if (r && r.state) ed.state = cfg.migrate ? cfg.migrate(r.state) : r.state;
+        if (r && r.state) ed.state = cfg.migrate ? cfg.migrate(r.state, r.v) : r.state;   // migrate には保存したときの版も渡す
       } catch (e) { /* 初回など */ }
     };
 
@@ -320,7 +320,7 @@
       let data;
       try { data = JSON.parse(await file.text()); } catch (e) { return U.toast('ファイルを読み取れませんでした', 'error'); }
       if (!data || data.app !== cfg.app || !data.state) return U.toast(`${cfg.app} の保存ファイルではないようです`, 'error');
-      ed.state = cfg.migrate ? cfg.migrate(data.state) : data.state;
+      ed.state = cfg.migrate ? cfg.migrate(data.state, data.version) : data.state;
       await ed.save();
       ed.rerender();
       U.toast('読み込みました');
@@ -586,5 +586,5 @@
     return box;
   }
 
-  window.Ed = { create, pickUserprof, pickColor, getIn, setIn, THEMES, themeColors, themeVars, themePicker, showPicker, help };
+  window.Ed = { create, pickUserprof, pickColor, getIn, setIn, THEMES, themeColors, themeVars, themePicker, showPicker, help, loadH2I };
 })();
