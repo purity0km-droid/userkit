@@ -1,4 +1,4 @@
-/* talklog ページ: ブックマークレットの用意 と 書き出したログのビューア */
+/* talklog ページ: 端末ごとの手順(ユーザースクリプト) と 書き出したログのビューア */
 (function () {
   'use strict';
   const { h, icon } = U;
@@ -18,28 +18,7 @@
   if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) showDev('ios');
   else if (/Android/.test(ua)) showDev('android');
 
-  /* ---------------------------------------------------------------- ブックマークレット */
-  const COLLECTOR = new URL('collector.js', location.href).href;
-  const bmShort = "javascript:(function(){window.__talklogAuto=true;var s=document.createElement('script');" +
-    "s.src='" + COLLECTOR + "?'+Date.now();document.body.appendChild(s);})();";
-  const drag = document.getElementById('bm-drag');
-  drag.href = bmShort;
-  drag.addEventListener('click', (e) => {
-    e.preventDefault();
-    U.toast('このボタンはブックマークバーへドラッグして使います');
-  });
-
-  let fullCache = null;
-  async function bmFull() {
-    if (fullCache) return fullCache;
-    const code = await fetch(COLLECTOR, { cache: 'no-store' }).then((r) => { if (!r.ok) throw new Error(); return r.text(); });
-    fullCache = 'javascript:' + encodeURIComponent('window.__talklogAuto=true;' + code);
-    return fullCache;
-  }
-  document.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', async () => {
-    if (b.dataset.copy === 'bm') return U.copyText(bmShort, 'コピーしました。ブックマークのURL欄に貼り付けてください');
-    try { U.copyText(await bmFull(), '全部入り版をコピーしました'); } catch (e) { U.toast('本体を読み込めませんでした', 'error'); }
-  }));
+  // ブックマークレットは 2026-11 の zeta の更新(トークが別オリジンの iframe へ)で使えなくなったので、手順はユーザースクリプトだけ
 
   /* ---------------------------------------------------------------- ビューア */
   const fileIn = document.getElementById('log-file');

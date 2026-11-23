@@ -12,6 +12,13 @@
   スクロール欄は実際の zeta と同じ「下から積む」(column-reverse)。?normal でふつうの向きになる。
   data-index は実際の zeta と同じく「読み込み済みのうち最も古い行 = 0」で、古い分を読み込むたびに振り直す。
   ?jump を付けると、古い分を読み込んだはずみに画面が上へ跳ぶ(間を読み飛ばす状況。?jump=1500 のように幅も指定可)。
+
+  2026-11 からの zeta(トークが別オリジンの iframe の中)の再現:
+  ?host  … zeta-ai.io 役の親のページ。ユーザースクリプトのように collector.js を自動で読み込み、
+           別の番号のサーバー(既定 5185。?host&frame=5185)の ?scene&us を sandbox つきの iframe で開く。
+           &bare を付けると親のページでは読み込まない(保存を受け取る側が無いとき)。
+  ?scene … frame.pingpong.ai 役の iframe の中の画面。部品の名前の目印は無く、[role=log] の行・.chat・.caption1・
+           右寄せのクラスだけを今の zeta と同じ形で置く。&us を付けると collector.js を自動で読み込む(右下に起動ボタン)。
 -->
 <style>
   body { margin: 0; font: 15px/1.6 system-ui, sans-serif; background: #f4f2f7; }
@@ -26,6 +33,20 @@
   .swiper { overflow: hidden; } .swiper-wrapper { display: flex; } .swiper-slide { flex: 0 0 100%; }
   .chat { display: block; font-size: 12px; }
   .loading { text-align: center; color: #999; font-size: 12px; padding: 6px; }
+  /* ?scene(今の zeta の iframe の中)で使う分だけ */
+  body.scene { background: #151516; color: #eee; }
+  body.scene .bar { background: #1e1e21; border-color: #333; color: #eee; }
+  .scene .flex { display: flex; } .scene .flex-row { flex-direction: row; } .scene .flex-col { flex-direction: column; }
+  .scene .ml-auto { margin-left: auto; } .scene .items-end { align-items: flex-end; } .scene .self-end { align-self: flex-end; }
+  .scene .w-fit { width: fit-content; } .scene .relative { position: relative; } .scene .gap-1 { gap: 4px; }
+  .scene .bg-gray-sub1 { background: #2b2b30; border-radius: 14px; } .scene .bg-bubble-user { background: #5b4fd6; border-radius: 14px; }
+  .scene .bg-gray-main { background: #232327; } .scene .rounded-12 { border-radius: 12px; }
+  .scene .px-3 { padding: 6px 12px; } .scene .chat p { margin: 0; } .scene em { color: #aaa; }
+  .scene .caption1 { color: #999; } .scene .size-8 { width: 24px; height: 24px; border-radius: 50%; background: #555; flex: none; }
+  .scene .size-4 { width: 12px; height: 12px; flex: none; }
+  .scene .slider { overflow: hidden; } .scene .track { display: flex; transition: transform .2s; } .scene .slide { flex: 0 0 100%; }
+  .scene .text-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+  .host-frame { position: fixed; top: 48px; left: 50%; transform: translateX(-50%); width: 480px; max-width: 100%; height: calc(100vh - 48px); border: 0; }
 </style>
 </head>
 <body>
@@ -33,32 +54,66 @@
 <div class="list" id="list"></div>
 <script>
 (function () {
-  const MOBILE = location.search.includes('mobile');
-  const jumpQ = new URLSearchParams(location.search).get('jump');
+  const Q = new URLSearchParams(location.search);
+  const load = () => { const s = document.createElement('script'); s.src = '../talklog/collector.js?' + Date.now(); document.body.appendChild(s); };
+
+  // ---- ?host: zeta-ai.io 役の親のページ(トークは別オリジンの iframe の中) ----
+  if (Q.has('host')) {
+    document.title = 'zeta';
+    const port = Q.get('frame') || '5185';
+    const pass = [...Q.keys()].filter((k) => k !== 'host' && k !== 'frame').map((k) => k + (Q.get(k) ? '=' + Q.get(k) : '')).join('&');
+    document.querySelector('.bar').replaceChildren(Object.assign(document.createElement('b'), { textContent: '模擬 zeta(親のページ)' }),
+      Object.assign(document.createElement('span'), { id: 'info', textContent: 'talklog はユーザースクリプトのように読み込み済み' }));
+    document.getElementById('list').remove();
+    const f = document.createElement('iframe');
+    f.className = 'host-frame';
+    f.name = 'zeta-scene-mock';
+    f.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+    f.setAttribute('allow', 'autoplay; clipboard-write; web-share');
+    f.setAttribute('referrerpolicy', 'no-referrer');
+    f.src = 'http://127.0.0.1:' + port + '/dev/zeta-mock.html?scene&us' + (pass ? '&' + pass : '');
+    document.body.append(f);
+    // &bare: 親のページでは talklog を動かさない(拡張機能を zeta-ai.io で許可していない状況。iframe の中は予備の保存になる)
+    if (!Q.has('bare')) load();
+    return;
+  }
+
+  const SCENE = Q.has('scene');
+  const MOBILE = !SCENE && location.search.includes('mobile');
+  const jumpQ = Q.get('jump');
   const JUMP = jumpQ === null ? 0 : (parseInt(jumpQ, 10) || 1000);
-  const N = 150, H = 150;
+  const BASE = 150, H = 150;
   const CHAR = '黒羽 蓮', CHAR2 = '白石 澪', ME = '水瀬 遥';
   // ---- 会話データ ----
+  // ?scene だけの物: 人物の区切り(divider)・画像だけの発言(image)・名前の出ない自分の発言(noName)・名前の無い相手(anon)・
+  //   送った直後のキー(client)・送信中の行(pending)。区切り・画像・送信中は書き出さない
   const msgs = [];
-  for (let i = 0; i < N; i++) {
+  for (let i = 0; i < BASE; i++) {
     const id = 'm' + (1000 + i);
-    if (i === N - 1) msgs.push({ id, type: 'cands', cands: ['候補A: もう寝る時間だよ', '候補B: *あくびをして* また明日ね', '候補C: 眠れないの?'], active: 1 });
+    if (i === BASE - 1) msgs.push({ id, type: 'cands', cands: ['候補A: もう寝る時間だよ', '候補B: *あくびをして* また明日ね', '候補C: 眠れないの?'], active: 1 });
+    else if (SCENE && i === 3) msgs.push({ id, type: 'divider' });
+    else if (SCENE && i % 31 === 15) msgs.push({ id, type: 'image' });
     else if (i % 37 === 20) msgs.push({ id, type: 'dice' });
     else if (i % 29 === 10) msgs.push({ id, type: 'info', rows: [['時間', '放課後 ' + i], ['場所', '旧校舎']], person: [CHAR, [['気分', '少し眠い']]] });
     else if (i % 23 === 5) msgs.push({ id, type: 'multi', parts: [[CHAR, `第${i}話: 先に行くね`], ['narr', `${CHAR2}が扉の陰から顔を出す。`], [CHAR2, `第${i}話: 待って、私も!`]] });
+    else if (SCENE && i % 41 === 7) msgs.push({ id, type: 'char', anon: true, text: `第${i}話: (名前の無い声)誰かいるの?`, narr: null });
+    else if (SCENE && i % 43 === 11) msgs.push({ id, type: 'narr', text: `第${i}話: 鐘が鳴った。` });
     else if (i % 2 === 0) msgs.push({ id, type: 'char', text: `第${i}話: *本を閉じて* ねえ、聞いてる?`, narr: i % 6 === 0 ? `窓の外で雨が降り出した(${i})。` : null });
-    else msgs.push({ id, type: 'user', text: i % 10 === 3 ? 'うん' : `第${i}話: うん、聞いてるよ` });
+    else msgs.push({ id, type: 'user', text: i % 10 === 3 ? 'うん' : `第${i}話: うん、聞いてるよ`, noName: SCENE && i % 8 === 1, client: SCENE && i >= BASE - 6 });
   }
+  if (SCENE) msgs.push({ id: 'pending', type: 'pending', text: '送信中の発言' });
+  const N = msgs.length;
   const expanded = new Set();
 
   // ---- 正解(書き出されるべき内容) ----
   window.__truth = () => {
     const out = [];
     for (const m of msgs) {
-      if (m.type === 'dice') continue;
-      if (m.type === 'user') out.push({ kind: 'speech', name: ME, right: true, body: m.text });
+      if (m.type === 'dice' || m.type === 'divider' || m.type === 'image' || m.type === 'pending') continue;
+      if (m.type === 'user') out.push({ kind: 'speech', name: m.noName ? '' : ME, right: true, body: m.text });
+      if (m.type === 'narr') out.push({ kind: 'narration', name: '', right: false, body: m.text });
       if (m.type === 'char') {
-        out.push({ kind: 'speech', name: CHAR, right: false, body: m.text });
+        out.push({ kind: 'speech', name: m.anon ? '' : CHAR, right: false, body: m.text });
         if (m.narr) out.push({ kind: 'narration', name: '', right: false, body: m.narr });
       }
       if (m.type === 'multi') for (const [who, t] of m.parts) out.push(who === 'narr' ? { kind: 'narration', name: '', right: false, body: t } : { kind: 'speech', name: who, right: false, body: t });
@@ -84,7 +139,85 @@
   const narr = (t) => { const n = S('NarratorBubble', 'nar'); n.textContent = t; return n; };
   const chatRow = (txt) => { const s = document.createElement('span'); s.className = 'chat'; const a = document.createElement('span'); a.textContent = txt[0]; const b = document.createElement('span'); b.textContent = txt[1]; s.append(a, '  ', b); return s; };
 
+  // ---- ?scene: 今の zeta の iframe の中と同じ形(クラス名は zeta のまま。部品の名前の目印は無い) ----
+  const E = (tag, cls, ...kids) => { const e = document.createElement(tag); if (cls) e.className = cls; e.append(...kids.filter((k) => k != null)); return e; };
+  const md = (text) => {
+    // マークダウンの文: div.chat > p(*...* は em)
+    const p = document.createElement('p');
+    text.split(/(\*[^*]+\*)/).forEach((part) => {
+      if (/^\*[^*]+\*$/.test(part)) p.append(E('em', 'pr-1 leading-[1.3em] text-white/60', part.slice(1, -1)));
+      else if (part) p.append(part);
+    });
+    return E('div', 'body16 [overflow-wrap:anywhere] whitespace-pre-wrap text-gray-200 text-white chat', p);
+  };
+  const icon = () => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('class', 'size-4 shrink-0 text-white/70'); return s; };
+  const sLeft = (who, text) => E('div', 'flex flex-row items-start gap-1.5 py-2 pr-[72px] pl-2',
+    E('span', 'aspect-square size-8 shrink-0 rounded-full object-cover'),
+    E('div', 'flex min-w-0 flex-col gap-1',
+      E('div', 'flex min-w-0 flex-row items-center gap-1', (() => { const n = E('span', 'min-w-0 caption1 wrap-break-word text-white/70', who || ' '); if (!who) n.setAttribute('aria-hidden', 'true'); return n; })()),
+      E('div', 'relative min-w-0 self-start',
+        E('div', 'flex w-fit flex-col px-3 py-2 native:shrink bg-gray-sub1', md(text)),
+        E('div', 'pointer-events-none absolute right-[-30px] bottom-0', icon()))));
+  const sRight = (who, text) => E('div', 'ml-auto flex flex-row items-start gap-1.5 py-2 pr-2 ' + (who ? 'pl-[72px]' : 'pl-[110px]'),
+    E('div', 'flex min-w-0 flex-col items-end gap-1',
+      who ? E('span', 'caption1 text-primary-200/70', who) : null,
+      E('div', 'relative flex min-w-0 flex-row self-end', E('div', 'flex w-fit flex-col px-3 py-2 native:shrink bg-bubble-user', md(text)))),
+    who ? E('span', 'aspect-square size-8 shrink-0 rounded-full object-cover') : null);
+  const sNarr = (t, plain) => E('div', 'flex flex-row items-start px-2 py-3',
+    E('div', 'flex flex-row gap-2 rounded-12 p-2 pr-3 bg-gray-main', icon(),
+      E('div', 'flex flex-[0_1_auto] flex-col', plain ? E('span', 'chat [overflow-wrap:anywhere] whitespace-pre-wrap text-white/70', t) : md(t))));
+  const infoLine = ([a, b], cls) => E('span', cls || 'chat native:mt-1', E('span', 'font-bold text-white', a), '  ', E('span', 'text-white/70', b));
+  const sInfo = (m) => {
+    const root = E('div', 'mx-2 my-3 flex flex-row items-start rounded-12 bg-gray-main py-2');
+    const toggle = () => { if (expanded.has(m.id)) expanded.delete(m.id); else expanded.add(m.id); cache.delete(m.id); render(); };
+    if (!expanded.has(m.id)) {
+      // 閉じている: ボタンの中に名前と、1行に切り詰めた最初の項目
+      const btn = E('button', 'flex flex-1 flex-row items-start text-left', E('div', 'flex h-5 w-8 shrink-0 items-center justify-center', icon()),
+        E('div', 'flex min-w-0 flex-1 flex-col gap-2 native:mt-0.5', E('span', 'shrink-0 caption1 font-semibold text-white/70', m.person[0]),
+          E('span', 'chat text-ellipsis line-clamp-2', E('span', 'font-bold text-white', m.rows[0][0]), '  ', E('span', 'text-white/70', m.rows[0][1] + '...'))));
+      btn.type = 'button';
+      btn.onclick = toggle;
+      root.append(btn);
+    } else {
+      const hdr = E('button', null, E('div', 'flex h-5 w-8 shrink-0 items-center justify-center', icon()));
+      hdr.type = 'button'; hdr.onclick = toggle;
+      const first = E('button', 'text-left', infoLine(m.rows[0]));
+      first.type = 'button'; first.onclick = toggle;
+      root.append(hdr, E('div', 'flex min-w-0 flex-1 flex-col gap-4',
+        E('div', 'flex flex-col', first, ...m.rows.slice(1).map((r) => infoLine(r))),
+        E('div', 'flex flex-col', E('span', 'mb-2 shrink-0 caption1 font-semibold text-white/70', m.person[0]), ...m.person[1].map((r) => infoLine(r)))));
+    }
+    return root;
+  };
+  function buildScene(m) {
+    const row = E('div', 'row absolute top-0 left-0 flex w-full flex-col');
+    const key = m.type === 'divider' ? 'player-character-divider' : m.type === 'pending' ? 'pending-user-message' : m.client ? 'c' + m.id.slice(1) + '-local' : 'message-' + m.id;
+    row.setAttribute('data-key', key);
+    const op = E('div', 'relative flex flex-col');
+    if (m.type !== 'cands' && m.type !== 'divider' && m.type !== 'pending') op.id = 'message-' + m.id;
+    if (m.type === 'user' || m.type === 'pending') op.append(sRight(m.noName ? '' : ME, m.text));
+    if (m.type === 'char') { op.append(sLeft(m.anon ? '' : CHAR, m.text)); if (m.narr) op.append(sNarr(m.narr)); }
+    if (m.type === 'narr') op.append(sNarr(m.text, true));
+    if (m.type === 'multi') for (const [who, t] of m.parts) op.append(who === 'narr' ? sNarr(t) : sLeft(who, t));
+    if (m.type === 'info') op.append(sInfo(m));
+    if (m.type === 'dice') op.append(E('div', 'flex flex-row px-2', E('span', 'body14', '🎲 4')));   // プラグインの表示(文の箱が無い)
+    if (m.type === 'image') op.append(E('div', 'flex flex-row justify-end pr-2 pb-2', E('div', 'mt-1 overflow-hidden rounded-xl bg-gray-sub1', E('img', 'size-full object-cover'))));
+    if (m.type === 'divider') op.append(E('div', 'flex flex-row items-center gap-2 px-4 py-3', E('span', 'caption1 text-white/50', ME + ' として参加')));
+    if (m.type === 'cands') {
+      // 最新の返答: 候補を横に並べてずらす。下に操作のバー(番号は .caption1)
+      const track = E('div', 'track', ...m.cands.map((t) => E('div', 'slide', E('div', 'relative flex flex-col', sLeft(CHAR, t)))));
+      track.style.transform = `translateX(${-m.active * 100}%)`;
+      const wrap = E('div', 'relative flex flex-col', E('div', null, E('div', 'slider', track)),
+        E('div', 'flex flex-row items-center justify-end gap-2 px-4', E('button', null, '‹'), E('span', 'caption1 text-white/50', `${m.active + 1}/${m.cands.length}`), E('button', null, '›')));
+      row.append(wrap);
+      return row;
+    }
+    row.append(op);
+    return row;
+  }
+
   function build(m, i) {
+    if (SCENE) return buildScene(m);
     const row = document.createElement('div');
     row.className = 'row';
     if (!MOBILE) { row.setAttribute('data-index', String(i)); row.setAttribute('data-key', (m.type === 'cands' ? 'local-reply-' : 'message-') + m.id); }
@@ -124,6 +257,13 @@
   // ?normal を付けると、ふつうの上から積むスクロールになる。
   const REVERSE = !location.search.includes('normal');
   const list = document.getElementById('list');
+  if (SCENE) {
+    // 今の zeta の iframe: ページの題名は「zeta」だけで、トーク名は見出しの .title16.truncate
+    document.title = 'zeta';
+    document.body.classList.add('scene');
+    list.setAttribute('role', 'log');
+    document.querySelector('.bar b').replaceWith(E('span', 'min-w-0 truncate title16 text-white', '模擬トーク(黒羽 蓮)'));
+  }
   const inner = document.createElement('div');
   if (REVERSE) { list.style.display = 'flex'; list.style.flexDirection = 'column-reverse'; list.append(inner); }
   const box = REVERSE ? inner : list;
@@ -175,10 +315,10 @@
 
   document.getElementById('run').onclick = () => {
     window.__talklogAuto = true;
-    const s = document.createElement('script');
-    s.src = '../talklog/collector.js?' + Date.now();
-    document.body.appendChild(s);
+    load();
   };
+  // ?scene&us: ユーザースクリプトのように自動で読み込む(右下に起動ボタンが出る)
+  if (SCENE && Q.has('us')) { document.getElementById('run').hidden = true; load(); }
 })();
 </script>
 </body>

@@ -10,15 +10,28 @@
  *   読み取った内容はこの端末の中だけで扱い、どこにも送信しない。
  *
  * zeta 固有の目印(画面の作りが変わったらここを直す):
- *   1件の塊   … [data-key^="message-"] / [data-key^="local-reply-"](PC) , ChatMessage / Candidate
- *   吹き出し  … ChatBubbleContainer(発言) / NarratorBubble(地の文) / InfoBoxContent(インフォボックス)
- *   左右      … Left/RightContentView, Left/RightTextContent(Right = 自分)
- *   名前      … .caption1
- *   再生成候補 … Swiper(.swiper-slide)。表示中は .swiper-slide-active
+ *   2026-11 から、トーク画面は別オリジンの iframe(https://frame.pingpong.ai/v1/index.html)の中にある。
+ *   ブックマークレットは iframe の中に届かないので、ユーザースクリプトで iframe の中でも動かす。
+ *   iframe の中ではファイルを保存できない(sandbox に allow-downloads が無い)ので、書き出した HTML は
+ *   親のページ(zeta-ai.io)で動いている同じスクリプトに MessageChannel で渡して保存してもらう(saveViaHost / hostListen)。
+ *
+ *   iframe の中(今の画面):
+ *     1件の塊   … [role="log"] の中の [data-index][data-key](キーは message-<id>。送った直後は別の id)
+ *     文        … .chat(吹き出し・地の文・インフォボックスの行。マークダウンは中に p / em / strong)
+ *     左右      … 右(自分)は外枠に ml-auto / items-end / self-end。左は名前 .caption1 が文の近くにある。どちらも無ければ地の文
+ *     インフォボックス … 行が .chat > span.font-bold(ラベル) + span(値)。閉じていると .text-ellipsis の1行(押すと開く)
+ *     再生成候補 … 横にずらして並ぶ。行の左右からはみ出した候補は拾わない
+ *     トーク名  … 見出しの .title16.truncate
+ *   以前の画面(zeta-ai.io に直接あった頃。残しておく):
+ *     1件の塊   … [data-key^="message-"] / [data-key^="local-reply-"](PC) , ChatMessage / Candidate
+ *     吹き出し  … ChatBubbleContainer(発言) / NarratorBubble(地の文) / InfoBoxContent(インフォボックス)
+ *     左右      … Left/RightContentView, Left/RightTextContent(Right = 自分)
+ *     名前      … .caption1
+ *     再生成候補 … Swiper(.swiper-slide)。表示中は .swiper-slide-active
  */
 (function () {
   'use strict';
-  var VER = '1.1.1';
+  var VER = '1.2.0';
 
   if (window.__talklog && window.__talklog.ver) {
     if (window.__talklogAuto) { window.__talklogAuto = false; window.__talklog.open(); }
@@ -28,14 +41,18 @@
   /* ------------------------------------------------------------ 目印 */
   var SC = function (n) { return '[data-sentry-component="' + n + '"]'; };
   var SEL = {
-    block: '[data-key^="message-"],[data-key^="local-reply-"],' + SC('ChatMessage') + ',' + SC('Candidate'),
+    block: '[data-key^="message-"],[data-key^="local-reply-"],' + SC('ChatMessage') + ',' + SC('Candidate') + ',[role="log"] [data-index][data-key]',
     side: SC('RightContentView') + ',' + SC('RightTextContent') + ',' + SC('LeftContentView') + ',' + SC('LeftTextContent'),
     bubble: SC('ChatBubbleContainer') + ',' + SC('NarratorBubble'),
     info: SC('InfoBoxContent'),
     infoCollapsed: SC('InfoBoxCollapsedContent'),
     dice: SC('DiceRecordContent'),
-    name: '.caption1'
+    name: '.caption1',
+    text: '.chat',
+    old: '[data-sentry-component]'
   };
+  // 行のキーのうち、発言でないもの(送信中・返答の途中・人物の選択・案内・区切り)。返答が終わると本物の行に置き換わる
+  var NOT_MESSAGE = /^(pending-user-message|streaming-reply|player-character-select|first-guide|player-character-divider)$/;
 
   /* ------------------------------------------------------------ 集めたもの */
   var blocks = new Map();   // blockKey → { items:[{kind,name,right,body}], idx, local }
@@ -98,7 +115,7 @@
   /** 再生成候補のうち、いま表示していないもの */
   function offSlide(el) {
     var slide = el.closest('.swiper-slide');
-    if (!slide || !slide.parentElement) return false;
+    if (!slide || !slide.parentElement) return offRow(el);
     var sibs = slide.parentElement.children;
     for (var i = 0; i < sibs.length; i++) {
       if (sibs[i].classList && sibs[i].classList.contains('swiper-slide-active')) return !slide.classList.contains('swiper-slide-active');
@@ -110,6 +127,21 @@
     if (!r.width && !r.height) return true;
     var cx = r.left + r.width / 2;
     return cx < frame.left || cx > frame.right;
+  }
+  /**
+   * 今の画面の再生成候補: 横にずらして並ぶので、行の左右からはみ出した物は表示していない候補。
+   * 候補の切り替えが隠している(aria-hidden / inert)物も外す。
+   */
+  function offRow(el) {
+    var row = el.closest('[data-index]');
+    if (!row) return false;
+    for (var p = el; p && p !== row; p = p.parentElement) {
+      if (p.getAttribute('aria-hidden') === 'true' || p.hasAttribute('inert')) return true;
+    }
+    var rr = row.getBoundingClientRect(), r = el.getBoundingClientRect();
+    if (!rr.width || (!r.width && !r.height)) return false;
+    var cx = r.left + r.width / 2;
+    return cx < rr.left - 1 || cx > rr.right + 1;
   }
 
   function isRight(el) {
@@ -167,6 +199,109 @@
     return items;
   }
 
+  /*
+   * 今の画面(iframe の中)の1行を読む。部品の名前の目印が無いので、文の箱(.chat)を手がかりに見分ける。
+   *   - 文の箱ごとに、ほかの文を含まない所まで上がった枠を「1つの発言の外枠」とみなす
+   *   - 外枠までの間に右寄せ(ml-auto / items-end / self-end)があれば自分の発言
+   *   - 文の近くに名前(.caption1)があれば相手の発言(名前が空でも左の発言は名前の欄がある)
+   *   - どちらでもなければ地の文
+   *   - 「span.font-bold(ラベル) + span(値)」の行はインフォボックス。箱ごとに1件にまとめる
+   */
+  /** いちばん外側の文の箱(入れ子の内側は除く) */
+  function topTexts(root) {
+    var all = root.querySelectorAll(SEL.text), out = [];
+    for (var i = 0; i < all.length; i++) {
+      var up = all[i].parentElement && all[i].parentElement.closest(SEL.text);
+      if (up && root.contains(up)) continue;
+      out.push(all[i]);
+    }
+    return out;
+  }
+  function isInfoLine(c) {
+    var f = c.firstElementChild;
+    return !!f && f.tagName === 'SPAN' && /(^|\s)font-bold(\s|$)/.test(f.className || '') && c.children.length >= 2;
+  }
+  /** c から上へ、ほかの文の箱を含まない所までの枠(row は越えない) */
+  function ownFrame(c, row, texts) {
+    var r = c;
+    while (r !== row && r.parentElement) {
+      var p = r.parentElement, other = false;
+      for (var i = 0; i < texts.length; i++) {
+        if (texts[i] !== c && p.contains(texts[i]) && !r.contains(texts[i])) { other = true; break; }
+      }
+      if (other) break;
+      r = p;
+    }
+    return r;
+  }
+  // 名前・右寄せを探すのは文から近い段だけ(今の zeta ではどちらも3〜4段上)。
+  // 発言が1つだけの行は外枠が行全体になり、最新の返答の下の操作のバーなども入るため
+  var NEAR = 6;
+  var RIGHT_CLS = /(^|\s)(ml-auto|items-end|self-end)(\s|$)/;
+  function pathRight(c, frame) {
+    for (var e = c, d = 0; e && d <= NEAR; e = e.parentElement, d++) {
+      if (typeof e.className === 'string' && RIGHT_CLS.test(e.className)) return true;
+      if (e === frame) break;
+    }
+    return false;
+  }
+  /** 文の近く(外枠の中で、文へ続く道の脇)にある名前。無ければ null */
+  function nameNear(c, frame) {
+    for (var e = c, d = 0; e && e !== frame && d < NEAR - 1; e = e.parentElement, d++) {
+      var p = e.parentElement;
+      if (!p) break;
+      for (var i = 0; i < p.children.length; i++) {
+        var s = p.children[i];
+        if (s === e) continue;
+        var cap = s.matches(SEL.name) ? s : s.querySelector(SEL.name);
+        if (cap && !cap.closest(SEL.text)) return cap.textContent.trim();
+      }
+    }
+    return null;
+  }
+  /** インフォボックスの箱。角丸の枠があればそれ、無ければインフォボックスの行だけを含む所まで */
+  function infoFrame(c, row, others) {
+    var box = c.closest('.rounded-12');
+    if (box && row.contains(box) && box !== row) return box;
+    return ownFrame(c, row, others);
+  }
+  function readRow(row) {
+    var texts = topTexts(row);
+    var items = [], boxes = [];
+    var plain = texts.filter(function (c) { return !isInfoLine(c); });
+    for (var i = 0; i < texts.length; i++) {
+      var c = texts[i];
+      if (offSlide(c)) continue;
+      if (isInfoLine(c)) {
+        var box = infoFrame(c, row, plain);
+        if (boxes.indexOf(box) >= 0) continue;
+        boxes.push(box);
+        // 閉じていたら一度だけ開く(開いた後の行は次の読み取りで拾う)
+        var shut = box.querySelector('.text-ellipsis');
+        if (shut && infoClicked && !infoClicked.has(box)) {
+          infoClicked.add(box);
+          var btn = shut.closest('button');
+          if (btn) { try { btn.click(); return null; } catch (e) { /* 見えている分で */ } }
+        }
+        var it = infoText(box);
+        if (it) items.push({ kind: 'info', name: 'インフォボックス', right: false, body: it });
+        continue;
+      }
+      var body = textOf(c);
+      if (!body) continue;
+      var frame = ownFrame(c, row, texts);
+      if (pathRight(c, frame)) {
+        var me = nameNear(c, frame);
+        items.push({ kind: 'speech', name: me || '', right: true, body: body });
+        continue;
+      }
+      var nm = nameNear(c, frame);
+      if (nm !== null) items.push({ kind: 'speech', name: nm, right: false, body: body });
+      else items.push({ kind: 'narration', name: '', right: false, body: body });
+    }
+    return items;
+  }
+
   /* ------------------------------------------------------------ 画面の読み取り */
   function hash(s) {
     var x = 5381;
@@ -191,7 +326,10 @@
       if (outer) continue;
       var row = el.closest('[data-index]') || el;
       var dk = el.getAttribute('data-key') || (row.getAttribute && row.getAttribute('data-key')) || '';
-      var items = readBlock(el);
+      if (NOT_MESSAGE.test(dk)) continue;
+      // 今の画面(部品の名前の目印が無い行)は文の箱から読む。以前の画面は今までどおり
+      var current = !el.matches(SEL.old) && !el.querySelector(SEL.old) && !!el.closest('[role="log"]');
+      var items = current ? readRow(el) : readBlock(el);
       if (items === null) continue;
       if (!items.length) continue;
       var key = dk || (el.id ? 'id:' + el.id : '');
@@ -597,7 +735,9 @@
     var t = (document.title || '').replace(/\s*[-|｜]\s*zeta.*$/i, '').trim();
     // zeta のページタイトルは「zeta」だけなので、画面上部のヘッダーにあるトーク名を使う
     if (!t || /^zeta$/i.test(t)) {
-      var hd = document.querySelector(SC('Header') + ' .title16') || document.querySelector(SC('Header') + ' .truncate');
+      // 今の画面(iframe の中)は見出しの .title16.truncate。以前の画面は Header の中
+      var hd = document.querySelector(SC('Header') + ' .title16') || document.querySelector(SC('Header') + ' .truncate') ||
+        document.querySelector('.title16.truncate');
       if (hd && hd.textContent.trim()) t = hd.textContent.trim();
     }
     return t || 'トーク';
@@ -651,16 +791,116 @@
     scan();
     var items = collect();
     if (!items.length) { setState('ready'); say('発言が見つかりませんでした。トーク画面で開いているか確かめてください。', true); return; }
-    var blob = new Blob([buildHtml(items)], { type: 'text/html;charset=utf-8' });
+    var file = { name: fileName(), html: buildHtml(items), n: items.length };
+    if (!inFrame()) { downloadHtml(file.name, file.html); setState('done', items.length); return; }
+    // iframe の中ではファイルを保存できないので、親のページ(zeta-ai.io)で動いている talklog に渡す
+    if (await saveViaHost(file)) { setState('done', items.length); return; }
+    pending = file;
+    setState('savefail', items.length);
+  }
+
+  function inFrame() { try { return window.parent !== window; } catch (e) { return true; } }
+  function downloadHtml(name, html) {
+    var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = fileName();
+    a.download = name;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
-    setState('done', items.length);
+  }
+
+  /*
+   * 親のページとの受け渡し。中身は MessageChannel の口だけを通すので、zeta 自身の画面のメッセージには流れない。
+   *   iframe → 親: window.postMessage({ talklog: 'save', v: 1 }, 親のオリジン, [口])
+   *   親 → 口: { type: 'ready' } → 口 → 親: { type: 'save', name, html } → 親 → 口: { type: 'saved' } / { type: 'failed' }
+   */
+  function saveViaHost(file) {
+    return new Promise(function (resolve) {
+      if (typeof MessageChannel !== 'function') { resolve(false); return; }
+      var ch = new MessageChannel(), done = false, tm = 0;
+      var finish = function (ok) {
+        if (done) return;
+        done = true;
+        clearTimeout(tm);
+        try { ch.port1.close(); } catch (e) { /* 閉じ済み */ }
+        resolve(ok);
+      };
+      tm = setTimeout(function () { finish(false); }, 3000);
+      ch.port1.onmessage = function (ev) {
+        var d = ev.data || {};
+        if (d.type === 'ready') ch.port1.postMessage({ type: 'save', name: file.name, html: file.html });
+        else if (d.type === 'saved') finish(true);
+        else if (d.type === 'failed') finish(false);
+      };
+      var target = '*';
+      try { if (location.ancestorOrigins && location.ancestorOrigins.length) target = location.ancestorOrigins[0]; } catch (e) { /* 使えないブラウザ */ }
+      try { window.parent.postMessage({ talklog: 'save', v: 1 }, target, [ch.port2]); } catch (e) { finish(false); }
+    });
+  }
+
+  /** 親のページ側: iframe の中の talklog から受け取った HTML を保存する */
+  function hostAllowed(origin) {
+    if (/^https:\/\/([a-z0-9-]+\.)*pingpong\.ai$/.test(origin)) return true;
+    // 開発用の模擬ページ(127.0.0.1 の別の番号のサーバー)
+    var local = /^http:\/\/127\.0\.0\.1(:\d+)?$/;
+    return local.test(location.origin) && local.test(origin);
+  }
+  function childFrame(src) {
+    for (var i = 0; i < window.frames.length; i++) if (window.frames[i] === src) return true;
+    return false;
+  }
+  function hostListen() {
+    window.addEventListener('message', function (e) {
+      var d = e.data;
+      if (!d || d.talklog !== 'save' || !e.ports || !e.ports[0]) return;
+      if (!hostAllowed(e.origin) || !childFrame(e.source)) return;
+      var port = e.ports[0];
+      port.onmessage = function (ev) {
+        var m = ev.data || {};
+        if (m.type !== 'save' || typeof m.html !== 'string') return;
+        var name = typeof m.name === 'string' && /^talklog_[^\\/:*?"<>|\u0000-\u001f]{1,80}\.html$/.test(m.name) ? m.name : 'talklog.html';
+        try { downloadHtml(name, m.html); port.postMessage({ type: 'saved' }); }
+        catch (err) { port.postMessage({ type: 'failed' }); }
+        try { port.close(); } catch (err) { /* 閉じ済み */ }
+      };
+      port.postMessage({ type: 'ready', ver: VER });
+    });
+  }
+
+  /*
+   * 親のページに渡せなかったときの予備: 押してすぐの操作なら、共有(iPhone の「ファイルに保存」など)とコピーは iframe の中でも使える
+   */
+  var pending = null;
+  function shareFile() {
+    if (!pending) return;
+    try {
+      var f = new File([pending.html], pending.name, { type: 'text/html' });
+      if (navigator.canShare && navigator.canShare({ files: [f] })) {
+        navigator.share({ files: [f], title: pending.name }).then(function () { setState('done', pending.n); }, function () { /* 取り消し */ });
+        return;
+      }
+    } catch (e) { /* 共有できない */ }
+    say('この端末では共有で保存できません。「HTMLをコピー」を使ってください。', true);
+  }
+  function copyHtml() {
+    if (!pending) return;
+    var ok = function () { say('コピーしました。メモ帳などに貼り付けて、名前の最後を .html にして保存してください。'); };
+    var ng = function () { say('コピーできませんでした。', true); };
+    // 押してすぐの間に、選んで写す昔ながらの方法を先に試す(iframe の中ではクリップボードの書き込みが断られることがあるため)
+    var ta = el('textarea');
+    ta.value = pending.html;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    ui.root.appendChild(ta);
+    ta.select();
+    var done = false;
+    try { done = document.execCommand('copy'); } catch (e) { done = false; }
+    ta.remove();
+    if (done) { ok(); return; }
+    try { navigator.clipboard.writeText(pending.html).then(ok, ng); } catch (e) { ng(); }
   }
 
   /* ------------------------------------------------------------ パネル(Shadow DOMで画面のCSSと分ける) */
@@ -682,7 +922,7 @@
     '.ver{font-size:10.5px;color:#9a93a8}.x{margin-left:auto;border:0;background:none;font-size:18px;line-height:1;color:#8a8399;cursor:pointer;padding:4px 6px;border-radius:8px}',
     '.x:hover{background:#f3f1ff}.count{font-size:15px;font-weight:700}.count small{font-size:11.5px;font-weight:400;color:#8a8399;margin-left:6px}',
     '.guide{color:#5b5567;margin:4px 0 10px}.guide.warn{color:#c4425a}',
-    '.row{display:flex;gap:8px;flex-wrap:wrap}',
+    '.row{display:flex;gap:8px;flex-wrap:wrap}.row.alt{margin-top:8px}',
     'button.b{flex:1;min-height:40px;border-radius:999px;border:1px solid #cdc6fd;background:#fff;color:#5b51c9;font:700 13px/1 inherit;cursor:pointer;padding:0 12px}',
     'button.b:hover{background:#f3f1ff}button.b.pri{background:#6d5dfc;border-color:#6d5dfc;color:#fff}button.b.pri:hover{background:#5b51c9}',
     'button.b:disabled{opacity:.5;cursor:default}',
@@ -724,6 +964,14 @@
     ui.exp.addEventListener('click', exportNow);
     row.appendChild(ui.climb);
     row.appendChild(ui.exp);
+    // 親のページに渡せなかったときだけ出す
+    ui.alt = el('div', { class: 'row alt' });
+    var sh = el('button', { class: 'b' }, '共有で保存');
+    sh.addEventListener('click', shareFile);
+    var cp = el('button', { class: 'b' }, 'HTMLをコピー');
+    cp.addEventListener('click', copyHtml);
+    ui.alt.appendChild(sh);
+    ui.alt.appendChild(cp);
     var opt = el('div', { class: 'opt' });
     [['narration', '地の文'], ['info', 'インフォボックス']].forEach(function (o) {
       var lb = el('label');
@@ -738,6 +986,7 @@
     p.appendChild(ui.count);
     p.appendChild(ui.guide);
     p.appendChild(row);
+    p.appendChild(ui.alt);
     p.appendChild(opt);
     p.appendChild(el('div', { class: 'note' }, '読み取った内容はこの端末の中だけで扱い、どこにも送信しません。'));
     ui.panel = p;
@@ -755,7 +1004,14 @@
         ? { warn: true, text: n + '件を書き出しました。ただし途中で読み飛ばした可能性があります(' + gapEvents + '回)。抜けがないかファイルを確かめ、足りなければ、もう一度ゆっくり遡ってから書き出してください。' }
         : { text: n + '件を書き出しました。保存したファイルを開いて、いちばん古い発言と新しい発言が入っているか確かめてください。' };
     }
+    if (s === 'savefail') {
+      msgOverride = { warn: true, text: n + '件をまとめましたが、ファイルを保存できませんでした。zeta のページ(zeta-ai.io)でも talklog が動くよう、拡張機能の許可を確かめてください。下のボタンでも保存できます。' };
+    }
     updatePanel();
+  }
+  /** トークが別オリジンの iframe の中にある(このページからは読めない)か */
+  function chatInFrame() {
+    return !inFrame() && !!document.querySelector('iframe[src*="pingpong.ai"],iframe[name^="zeta-scene"]');
   }
 
   function updatePanel() {
@@ -770,6 +1026,7 @@
     else if (state === 'climbing') text = '上へ遡っています。止めたいときは「止める」を押してください。';
     else if (state === 'top') text = 'いちばん上まで来ました。「書き出す」を押してください。';
     else if (state === 'exporting') text = '書き出しています…';
+    else if (!visNow && chatInFrame()) { text = 'zeta の更新でトークが別の枠に移ったため、このページからはトークを読めません。talklog のページの手順で、ユーザースクリプトを入れて使ってください。'; warn = true; }
     else if (!visNow) { text = 'トークが見つかりません。zeta のトーク画面で開いてください。'; warn = true; }
     else text = 'いちばん古い発言まで、ゆっくり上へスクロールしてください(「自動で遡る」でもOK)。終わったら「書き出す」。';
     ui.guide.textContent = text;
@@ -777,6 +1034,7 @@
     ui.climb.textContent = state === 'climbing' ? '止める' : '自動で遡る';
     ui.exp.disabled = state === 'exporting' || state === 'sweeping';
     ui.climb.disabled = state === 'exporting' || state === 'sweeping';
+    ui.alt.style.display = state === 'savefail' ? '' : 'none';
   }
 
   function startWatching() {
@@ -840,6 +1098,9 @@
       return { blocks: order.length, gaps: gapEvents, chains: Object.keys(chains).length, keys: order.slice() };
     }
   };
+
+  // いちばん外のページでは、iframe の中の talklog から書き出しを受け取れるようにしておく
+  if (!inFrame()) hostListen();
 
   if (window.__talklogAuto) {
     window.__talklogAuto = false;

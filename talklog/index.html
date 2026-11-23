@@ -30,6 +30,9 @@
 
     <section class="panel steps-card">
       <h2>1. 準備(はじめの1回だけ)</h2>
+      <div class="notice">
+        <p><b>zeta の更新でトークの画面が別の枠(iframe)に移り、ブックマーク(ブックマークレット)では使えなくなりました。</b>下の手順で、拡張機能にユーザースクリプトを入れて使ってください。前から talklog のユーザースクリプトを使っている人も、下のリンクから入れ直してください。</p>
+      </div>
       <div class="seg dev-tabs" role="tablist" aria-label="端末の種類">
         <button type="button" role="tab" data-dev="pc" aria-pressed="true">パソコン</button>
         <button type="button" role="tab" data-dev="ios" aria-pressed="false">iPhone・iPad</button>
@@ -37,54 +40,42 @@
       </div>
 
       <div class="dev" data-dev-panel="pc">
-        <p class="hint">Chrome・Edge・Safari・Firefox などで使えます。ブックマークバーを表示しておいてください。</p>
+        <p class="hint">Chrome・Edge・Firefox・Safari で使えます。拡張機能「Tampermonkey」を使います。</p>
         <ol class="howto">
-          <li>下の <b>「talklogで保存」</b> ボタンを、ブックマークバーへドラッグして置きます。
-            <div class="bm-row"><a class="bm-link" id="bm-drag" href="#" title="ブックマークバーへドラッグしてください"><span data-icon="bubble" data-icon-size="16"></span>talklogで保存</a><span class="hint">← ドラッグ</span></div>
-          </li>
-          <li>ドラッグできないときは、<button type="button" class="link-btn" data-copy="bm">ブックマーク用の文字列をコピー</button>し、ブックマークを新しく作って「URL」欄に貼り付けます(名前は「talklogで保存」など)。</li>
+          <li>ブラウザに拡張機能「Tampermonkey」を入れます。</li>
+          <li>Chrome と Edge では、拡張機能の管理画面で Tampermonkey の「詳細」を開き、「ユーザー スクリプトを許可する」をオンにします。この項目が無いブラウザでは、何もしなくて構いません。</li>
+          <li><a href="talklog.user.js">talklog.user.js</a> を開いて「インストール」を押します。</li>
+          <li>zeta のトーク画面の右下に <b>「talklog」</b> ボタンが出るようになります。</li>
         </ol>
       </div>
 
       <div class="dev" data-dev-panel="ios" hidden>
-        <p class="hint">Safari で使います。方法はどちらか一方で構いません。</p>
-        <h3>方法A: ブックマークで使う(アプリ不要)</h3>
+        <p class="hint">Safari で使います。無料アプリ「Userscripts」を使います。</p>
         <ol class="howto">
-          <li><button type="button" class="btn btn-outline btn-sm" data-copy="bm"><span data-icon="copy"></span>ブックマーク用の文字列をコピー</button></li>
-          <li>Safari で今のページを開いたまま、共有ボタン →「ブックマークを追加」で保存します。</li>
-          <li>ブックマーク一覧で今のブックマークを長押しして、「編集」を選びます。名前を「talklogで保存」にし、アドレス欄を消して、コピーした文字列を貼り付けて保存します。</li>
-        </ol>
-        <h3>方法B: アプリ「Userscripts」で使う(ボタンが出て便利)</h3>
-        <ol class="howto">
-          <li>App Store で無料アプリ「Userscripts」を入れ、Safari の機能拡張で有効にします。</li>
-          <li>Safari でこのリンクを開き、機能拡張から「インストール」します: <a id="us-link" href="talklog.user.js">talklog.user.js</a></li>
+          <li>App Store で「Userscripts」を入れ、設定アプリにある Safari の「機能拡張」で、Userscripts をオンにします。</li>
+          <li>同じ画面で、Userscripts をすべての Web サイトで「許可」にします。zeta のページ(zeta-ai.io)とトークの枠(frame.pingpong.ai)の両方で動かす必要があるためです。</li>
+          <li>Safari で <a href="talklog.user.js">talklog.user.js</a> を開き、機能拡張のメニューから「インストール」します。</li>
           <li>zeta のトーク画面の右下に <b>「talklog」</b> ボタンが出るようになります。</li>
         </ol>
       </div>
 
       <div class="dev" data-dev-panel="android" hidden>
-        <p class="hint">Chrome で使います。</p>
+        <p class="hint">Firefox で使います。Android の Chrome には拡張機能を入れられません。</p>
         <ol class="howto">
-          <li><button type="button" class="btn btn-outline btn-sm" data-copy="bm"><span data-icon="copy"></span>ブックマーク用の文字列をコピー</button></li>
-          <li>今のページをブックマークに追加して、そのブックマークを編集します。名前を「talklogで保存」にし、URLをコピーした文字列に置き換えて保存します。</li>
-          <li>使うときは、zeta のトーク画面でアドレスバーに <b>talklogで保存</b> と入力し、候補に出たブックマーク(★)をタップします。</li>
+          <li>Firefox に拡張機能「Tampermonkey」か「Violentmonkey」を入れます。</li>
+          <li>Firefox で <a href="talklog.user.js">talklog.user.js</a> を開いて「インストール」を押します。</li>
+          <li>zeta のトーク画面の右下に <b>「talklog」</b> ボタンが出るようになります。</li>
         </ol>
-        <p class="hint">Firefox(Android) に拡張機能「Violentmonkey」を入れて、<a href="talklog.user.js">talklog.user.js</a> をインストールする方法もあります(トーク画面にボタンが出ます)。</p>
       </div>
 
-      <details class="fold">
-        <summary>短い版で動かないとき(全部入り版)</summary>
-        <p class="hint">上のブックマークは毎回このサイトから本体を読み込みます。zeta 側の設定で外部の読み込みが止められて動かない場合は、本体を丸ごと入れた全部入り版を試してください。全部入り版には更新が自動では入りません。</p>
-        <button type="button" class="btn btn-outline btn-sm" data-copy="full"><span data-icon="copy"></span>全部入り版をコピー</button>
-      </details>
-      <p class="hint warn-note">貼り付けたあと、先頭の <code>javascript:</code> が消えていないか確かめてください。ブラウザが自動で取り除くことがあります。消えていたら手で打ち足してください。</p>
+      <p class="hint">talklog はトークの枠の中で発言を読み取り、zeta のページの側でファイルを保存します。拡張機能を使うサイトを選ぶときは、zeta-ai.io と frame.pingpong.ai の両方を許可してください。</p>
     </section>
 
     <section class="panel steps-card">
       <h2>2. 保存する</h2>
       <ol class="howto">
         <li>ブラウザで <b>zeta(Web版)</b> を開き、保存したいトークの画面を表示します。</li>
-        <li>ブックマーク「talklogで保存」(またはトーク画面の「talklog」ボタン)を押します。画面の下にパネルが出て、まず最新の発言まで自動で読み込みます。</li>
+        <li>トーク画面の右下の <b>「talklog」</b> ボタンを押します。画面の下にパネルが出て、まず最新の発言まで自動で読み込みます。</li>
         <li>いちばん古い発言まで、ゆっくり上へスクロールします。パネルの <b>「自動で遡る」</b> を押すと自動で上まで戻ります。</li>
         <li><b>「書き出す」</b> を押すと、<code>talklog_</code> ではじまる HTML ファイルが保存されます。</li>
       </ol>
@@ -95,6 +86,7 @@
         <li>集められるのは、画面に読み込まれた発言だけです。上まで遡らないと、遡ったところから先しか入りません。</li>
         <li>入るのは文字だけで、発言の日時、画像・ボイス・スタンプは入りません。</li>
         <li>再生成した候補は、そのとき表示しているものだけが入ります。</li>
+        <li>ファイルが保存されないときは、パネルに出る「共有で保存」か「HTMLをコピー」でも保存できます。</li>
         <li>zeta の画面の作りが変わると、動かなくなることがあります。</li>
       </ul>
     </section>

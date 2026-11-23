@@ -22,15 +22,8 @@
 .dev-tabs { align-self: flex-start; }
 .howto { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
 .howto li::marker { color: var(--primary); font-weight: 700; }
-.bm-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
-.bm-link { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 999px; background: var(--primary); color: #fff; font-weight: 700; font-size: 13.5px; cursor: grab; box-shadow: 0 4px 12px rgba(109, 93, 252, .3); }
 .link-btn { border: 0; background: none; padding: 0; color: var(--primary-dark); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: .92em; background: var(--soft); border-radius: 5px; padding: 1px 5px; }
-.fold { border-top: 1px solid var(--line); padding-top: 10px; }
-.fold summary { cursor: pointer; font-weight: 700; font-size: 13.5px; }
-.fold[open] summary { margin-bottom: 8px; }
-.fold .btn { margin-top: 8px; }
-.warn-note { color: #9a4a17; }
 .limits { margin: 0; padding-left: 1.2em; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
 
 /* ---------- ビューア ---------- */
