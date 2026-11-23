@@ -107,6 +107,8 @@
     else if (i % 2 === 0) msgs.push({ id, type: 'char', text: `第${i}話: *本を閉じて* ねえ、聞いてる?`, narr: i % 6 === 0 ? `窓の外で雨が降り出した(${i})。` : null, dream: SCENE && i === 40 ? { st: 'peek', pages: [[`夢${i}は一ページだけ。`]] } : null });
     else msgs.push({ id, type: 'user', text: i % 10 === 3 ? 'うん' : `第${i}話: うん、聞いてるよ`, noName: SCENE && i % 8 === 1, client: SCENE && i >= BASE - 6 });
   }
+  // &userlast: 最後が自分の発言(返答が来なかった)。zeta はその前の返答を「最新の返答」として夢を買わせる
+  if (SCENE && Q.has('userlast')) msgs.push({ id: 'm' + (1000 + BASE), type: 'user', text: '返答の来なかった発言' });
   if (SCENE) msgs.push({ id: 'pending', type: 'pending', text: '送信中の発言' });
   const N = msgs.length;
   const expanded = new Set();
@@ -131,6 +133,7 @@
     return out;
   };
   window.__dreamBought = 0;   // 最新の返答の夢をピースで買った回数(talklog が自分で押していないかを確かめる)
+  window.__dreamOffscreen = 0;   // 画面(スクロール欄)の外にある札の「のぞく」が押された回数
 
   // ---- DOM(Reactのように、同じidの要素は描き直しても使い回す) ----
   const S = (name, cls) => { const d = document.createElement('div'); d.setAttribute('data-sentry-component', name); if (cls) d.className = cls; return d; };
@@ -180,7 +183,7 @@
     (() => { const s = E('span', 'text-lg text-indigo-200', '☾'); s.setAttribute('aria-hidden', 'true'); return s; })(),
     E('span', 'min-w-0 flex-1 truncate', CHAR + 'の夢'),
     d.st === 'past' ? E('span', 'shrink-0 caption1 text-gray-500', '過去の夢')
-      : (() => { const b = E('button', 'shrink-0 rounded-full bg-white/5 px-3 py-1 caption1 text-indigo-200', 'のぞく'); b.type = 'button'; b.onclick = () => openDream(d); return b; })());
+      : (() => { const b = E('button', 'shrink-0 rounded-full bg-white/5 px-3 py-1 caption1 text-indigo-200', 'のぞく'); b.type = 'button'; b.onclick = () => { const r = b.getBoundingClientRect(), L = document.getElementById('list').getBoundingClientRect(); if (r.top < L.top || r.bottom > L.bottom) window.__dreamOffscreen++; openDream(d); }; return b; })());
   // 夢のパネル(zeta では画面に重ねる層)。開くまで少し待ち、ページは 1 枚ずつ。めくると番号が先に変わり、前のページが消えてから次のページが出る
   function openDream(d) {
     if (document.querySelector('.dream-layer')) return;

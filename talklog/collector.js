@@ -33,7 +33,7 @@
  */
 (function () {
   'use strict';
-  var VER = '1.3.0';
+  var VER = '1.3.1';
 
   if (window.__talklog && window.__talklog.ver) {
     if (window.__talklogAuto) { window.__talklogAuto = false; window.__talklog.open(); }
@@ -614,7 +614,61 @@
   function dreamAutoOk(key) {
     if (!sawBottom || !/^message-/.test(key || '')) return false;
     var at = order.indexOf(key);
-    return at >= 0 && at < order.length - 1;
+    return at >= 0 && at < lastReplyAt();
+  }
+  /**
+   * 最新の返答(相手側の最後の発言)の位置。zeta が夢を買わせるのは「相手の最後の発言」の札なので、
+   * 最後が自分の発言(返答が来ていない・失敗した)のときも、その前の返答を最新として扱う。中身の分からない行も返答とみなす
+   */
+  function lastReplyAt() {
+    for (var i = order.length - 1; i >= 0; i--) {
+      var b = blocks.get(order[i]);
+      if (!b || !b.items || !b.items.length || b.items.some(function (x) { return !x.right; })) return i;
+    }
+    return -1;
+  }
+  /** 画面で見えている範囲(スクロール欄の枠の中で、talklog のパネルに隠れていない所) */
+  function viewRect(t, el, underPanel) {
+    var top = 0, bottom = window.innerHeight || document.documentElement.clientHeight;
+    if (t && t !== document.scrollingElement && t !== document.documentElement && t !== document.body) {
+      var s = t.getBoundingClientRect();
+      top = Math.max(top, s.top); bottom = Math.min(bottom, s.bottom);
+    }
+    var p = !underPanel && ui && ui.panel && ui.panel.isConnected ? ui.panel.getBoundingClientRect() : null;
+    if (p && p.height && el) {
+      var r = el.getBoundingClientRect();
+      if (r.left < p.right && r.right > p.left) bottom = Math.min(bottom, p.top);
+    }
+    return { top: top, bottom: bottom };
+  }
+  /** el が画面に見えているか(underPanel = talklog のパネルの裏も見えているとみなす) */
+  function onScreen(el, t, underPanel) {
+    var r = el.getBoundingClientRect(), v = viewRect(t, el, underPanel);
+    return r.height > 0 && r.top >= v.top && r.bottom <= v.bottom;
+  }
+  function rowByKey(key) {
+    var q = window.CSS && CSS.escape ? CSS.escape(key) : key.replace(/["\\]/g, '\\$&');
+    return document.querySelector('[role="log"] [data-index][data-key="' + q + '"]');
+  }
+  /** 札を画面の真ん中あたりへ動かす。動かす前の位置(画面のいちばん上の行と、その高さ)を返す */
+  async function bringIntoView(card, t, my) {
+    var v = viewRect(t, card), rows = document.querySelectorAll('[role="log"] [data-index][data-key]'), anchor = null;
+    for (var i = 0; i < rows.length; i++) {
+      var rr = rows[i].getBoundingClientRect();
+      if (rr.bottom > v.top + 1) { anchor = { key: rows[i].getAttribute('data-key'), top: rr.top }; break; }
+    }
+    var back = { scrollTop: t.scrollTop, anchor: anchor };
+    var r = card.getBoundingClientRect(), before = domSig();
+    t.scrollTop = t.scrollTop + Math.round((r.top + r.bottom) / 2 - (v.top + v.bottom) / 2);
+    await settle(before, my, 8);
+    return back;
+  }
+  /** bringIntoView の前の位置へ戻す(上に古い分が読み込まれても同じ行が同じ高さに来るように、行で合わせる) */
+  async function returnTo(back, t, my) {
+    var row = back.anchor && rowByKey(back.anchor.key), before = domSig();
+    if (row) t.scrollTop = t.scrollTop + Math.round(row.getBoundingClientRect().top - back.anchor.top);
+    else t.scrollTop = back.scrollTop;
+    await settle(before, my, 8);
   }
   function dreamPanel() {
     var start = document.querySelector('[data-dream="moon"]') || document.querySelector('p[data-dream="paragraph"]');
@@ -696,27 +750,49 @@
   function keepDream(key, owner, body) {
     dreams.set(key, { owner: owner, body: '☾' + owner + '\n' + body });
   }
-  /** 自動で遡る・読み込む間: 画面にある、最新の返答より前の札を開いて読み、閉じる */
+  /** 次に自動で開く札(最新の返答より前で、まだ開いていない物)。zeta は画面の少し外の行も描いておくので、画面の外の札も含む */
+  function nextAutoDream(skip) {
+    var rows = document.querySelectorAll('[role="log"] [data-index][data-key]');
+    for (var i = 0; i < rows.length; i++) {
+      var key = rows[i].getAttribute('data-key');
+      if (dreams.has(key) || dreamTried.has(key) || skip.has(key) || !dreamAutoOk(key)) continue;
+      var c = dreamCardIn(rows[i]);
+      if (!c || !c.btn || c.btn.disabled) continue;
+      return { key: key, card: c };
+    }
+    return null;
+  }
+  /**
+   * 自動で遡る・読み込む間: 最新の返答より前の札を開いて読み、閉じる。
+   * 押すのは画面に見えている札だけ。画面の外(描いてあるだけの行)の札は、画面に入れてから押し、閉じたら元の位置へ戻る
+   */
   async function autoDreams(my) {
     if (!opts.dream || dreamBusy || dreamPanel()) return;
     dreamMsg = null;
-    var rows = document.querySelectorAll('[role="log"] [data-index][data-key]');
-    for (var i = 0; i < rows.length && my === runId; i++) {
-      var key = rows[i].getAttribute('data-key');
-      if (dreams.has(key) || dreamTried.has(key) || !dreamAutoOk(key)) continue;
-      var c = dreamCardIn(rows[i]);
-      if (!c || !c.btn || c.btn.disabled) continue;
-      dreamTried.add(key);
-      dreamBusy = true;
-      dreamMsg = { text: '☾' + c.owner + 'を開いて読んでいます…' };
-      updatePanel();
-      var shut = true;
+    var t = scroller(), skip = new Set();
+    for (var n; my === runId && (n = nextAutoDream(skip));) {
+      var key = n.key, c = n.card, back = null, shut = true;
+      dreamBusy = true;   // 動かしている間に手で「のぞく」を押されても重ねない
       try {
+        if (!onScreen(c.btn, t)) {
+          if (t) {
+            back = await bringIntoView(c.el, t, my);
+            var row = rowByKey(key);
+            c = row && dreamCardIn(row);
+          }
+          // 画面に入らなければ、今回は押さない(あとで画面に入ったときに開く)。
+          // いちばん下の近くで talklog のパネルの裏から出せないときは、スクロール欄の中に見えていれば押す
+          if (!t || my !== runId || !c || !c.btn || c.btn.disabled || !(onScreen(c.btn, t) || onScreen(c.btn, t, true))) { skip.add(key); continue; }
+        }
+        dreamTried.add(key);
+        dreamMsg = { text: '☾' + c.owner + 'を開いて読んでいます…' };
+        updatePanel();
         c.btn.click();
         var body = await readDream(6000);
         if (body) keepDream(key, c.owner, body);
         shut = await closeDream();
       } finally {
+        if (back && shut) await returnTo(back, t, my);
         dreamBusy = false;
         dreamMsg = shut ? null : { warn: true, text: '夢のパネルを閉じられませんでした。パネルを閉じてください。閉じたあとは、残りの夢も開いて読みます。' };
       }
