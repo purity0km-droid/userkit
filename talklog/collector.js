@@ -20,6 +20,7 @@
  *     文        … .chat(吹き出し・地の文・インフォボックスの行。マークダウンは中に p / em / strong)
  *     左右      … 右(自分)は外枠に ml-auto / items-end / self-end。左は名前 .caption1 が文の近く(前)にある。どちらも無ければ地の文
  *     プラグインの札 … 夢の札(☾ 〜の夢 と「のぞく」のボタン)などは文の後ろに付き、.caption1 を含む。名前とみなさない
+ *     夢のパネル … 「のぞく」で開く層。見出しに戻るボタンと [data-dream="moon"]、本文は p[data-dream="paragraph"]、下に前・次のボタンと「1 / 3」
  *     インフォボックス … 行が .chat > span.font-bold(ラベル) + span(値)。閉じていると .text-ellipsis の1行(押すと開く)
  *     再生成候補 … 横にずらして並ぶ。行の左右からはみ出した候補は拾わない
  *     トーク名  … 見出しの .title16.truncate
@@ -32,7 +33,7 @@
  */
 (function () {
   'use strict';
-  var VER = '1.2.1';
+  var VER = '1.3.0';
 
   if (window.__talklog && window.__talklog.ver) {
     if (window.__talklogAuto) { window.__talklogAuto = false; window.__talklog.open(); }
@@ -58,7 +59,7 @@
   /* ------------------------------------------------------------ 集めたもの */
   var blocks = new Map();   // blockKey → { items:[{kind,name,right,body}], idx, local }
   var order = [];           // blockKey の並び(古い→新しい)
-  var opts = { narration: true, info: true };
+  var opts = { narration: true, info: true, dream: true };
   // scrollDir: 最後に動いた向き(上 -1 / 下 1)。moveDir: 自動で動かしている間の向き(手で動かしているときは 0)
   var lastFromBottom = null, scrollDir = 0, moveDir = 0, sawBottom = false;
   var infoClicked = typeof WeakSet === 'function' ? new WeakSet() : null;
@@ -339,6 +340,8 @@
       if (!items.length) continue;
       var key = dk || (el.id ? 'id:' + el.id : '');
       if (key) { if (seen.has(key)) continue; seen.add(key); }
+      var dc = current && key ? dreamCardIn(el) : null;
+      if (dc) dreamCards.set(key, { owner: dc.owner, past: !dc.btn });
       var idx = row.getAttribute ? parseInt(row.getAttribute('data-index'), 10) : NaN;
       out.push({ key: key, el: el, sig: sigOf(items), idx: isNaN(idx) ? null : idx, local: /^local-reply-/.test(dk), items: items });
     }
@@ -583,6 +586,193 @@
     return visKeys.some(function (k) { return seen[chainOf.get(k)] === true; });
   }
 
+  /* ------------------------------------------------------------ 夢(zeta の dream プラグイン)
+   * 地の文だけの返答などの後ろに「☾ 〜の夢 [のぞく]」の札が付く。中身はトーク欄には無く、「のぞく」で開くパネルに 1 ページずつ出る。
+   * 一度見た夢は、もう一度開いてもピースはかからない(zeta は先に夢があるかを確かめ、あればパネルを開くだけ)。
+   * 見ていない夢を買えるのは最新の返答だけ(それより前は「過去」の印になり、押しても買えない)。
+   * なので自動で開くのは、最新の返答より前の札だけ。最新の返答の札と、手でスクロールしている間の札は案内を出し、利用者が開いた分を読む。
+   */
+  var dreams = new Map();      // blockKey → { owner, body }  読み取った夢
+  var dreamCards = new Map();  // blockKey → { owner, past }  見かけた札(past = 過去の印で、開けない)
+  var dreamTried = new Set();  // 自動で開こうとした札(開けなくても繰り返さない)
+  var dreamBusy = false, dreamMsg = null;
+
+  /** 行の中の夢の札。☾(aria-hidden の span)と「〜の夢」(.truncate)と、のぞくのボタン(過去の夢はボタンが無い) */
+  function dreamCardIn(row) {
+    var marks = row.querySelectorAll('span[aria-hidden="true"]');
+    for (var i = 0; i < marks.length; i++) {
+      if (marks[i].textContent.trim() !== '☾') continue;
+      var card = marks[i].parentElement;   // ☾ そのものは aria-hidden なので、隠れた候補かは札で見る
+      if (!card || card.querySelector(SEL.text) || offRow(card)) continue;
+      var nm = card.querySelector('.truncate');
+      var owner = nm ? nm.textContent.trim() : '';
+      if (owner) return { el: card, owner: owner, btn: card.querySelector('button') };
+    }
+    return null;
+  }
+  /** 自動で開いてよい札か: 最新まで読んだあとで、最新の返答より前の行 */
+  function dreamAutoOk(key) {
+    if (!sawBottom || !/^message-/.test(key || '')) return false;
+    var at = order.indexOf(key);
+    return at >= 0 && at < order.length - 1;
+  }
+  function dreamPanel() {
+    var start = document.querySelector('[data-dream="moon"]') || document.querySelector('p[data-dream="paragraph"]');
+    for (var r = start && start.parentElement; r && r !== document.body; r = r.parentElement) {
+      if (r.querySelector('footer') && r.querySelector('h1')) return r;
+    }
+    return null;
+  }
+  /** パネルのいまのページ。「2 / 3」の番号(作っている途中は「…」が付く)と、ページの箱(入れ替わりの間は 2 つ重なる) */
+  function dreamPage(panel) {
+    var live = panel.querySelector('[aria-live="polite"]');
+    var m = live && /(\d+)\s*\/\s*(\d+)\s*(…)?/.exec(live.textContent);
+    var ps = panel.querySelectorAll('p[data-dream="paragraph"]'), boxes = [];
+    for (var i = 0; i < ps.length; i++) {
+      var b = ps[i].closest('article') || ps[i].parentElement;
+      if (boxes.indexOf(b) < 0) boxes.push(b);
+    }
+    var text = boxes.length === 1 ? [].map.call(boxes[0].querySelectorAll('p[data-dream="paragraph"]'), function (p) { return p.textContent.trim(); }) : null;
+    return { at: m ? +m[1] : 0, of: m ? +m[2] : 0, done: !!m && !m[3], box: boxes.length === 1 ? boxes[0] : null, text: text };
+  }
+  function dreamButtons(panel) {
+    var f = panel.querySelector('footer');
+    var bs = f ? f.querySelectorAll('button') : [];
+    return { prev: bs[0] || null, next: bs.length > 1 ? bs[bs.length - 1] : null };
+  }
+  /** 開いたパネルを最後のページまでめくって読む。読めなければ null。wait = パネルが開くまで待つ時間 */
+  async function readDream(wait) {
+    var panel = null;
+    for (var w = 0; w * 150 < wait && !(panel = dreamPanel()); w++) await sleep(150);
+    if (!panel) return null;
+    var pages = [], last = null, deadline = Date.now() + 120000;   // 作っている途中の夢は、できるまで待つ
+    while (Date.now() < deadline && panel.isConnected) {
+      var pg = dreamPage(panel);
+      // 番号が出て、作り終わり、ページが 1 つだけになり、前のページと別の物になるまで待つ
+      if (!pg.at || !pg.done || !pg.box || (last && pg.box === last.box && pg.text.join() === last.text.join())) { await sleep(150); continue; }
+      pages[pg.at - 1] = pg.text;
+      last = pg;
+      if (pg.at >= pg.of) break;
+      var nx = dreamButtons(panel).next;
+      if (!nx || nx.disabled) { last = null; await sleep(150); continue; }
+      nx.click();
+      for (var k = 0; k < 15 && dreamPage(panel).at === pg.at; k++) await sleep(100);
+      // めくれなければ、ページの右半分を押す(zeta はページの右半分の押下でも次へ進む)
+      if (dreamPage(panel).at === pg.at && pg.box.isConnected) {
+        var r = pg.box.getBoundingClientRect();
+        pg.box.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: r.right - 12, clientY: r.top + r.height / 2 }));
+        for (k = 0; k < 25 && dreamPage(panel).at === pg.at; k++) await sleep(100);
+      }
+    }
+    if (!last || pages.length < last.of) return null;
+    for (var i = 0; i < pages.length; i++) if (!pages[i]) return null;
+    var paras = [].concat.apply([], pages).filter(Boolean);
+    return paras.length ? paras.join('\n') : null;
+  }
+  async function closeDream() {
+    var panel = dreamPanel();
+    var h1 = panel && panel.querySelector('h1');
+    var back = h1 && h1.parentElement && h1.parentElement.querySelector('button');
+    if (back) back.click();
+    for (var w = 0; w < 30 && dreamPanel(); w++) await sleep(100);
+    return !dreamPanel();
+  }
+  async function firstDreamPage() {
+    for (var i = 0; i < 60; i++) {
+      var panel = dreamPanel();
+      if (!panel) return;
+      var pg = dreamPage(panel), pv = dreamButtons(panel).prev;
+      if (pg.at <= 1 || !pv || pv.disabled) return;
+      pv.click();
+      for (var k = 0; k < 15 && dreamPage(panel).at === pg.at; k++) await sleep(100);
+      if (dreamPage(panel).at === pg.at && pg.box && pg.box.isConnected) {
+        var r = pg.box.getBoundingClientRect();
+        pg.box.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: r.left + 12, clientY: r.top + r.height / 2 }));
+        for (k = 0; k < 25 && dreamPage(panel).at === pg.at; k++) await sleep(100);
+      }
+      if (dreamPage(panel).at === pg.at) return;
+    }
+  }
+  function keepDream(key, owner, body) {
+    dreams.set(key, { owner: owner, body: '☾' + owner + '\n' + body });
+  }
+  /** 自動で遡る・読み込む間: 画面にある、最新の返答より前の札を開いて読み、閉じる */
+  async function autoDreams(my) {
+    if (!opts.dream || dreamBusy || dreamPanel()) return;
+    dreamMsg = null;
+    var rows = document.querySelectorAll('[role="log"] [data-index][data-key]');
+    for (var i = 0; i < rows.length && my === runId; i++) {
+      var key = rows[i].getAttribute('data-key');
+      if (dreams.has(key) || dreamTried.has(key) || !dreamAutoOk(key)) continue;
+      var c = dreamCardIn(rows[i]);
+      if (!c || !c.btn || c.btn.disabled) continue;
+      dreamTried.add(key);
+      dreamBusy = true;
+      dreamMsg = { text: '☾' + c.owner + 'を開いて読んでいます…' };
+      updatePanel();
+      var shut = true;
+      try {
+        c.btn.click();
+        var body = await readDream(6000);
+        if (body) keepDream(key, c.owner, body);
+        shut = await closeDream();
+      } finally {
+        dreamBusy = false;
+        dreamMsg = shut ? null : { warn: true, text: '夢のパネルを閉じられませんでした。パネルを閉じてください。閉じたあとは、残りの夢も開いて読みます。' };
+      }
+      scan(true);
+      if (!shut) return;
+    }
+  }
+  /** 利用者が「のぞく」を押したとき: パネルが開いたら最後までめくって読み、初めのページに戻す */
+  function onDreamClick(e) {
+    var b = e.target && e.target.closest ? e.target.closest('button') : null;
+    if (!b || dreamBusy || !opts.dream) return;
+    var row = b.closest('[role="log"] [data-index][data-key]');
+    var c = row && dreamCardIn(row);
+    if (!c || c.btn !== b) return;
+    manualDream(row.getAttribute('data-key'), c.owner);
+  }
+  async function manualDream(key, owner) {
+    dreamBusy = true;
+    dreamMsg = { text: '☾' + owner + 'を読んでいます。ページは talklog がめくります…' };
+    updatePanel();
+    try {
+      var body = await readDream(60000);
+      if (body) {
+        keepDream(key, owner, body);
+        await firstDreamPage();
+        dreamMsg = { text: '☾' + owner + 'も書き出す内容に加えました。読み終えたら、パネルを閉じてください。' };
+      } else if (dreamPanel()) {
+        dreamMsg = { warn: true, text: '☾' + owner + 'を読み取れませんでした。パネルを閉じて、もう一度「のぞく」を押してください。' };
+      } else dreamMsg = null;
+    } finally { dreamBusy = false; updatePanel(); }
+  }
+  /** 案内の文: 画面にある、まだ読んでいない札 */
+  function dreamGuide() {
+    if (!opts.dream) return null;
+    if (dreamMsg && !dreamBusy && !dreamPanel()) dreamMsg = null;   // パネルを閉じたら知らせも消す
+    if (dreamMsg) return dreamMsg;
+    var rows = document.querySelectorAll('[role="log"] [data-index][data-key]'), latest = false, any = false;
+    for (var i = 0; i < rows.length; i++) {
+      var key = rows[i].getAttribute('data-key');
+      if (dreams.has(key)) continue;
+      var c = dreamCardIn(rows[i]);
+      if (!c || !c.btn) continue;
+      if (dreamAutoOk(key) && (state === 'climbing' || state === 'sweeping')) continue;   // 自動で開く
+      any = true;
+      if (!dreamAutoOk(key)) latest = true;
+    }
+    if (!any) return null;
+    return { text: '☾ 画面にある夢は、「のぞく」を押すと中身も一緒に保存します。' + (latest ? '最新の返答の夢は、まだ見ていなければ、のぞくとピースがかかります。' : '') };
+  }
+  /** まだ中身を読んでいない札の数(過去の印の札は開けないので数えない) */
+  function dreamsLeft() {
+    var n = 0;
+    dreamCards.forEach(function (c, k) { if (!c.past && !dreams.has(k)) n++; });
+    return n;
+  }
+
   /* ------------------------------------------------------------ スクロール */
   function scroller() {
     var one = document.querySelector(SEL.block) || document.querySelector(SEL.name);
@@ -651,6 +841,7 @@
       if (Math.abs(t.scrollTop - was) < 1) break;   // 端まで戻った
       await settle(before, my, 8);
       scan(true);
+      await autoDreams(my);   // 読み込みで画面が跳んだときは、ここでしか見えない行がある
       if (joined(prev)) { filled = true; break; }
       if (prev.fb !== null && dir * (fromBottom(t) - prev.fb) > t.clientHeight) break;
     }
@@ -671,10 +862,12 @@
       if (atBottom(t)) break;
       var prev = fromTop(t);
       await stepBy(t, Math.max(80, Math.round(t.clientHeight * 0.45)), my);
+      await autoDreams(my);
       stuck = fromTop(t) <= prev ? stuck + 1 : 0;
       if (stuck > 3) break;
     }
     scan();
+    await autoDreams(my);
   }
   /** 一番上(最初の発言)まで自動で遡る。古い分の読み込みを待ちながら進む */
   async function climbUp() {
@@ -684,6 +877,7 @@
     setState('climbing');
     var still = 0;
     scan();
+    await autoDreams(my);
     while (my === runId) {
       if (atTop(t)) {
         var h0 = t.scrollHeight, prev = snap();
@@ -693,11 +887,13 @@
         scan(true);
         if (!joined(prev)) await fillGap(t, prev, my);
         moveDir = 0;
+        await autoDreams(my);
         if (t.scrollHeight === h0 && atTop(t)) { if (++still >= 3) break; } else still = 0;
         continue;
       }
       still = 0;
       await stepBy(t, -Math.max(80, Math.round(t.clientHeight * 0.45)), my);
+      await autoDreams(my);
     }
     scan();
     if (my === runId) setState('top');
@@ -722,6 +918,9 @@
         if (x.kind === 'info' && !opts.info) return;
         out.push({ kind: x.kind, name: x.name, right: x.right, body: x.body });
       });
+      // 夢は、その返答の後ろに地の文として入れる(「☾〜の夢」の行で始まる。読む側が夢を知らなくても地の文として出る)
+      var d = opts.dream && dreams.get(k);
+      if (d) out.push({ kind: 'narration', name: '', right: false, body: d.body, dream: true });
     });
     return out;
   }
@@ -752,7 +951,7 @@
     var title = pageTitle();
     var now = new Date();
     var rows = items.map(function (x) {
-      var cls = x.kind === 'narration' ? 'nar' : x.kind === 'info' ? 'info' : (x.right ? 'me' : 'them');
+      var cls = x.dream ? 'nar dream' : x.kind === 'narration' ? 'nar' : x.kind === 'info' ? 'info' : (x.right ? 'me' : 'them');
       return '<div class="m ' + cls + '">' + (x.name && x.kind !== 'narration' ? '<div class="nm">' + esc(x.name) + '</div>' : '') +
         '<div class="bb">' + lineHtml(x.body) + '</div></div>';
     }).join('\n');
@@ -771,6 +970,7 @@
       '.them .bb{background:var(--them);border-top-left-radius:4px}.me .bb{background:var(--me);border-color:#d6d0fb;border-top-right-radius:4px}',
       '.bb p{margin:3px 0}.bb p.act,.nar p{color:var(--muted);font-style:italic}',
       '.m.nar{max-width:100%;margin:14px 6%;align-items:stretch}.nar .bb{background:transparent;border:0;border-left:3px solid var(--line);border-radius:0;padding:4px 14px}',
+      '.dream .bb{border-left-color:#b9b0f7}.dream .bb p{font-style:normal}.dream .bb p:first-child{color:var(--accent);font-weight:700}',
       '.m.info{max-width:100%;align-items:stretch}.info .nm{color:var(--accent)}.info .bb{background:#f3f1ff;border-style:dashed;font-size:13.5px}',
       'footer{margin-top:40px;font-size:11.5px;color:var(--muted);text-align:center}',
       '@media print{body{background:#fff}.m{break-inside:avoid}}'
@@ -927,6 +1127,7 @@
     '.ver{font-size:10.5px;color:#9a93a8}.x{margin-left:auto;border:0;background:none;font-size:18px;line-height:1;color:#8a8399;cursor:pointer;padding:4px 6px;border-radius:8px}',
     '.x:hover{background:#f3f1ff}.count{font-size:15px;font-weight:700}.count small{font-size:11.5px;font-weight:400;color:#8a8399;margin-left:6px}',
     '.guide{color:#5b5567;margin:4px 0 10px}.guide.warn{color:#c4425a}',
+    '.guide.dream{margin-top:-4px;padding:6px 10px;border-radius:10px;background:#f3f1ff;color:#4b42b0}.guide.dream.warn{background:#fdeef1;color:#c4425a}',
     '.row{display:flex;gap:8px;flex-wrap:wrap}.row.alt{margin-top:8px}',
     'button.b{flex:1;min-height:40px;border-radius:999px;border:1px solid #cdc6fd;background:#fff;color:#5b51c9;font:700 13px/1 inherit;cursor:pointer;padding:0 12px}',
     'button.b:hover{background:#f3f1ff}button.b.pri{background:#6d5dfc;border-color:#6d5dfc;color:#fff}button.b.pri:hover{background:#5b51c9}',
@@ -978,7 +1179,7 @@
     ui.alt.appendChild(sh);
     ui.alt.appendChild(cp);
     var opt = el('div', { class: 'opt' });
-    [['narration', '地の文'], ['info', 'インフォボックス']].forEach(function (o) {
+    [['narration', '地の文'], ['info', 'インフォボックス'], ['dream', '夢']].forEach(function (o) {
       var lb = el('label');
       var cb = el('input', { type: 'checkbox' });
       cb.checked = opts[o[0]];
@@ -990,6 +1191,8 @@
     p.appendChild(hd);
     p.appendChild(ui.count);
     p.appendChild(ui.guide);
+    ui.dream = el('div', { class: 'guide dream' });
+    p.appendChild(ui.dream);
     p.appendChild(row);
     p.appendChild(ui.alt);
     p.appendChild(opt);
@@ -1008,6 +1211,8 @@
       msgOverride = gapEvents
         ? { warn: true, text: n + '件を書き出しました。ただし途中で読み飛ばした可能性があります(' + gapEvents + '回)。抜けがないかファイルを確かめ、足りなければ、もう一度ゆっくり遡ってから書き出してください。' }
         : { text: n + '件を書き出しました。保存したファイルを開いて、いちばん古い発言と新しい発言が入っているか確かめてください。' };
+      var left = opts.dream ? dreamsLeft() : 0;
+      if (left) msgOverride.text += ' 中身を入れていない夢が' + left + '件あります。';
     }
     if (s === 'savefail') {
       msgOverride = { warn: true, text: n + '件をまとめましたが、ファイルを保存できませんでした。zeta のページ(zeta-ai.io)でも talklog が動くよう、拡張機能の許可を確かめてください。下のボタンでも保存できます。' };
@@ -1036,6 +1241,10 @@
     else text = 'いちばん古い発言まで、ゆっくり上へスクロールしてください(「自動で遡る」でもOK)。終わったら「書き出す」。';
     ui.guide.textContent = text;
     ui.guide.className = 'guide' + (warn ? ' warn' : '');
+    var dg = state === 'exporting' || state === 'done' || state === 'savefail' ? dreamMsg : dreamGuide();
+    ui.dream.textContent = dg ? dg.text : '';
+    ui.dream.className = 'guide dream' + (dg && dg.warn ? ' warn' : '');
+    ui.dream.style.display = dg ? '' : 'none';
     ui.climb.textContent = state === 'climbing' ? '止める' : '自動で遡る';
     ui.exp.disabled = state === 'exporting' || state === 'sweeping';
     ui.climb.disabled = state === 'exporting' || state === 'sweeping';
@@ -1047,6 +1256,7 @@
       observer = new MutationObserver(function () { schedule(); });
       observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] });
       document.addEventListener('scroll', schedule, true);
+      document.addEventListener('click', onDreamClick, true);
     }
     if (!timer) timer = setInterval(idleScan, 700);
   }
@@ -1058,7 +1268,11 @@
     pendingScan = setTimeout(function () { pendingScan = 0; idleScan(); }, 120);
   }
   function stopWatching() {
-    if (observer) { observer.disconnect(); observer = null; document.removeEventListener('scroll', schedule, true); }
+    if (observer) {
+      observer.disconnect(); observer = null;
+      document.removeEventListener('scroll', schedule, true);
+      document.removeEventListener('click', onDreamClick, true);
+    }
     if (timer) { clearInterval(timer); timer = null; }
   }
 
@@ -1100,7 +1314,8 @@
     stats: function () {
       var chains = {};
       chainOf.forEach(function (c) { chains[c] = true; });
-      return { blocks: order.length, gaps: gapEvents, chains: Object.keys(chains).length, keys: order.slice() };
+      return { blocks: order.length, gaps: gapEvents, chains: Object.keys(chains).length, keys: order.slice(),
+        dreams: { read: Array.from(dreams.keys()), tried: Array.from(dreamTried), cards: Array.from(dreamCards.keys()) } };
     }
   };
 

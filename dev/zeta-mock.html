@@ -46,6 +46,10 @@
   .scene .size-4 { width: 12px; height: 12px; flex: none; }
   .scene .slider { overflow: hidden; } .scene .track { display: flex; transition: transform .2s; } .scene .slide { flex: 0 0 100%; }
   .scene .text-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+  .dream-layer { position: fixed; inset: 0; z-index: 20; background: #101018; color: #eee; }
+  .dream-layer .size-full { width: 100%; height: 100%; } .dream-layer .flex-1 { flex: 1; min-height: 0; } .dream-layer h1 { font-size: 16px; margin: 0; text-align: center; flex: 1; }
+  .dream-stage { position: relative; flex: 1; } .dream-stage article { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; transition: opacity .3s; }
+  .dream-layer footer { display: flex; flex-direction: column; gap: 8px; padding: 10px 20px 18px; } .dream-layer footer > div:last-child { display: flex; justify-content: space-between; align-items: center; }
   .host-frame { position: fixed; top: 48px; left: 50%; transform: translateX(-50%); width: 480px; max-width: 100%; height: calc(100vh - 48px); border: 0; }
 </style>
 </head>
@@ -90,16 +94,17 @@
   const msgs = [];
   for (let i = 0; i < BASE; i++) {
     const id = 'm' + (1000 + i);
-    if (i === BASE - 1) msgs.push({ id, type: 'cands', cands: ['候補A: もう寝る時間だよ', '候補B: *あくびをして* また明日ね', '候補C: 眠れないの?'], active: 1 });
+    if (i === BASE - 1) msgs.push({ id, type: 'cands', cands: ['候補A: もう寝る時間だよ', '候補B: *あくびをして* また明日ね', '候補C: 眠れないの?'], active: 1, dream: SCENE ? { st: 'buy', pages: [['最新の夢(買うとできる)。']] } : null });
     else if (SCENE && i === 3) msgs.push({ id, type: 'divider' });
     else if (SCENE && i % 31 === 15) msgs.push({ id, type: 'image' });
     else if (i % 37 === 20) msgs.push({ id, type: 'dice' });
     else if (i % 29 === 10) msgs.push({ id, type: 'info', rows: [['時間', '放課後 ' + i], ['場所', '旧校舎']], person: [CHAR, [['気分', '少し眠い']]] });
     else if (i % 23 === 5) msgs.push({ id, type: 'multi', parts: [[CHAR, `第${i}話: 先に行くね`], ['narr', `${CHAR2}が扉の陰から顔を出す。`], [CHAR2, `第${i}話: 待って、私も!`]] });
     else if (SCENE && i % 41 === 7) msgs.push({ id, type: 'char', anon: true, text: `第${i}話: (名前の無い声)誰かいるの?`, narr: null });
-    // 地の文だけの返答の後ろに、夢のプラグインの札(「のぞく」のボタンか、過去の夢の印。どちらも .caption1)が付くことがある
-    else if (SCENE && i % 43 === 11) msgs.push({ id, type: 'narr', text: `第${i}話: 鐘が鳴った。`, dream: i === 11 ? 'peek' : i === 54 ? 'past' : null });
-    else if (i % 2 === 0) msgs.push({ id, type: 'char', text: `第${i}話: *本を閉じて* ねえ、聞いてる?`, narr: i % 6 === 0 ? `窓の外で雨が降り出した(${i})。` : null, dream: SCENE && i === 40 ? 'peek' : null });
+    // 地の文だけの返答の後ろに、夢のプラグインの札(「のぞく」のボタンか、過去の夢の印。どちらも .caption1)が付くことがある。
+    // peek = 見たことのある夢(押すとパネルが開く)、past = 過去の印(開けない)、buy = 最新の返答の見ていない夢(押すとピースで買う)
+    else if (SCENE && i % 43 === 11) msgs.push({ id, type: 'narr', text: `第${i}話: 鐘が鳴った。`, dream: i === 11 ? { st: 'peek', pages: [[`夢${i}の一節目。`, `夢${i}の二節目。\n改行のある節。`], [`夢${i}の三節目。`], [`夢${i}の四節目。`, `夢${i}の五節目。`]] } : i === 54 ? { st: 'past' } : null });
+    else if (i % 2 === 0) msgs.push({ id, type: 'char', text: `第${i}話: *本を閉じて* ねえ、聞いてる?`, narr: i % 6 === 0 ? `窓の外で雨が降り出した(${i})。` : null, dream: SCENE && i === 40 ? { st: 'peek', pages: [[`夢${i}は一ページだけ。`]] } : null });
     else msgs.push({ id, type: 'user', text: i % 10 === 3 ? 'うん' : `第${i}話: うん、聞いてるよ`, noName: SCENE && i % 8 === 1, client: SCENE && i >= BASE - 6 });
   }
   if (SCENE) msgs.push({ id: 'pending', type: 'pending', text: '送信中の発言' });
@@ -120,9 +125,12 @@
       if (m.type === 'multi') for (const [who, t] of m.parts) out.push(who === 'narr' ? { kind: 'narration', name: '', right: false, body: t } : { kind: 'speech', name: who, right: false, body: t });
       if (m.type === 'info') out.push({ kind: 'info', name: 'インフォボックス', right: false, body: m.rows.map(([a, b]) => a + '：' + b).concat(['【' + m.person[0] + '】'], m.person[1].map(([a, b]) => a + '：' + b)).join('\n') });
       if (m.type === 'cands') out.push({ kind: 'speech', name: CHAR, right: false, body: m.cands[m.active] });
+      // 夢は見たことのある物(と、買った最新の夢)だけ。「☾〜の夢」の行で始まる地の文として、その返答の後ろに入る
+      if (m.dream && (m.dream.st === 'peek' || m.dream.bought)) out.push({ kind: 'narration', name: '', right: false, body: '☾' + CHAR + 'の夢\n' + m.dream.pages.flat().join('\n') });
     }
     return out;
   };
+  window.__dreamBought = 0;   // 最新の返答の夢をピースで買った回数(talklog が自分で押していないかを確かめる)
 
   // ---- DOM(Reactのように、同じidの要素は描き直しても使い回す) ----
   const S = (name, cls) => { const d = document.createElement('div'); d.setAttribute('data-sentry-component', name); if (cls) d.className = cls; return d; };
@@ -167,12 +175,54 @@
   const sNarr = (t, plain) => E('div', 'flex flex-row items-start px-2 py-3',
     E('div', 'flex flex-row gap-2 rounded-12 p-2 pr-3 bg-gray-main', icon(),
       E('div', 'flex flex-[0_1_auto] flex-col', plain ? E('span', 'chat [overflow-wrap:anywhere] whitespace-pre-wrap text-white/70', t) : md(t))));
-  // 夢のプラグインの札(zeta の dream プラグインと同じ形)。書き出さない
-  const sDream = (st) => E('div', 'my-2 flex min-h-8 items-center gap-2 px-4 body2 text-gray-300',
+  // 夢のプラグインの札(zeta の dream プラグインと同じ形)
+  const sDream = (d) => E('div', 'my-2 flex min-h-8 items-center gap-2 px-4 body2 text-gray-300',
     (() => { const s = E('span', 'text-lg text-indigo-200', '☾'); s.setAttribute('aria-hidden', 'true'); return s; })(),
     E('span', 'min-w-0 flex-1 truncate', CHAR + 'の夢'),
-    st === 'past' ? E('span', 'shrink-0 caption1 text-gray-500', '過去の夢')
-      : (() => { const b = E('button', 'shrink-0 rounded-full bg-white/5 px-3 py-1 caption1 text-indigo-200', 'のぞく'); b.type = 'button'; return b; })());
+    d.st === 'past' ? E('span', 'shrink-0 caption1 text-gray-500', '過去の夢')
+      : (() => { const b = E('button', 'shrink-0 rounded-full bg-white/5 px-3 py-1 caption1 text-indigo-200', 'のぞく'); b.type = 'button'; b.onclick = () => openDream(d); return b; })());
+  // 夢のパネル(zeta では画面に重ねる層)。開くまで少し待ち、ページは 1 枚ずつ。めくると番号が先に変わり、前のページが消えてから次のページが出る
+  function openDream(d) {
+    if (document.querySelector('.dream-layer')) return;
+    let gen = false;
+    if (d.st === 'buy' && !d.bought) { window.__dreamBought++; d.bought = true; gen = true; }
+    setTimeout(() => {
+      let at = 0;
+      const live = E('span', 'caption1 text-gray-400'); live.setAttribute('aria-live', 'polite');
+      const stage = E('div', 'dream-stage');
+      const prev = E('button', 'size-10 rounded-full bg-white/5', '‹'), next = E('button', 'size-10 rounded-full bg-white/5', '›');
+      const back = E('button', 'size-9 shrink-0 rounded-full bg-white/5', '‹');
+      const moon = E('span', 'flex size-9 shrink-0 items-center justify-center text-indigo-200', '☽'); moon.setAttribute('aria-hidden', 'true'); moon.setAttribute('data-dream', 'moon');
+      const page = (k) => {
+        const a = E('article', 'absolute inset-0 overflow-y-auto px-6 py-8', E('div', 'mx-auto flex min-h-full max-w-xl flex-col justify-center gap-7',
+          ...d.pages[k].map((t) => { const p = E('p', 'text-center chat whitespace-pre-wrap text-gray-100', t); p.setAttribute('data-dream', 'paragraph'); return p; })));
+        a.onclick = (e) => { const r = a.getBoundingClientRect(); go(e.clientX < r.left + r.width / 2 ? -1 : 1); };
+        return a;
+      };
+      const show = () => { live.textContent = `${at + 1} / ${d.pages.length}` + (gen ? ' …' : ''); prev.disabled = at === 0; next.disabled = gen || at >= d.pages.length - 1; };
+      let tok = 0;
+      const go = (dir) => {
+        const to = at + dir;
+        if (to < 0 || to >= d.pages.length || gen) return;
+        at = to; show();
+        [...stage.children].forEach((a) => { a.style.opacity = '0'; });
+        const my = ++tok;
+        setTimeout(() => { if (my !== tok) return; stage.replaceChildren(page(at)); }, 350);
+      };
+      prev.onclick = () => go(-1); next.onclick = () => go(1);
+      back.onclick = () => layer.remove();
+      const layer = E('div', 'dream-layer', E('div', 'relative isolate size-full overflow-hidden bg-gray-main text-gray-100',
+        E('div', 'relative flex size-full flex-col',
+          E('div', 'flex shrink-0 items-center gap-3 border-b px-4 py-3', back, E('h1', 'min-w-0 flex-1 truncate text-center heading1', CHAR + 'の夢'), moon),
+          E('div', 'flex min-h-0 flex-1 flex-col', stage,
+            E('footer', 'flex shrink-0 flex-col gap-3 px-6 pt-3 pb-5', (() => { const s = E('div', 'min-h-5 text-center caption1 text-gray-400'); s.setAttribute('role', 'status'); return s; })(),
+              E('div', 'flex items-center justify-between gap-4', prev, live, next))))));
+      stage.append(page(0)); show();
+      document.body.append(layer);
+      // 買った直後は作っている途中(番号に「…」が付く)
+      if (gen) setTimeout(() => { gen = false; show(); }, 1500);
+    }, 400);
+  }
   const infoLine = ([a, b], cls) => E('span', cls || 'chat native:mt-1', E('span', 'font-bold text-white', a), '  ', E('span', 'text-white/70', b));
   const sInfo = (m) => {
     const root = E('div', 'mx-2 my-3 flex flex-row items-start rounded-12 bg-gray-main py-2');
@@ -213,7 +263,7 @@
     if (m.type === 'divider') op.append(E('div', 'flex flex-row items-center gap-2 px-4 py-3', E('span', 'caption1 text-white/50', ME + ' として参加')));
     if (m.type === 'cands') {
       // 最新の返答: 候補を横に並べてずらす。下に操作のバー(番号は .caption1)
-      const track = E('div', 'track', ...m.cands.map((t) => E('div', 'slide', E('div', 'relative flex flex-col', sLeft(CHAR, t)))));
+      const track = E('div', 'track', ...m.cands.map((t) => E('div', 'slide', E('div', 'relative flex flex-col', sLeft(CHAR, t), m.dream ? sDream(m.dream) : null))));
       track.style.transform = `translateX(${-m.active * 100}%)`;
       const wrap = E('div', 'relative flex flex-col', E('div', null, E('div', 'slider', track)),
         E('div', 'flex flex-row items-center justify-end gap-2 px-4', E('button', null, '‹'), E('span', 'caption1 text-white/50', `${m.active + 1}/${m.cands.length}`), E('button', null, '›')));
