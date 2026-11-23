@@ -96,7 +96,8 @@
     stop: '<rect x="6.5" y="6.5" width="11" height="11" rx="1.5"/>',
     music: '<path d="M9 17.5V6l11-2.5V15"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="15" r="2.5"/><path d="M9 9.5 20 7"/>',
     scroll: '<path d="M18 16V5a2 2 0 0 0-2-2H5"/><path d="M5 3a2 2 0 0 0-2 2v1.5h4V5a2 2 0 0 0-2-2z"/><path d="M7 6.5V19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1.5H11V19a2 2 0 0 1-2 2"/><path d="M10.5 8.5h4.5M10.5 12h4.5"/>',
-    help: '<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2-2.5 3.6M12 16.8h.01"/>'
+    help: '<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2-2.5 3.6M12 16.8h.01"/>',
+    info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8h.01"/>'
   };
   function icon(name, size) {
     const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');

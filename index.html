@@ -75,6 +75,8 @@
     .notes dt { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 700; }
     .notes dt .icon { color: var(--primary); }
     .notes dd { margin: 6px 0 0; font-size: 13.5px; color: var(--muted); }
+    .notes > div.wide { grid-column: 1 / -1; margin-top: 18px; padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--line); }
+    .notes .wide a { color: var(--primary-dark); font-weight: 700; text-underline-offset: 3px; }
 
     @media (max-width: 860px) {
       .hub { padding-top: 28px; }
@@ -133,6 +135,10 @@
         <div>
           <dt><span data-icon="link"></span>ツール同士でつながります</dt>
           <dd>同じ端末・同じブラウザなら、userprof に保存したプロフィールと画像を、ほかの多くのツールで読み込めます。talklog で書き出したトークは、userhome で住まいの設定と照らし合わせられます。</dd>
+        </div>
+        <div class="wide">
+          <dt><span data-icon="info"></span>zeta の規約を守って</dt>
+          <dd>アンリミテッドモードで生成された扇情的・暴力的な内容を SNS などで共有することは、zeta の運営規約で禁止されています。他の人が作ったプロットの文や画像は、作者の権利を侵害しないよう気をつけて扱ってください。どのツールも zeta 非公式です。zeta の<a href="https://zeta-ai.io/ja/policy/terms" target="_blank" rel="noopener">利用規約</a>・<a href="https://mlpingpong.notion.site/1198134480b98064b2edc7cc040cd453" target="_blank" rel="noopener">運営規約</a>を読んだうえで、自分の責任でお使いください。talklog は zeta の画面を自動で操作するので、使う前に talklog のページの<a href="talklog/#notice">「利用上の注意」</a>を読んでください。</dd>
         </div>
       </dl>
     </section>

@@ -26,6 +26,16 @@
 code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: .92em; background: var(--soft); border-radius: 5px; padding: 1px 5px; }
 .limits { margin: 0; padding-left: 1.2em; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
 
+/* 利用上の注意 */
+.hero-terms { margin-top: 6px; }
+.hero-terms a, .terms-card a { color: var(--primary-dark); font-weight: 700; text-underline-offset: 3px; }
+.terms-card { scroll-margin-top: calc(var(--kitbar-h) + 12px); }
+.terms-card > p { font-size: 14px; }
+.terms-list { margin: 0; padding-left: 1.2em; font-size: 13.5px; display: flex; flex-direction: column; gap: 6px; }
+.terms-list li::marker { color: var(--primary); }
+.terms-clauses { margin: 8px 0 2px; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+.terms-clauses b { display: block; color: var(--text, #2c2c2c); font-weight: 700; }
+
 /* ---------- ビューア ---------- */
 .viewer-card { display: flex; flex-direction: column; gap: 14px; }
 .viewer-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 14px; flex-wrap: wrap; }

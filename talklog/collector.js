@@ -33,7 +33,7 @@
  */
 (function () {
   'use strict';
-  var VER = '1.4.0';
+  var VER = '1.4.1';
 
   if (window.__talklog && window.__talklog.ver) {
     if (window.__talklogAuto) { window.__talklogAuto = false; window.__talklog.open(); }
@@ -1220,6 +1220,10 @@
     'button.b:disabled{opacity:.5;cursor:default}',
     '.opt{display:flex;gap:14px;margin-top:8px;font-size:12px;color:#5b5567}.opt label{display:flex;align-items:center;gap:5px;cursor:pointer}',
     '.note{margin-top:6px;font-size:11px;color:#9a93a8}',
+    '.lk{border:0;background:none;padding:0;margin-left:4px;color:#6d5dfc;font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}',
+    '.ntc h3{margin:2px 0 6px;font-size:14px;font-weight:700;color:#2c2c2c}',
+    '.ntc ul{margin:0 0 6px;padding-left:1.2em;max-height:min(46vh,340px);overflow:auto;font-size:12.5px;line-height:1.6;color:#3d3a4c}',
+    '.ntc li{margin:3px 0}.ntc li::marker{color:#6d5dfc}.ntc .src{margin:0 0 10px;font-size:11px;color:#8a8399}',
     '.launch{position:fixed;right:14px;bottom:86px;z-index:2147483645;border:0;border-radius:999px;background:#6d5dfc;color:#fff;',
     'font:700 12.5px/1 "Hiragino Sans","Yu Gothic UI",system-ui,sans-serif;padding:10px 14px;box-shadow:0 6px 18px rgba(40,20,70,.3);cursor:pointer;opacity:.92}',
     '.launch:hover{opacity:1}'
@@ -1233,6 +1237,51 @@
     root.appendChild(style);
     ui = { root: root };
     document.documentElement.appendChild(panelHost);
+  }
+
+  /*
+   * 利用上の注意: 初めてパネルを開いたとき(と注意を書き換えたとき)は、画面を動かす前にこれを出し、「確認して使う」で始める。
+   * 覚えるのは zeta の枠の localStorage(読めない・書けない端末では毎回出す)。パネルの下の「利用上の注意」でいつでも読み直せる。
+   * 文はページの「利用上の注意」の要点(どちらも yomiyasu で推敲済み。直すときは両方そろえる)。
+   * 規約の条項の番号は変わることがあるので、ここには書かない(番号はページと README だけ。2026-11-23 ユーザー指示)
+   */
+  var NOTICE_KEY = 'userkit:talklog:notice', NOTICE_VER = '1';
+  var NOTICE = [
+    'talklog は zeta 公式の機能ではなく、運営の許可や動作の保証は受けていません。',
+    '画面を自動でスクロールし、表示された文を読み取って保存します。zeta が用意していないこの方法が規約に反するかどうかは、運営の判断によります。',
+    '短い間に何度も取り直すと、zeta に負担をかけ、利用の制限につながるおそれがあります。エラーや制限の表示が出たら止めてください。',
+    'アンリミテッドモードで生成された扇情的・暴力的な内容を SNS などで共有することは、運営規約で禁止されています。',
+    '使ったことで起きたアカウントの制限などについて、作者は責任を負えません。'
+  ];
+  var noticeMode = null;   // 'first'(初めて。確認して使う) / 'back'(読み直し。戻る) / null
+  function noticeOk() { try { return localStorage.getItem(NOTICE_KEY) === NOTICE_VER; } catch (e) { return false; } }
+  function noticeSave() { try { localStorage.setItem(NOTICE_KEY, NOTICE_VER); } catch (e) { /* 覚えられなければ次も出す */ } }
+  function buildNotice() {
+    var box = el('div', { class: 'ntc' });
+    box.appendChild(el('h3', null, '使う前に確かめてください'));
+    var ul = el('ul');
+    NOTICE.forEach(function (t) { ul.appendChild(el('li', null, t)); });
+    box.appendChild(ul);
+    box.appendChild(el('p', { class: 'src' }, 'くわしくは、talklog のページ（purity0km-droid.github.io/userkit/talklog/）の「利用上の注意」を見てください。'));
+    var row = el('div', { class: 'row' });
+    ui.ntcNo = el('button', { class: 'b' }, '閉じる');
+    ui.ntcNo.addEventListener('click', close);
+    ui.ntcOk = el('button', { class: 'b pri' }, '確認して使う');
+    ui.ntcOk.addEventListener('click', function () {
+      if (noticeMode === 'first') { noticeSave(); start(); } else showNotice(null);
+    });
+    row.appendChild(ui.ntcNo);
+    row.appendChild(ui.ntcOk);
+    box.appendChild(row);
+    return box;
+  }
+  function showNotice(mode) {
+    noticeMode = mode;
+    ui.notice.style.display = mode ? '' : 'none';
+    ui.body.style.display = mode ? 'none' : '';
+    ui.ntcNo.style.display = mode === 'first' ? '' : 'none';
+    ui.ntcOk.textContent = mode === 'first' ? '確認して使う' : '戻る';
+    ui.panel.setAttribute('aria-label', mode ? 'talklog 利用上の注意' : 'talklog トーク保存');
   }
 
   function buildPanel() {
@@ -1274,15 +1323,24 @@
       lb.appendChild(document.createTextNode(o[1] + 'を入れる'));
       opt.appendChild(lb);
     });
-    p.appendChild(hd);
-    p.appendChild(ui.count);
-    p.appendChild(ui.guide);
+    ui.body = el('div');
+    ui.body.appendChild(ui.count);
+    ui.body.appendChild(ui.guide);
     ui.dream = el('div', { class: 'guide dream' });
-    p.appendChild(ui.dream);
-    p.appendChild(row);
-    p.appendChild(ui.alt);
-    p.appendChild(opt);
-    p.appendChild(el('div', { class: 'note' }, '読み取った内容はこの端末の中だけで扱い、どこにも送信しません。'));
+    ui.body.appendChild(ui.dream);
+    ui.body.appendChild(row);
+    ui.body.appendChild(ui.alt);
+    ui.body.appendChild(opt);
+    var note = el('div', { class: 'note' }, '読み取った内容はこの端末の中だけで扱い、どこにも送信しません。');
+    var lk = el('button', { class: 'lk', type: 'button' }, '利用上の注意');
+    lk.addEventListener('click', function () { showNotice('back'); });
+    note.appendChild(lk);
+    ui.body.appendChild(note);
+    ui.notice = buildNotice();
+    ui.notice.style.display = 'none';
+    p.appendChild(hd);
+    p.appendChild(ui.notice);
+    p.appendChild(ui.body);
     ui.panel = p;
     ui.root.appendChild(p);
   }
@@ -1319,7 +1377,7 @@
     var text, warn = false;
     if (msgOverride) { text = msgOverride.text; warn = msgOverride.warn; }
     else if (state === 'sweeping') text = 'いちばん新しい発言まで読み込んでいます…';
-    else if (state === 'climbing') text = '上へ遡っています。止めたいときは「止める」を押してください。';
+    else if (state === 'climbing') text = '上へ遡っています。止めたいときや、zeta の画面にエラーや制限の表示が出たときは「止める」を押してください。';
     else if (state === 'top') text = 'いちばん上まで来ました。「書き出す」を押してください。';
     else if (state === 'exporting') text = '書き出しています…';
     else if (!visNow && chatInFrame()) { text = 'zeta の更新でトークが別の枠に移ったため、このページからはトークを読めません。talklog のページの手順で、ユーザースクリプトを入れて使ってください。'; warn = true; }
@@ -1366,6 +1424,12 @@
     buildPanel();
     hideLauncher();
     ui.panel.style.display = '';
+    // 初めて(か注意を書き換えた後)は、画面を動かす前に利用上の注意を出す
+    if (!noticeOk()) { showNotice('first'); return; }
+    await start();
+  }
+  async function start() {
+    showNotice(null);
     startWatching();
     setState('sweeping');
     await sweepDown();
