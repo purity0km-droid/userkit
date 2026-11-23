@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         talklog (zetaトーク保存)
 // @namespace    https://purity0km-droid.github.io/userkit/
-// @version      1.4.1
+// @version      1.4.2
 // @description  zetaのトーク画面に「talklog」ボタンを出し、トークを吹き出しのまま読めるHTMLファイルに保存します。内容はどこにも送信しません。
 // @author       userkit
 // @match        https://zeta-ai.io/*
 // @match        https://*.zeta-ai.io/*
 // @match        https://frame.pingpong.ai/*
-// @require      https://purity0km-droid.github.io/userkit/talklog/collector.js?v=1.4.1
+// @require      https://purity0km-droid.github.io/userkit/talklog/collector.js?v=1.4.2
 // @grant        none
 // @run-at       document-idle
 // @homepageURL  https://purity0km-droid.github.io/userkit/talklog/

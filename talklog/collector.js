@@ -33,7 +33,7 @@
  */
 (function () {
   'use strict';
-  var VER = '1.4.1';
+  var VER = '1.4.2';
 
   if (window.__talklog && window.__talklog.ver) {
     if (window.__talklogAuto) { window.__talklogAuto = false; window.__talklog.open(); }
@@ -1251,7 +1251,7 @@
     '画面を自動でスクロールし、表示された文を読み取って保存します。zeta が用意していないこの方法が規約に反するかどうかは、運営の判断によります。',
     '短い間に何度も取り直すと、zeta に負担をかけ、利用の制限につながるおそれがあります。エラーや制限の表示が出たら止めてください。',
     'アンリミテッドモードで生成された扇情的・暴力的な内容を SNS などで共有することは、運営規約で禁止されています。',
-    '使ったことで起きたアカウントの制限などについて、作者は責任を負えません。'
+    'talklog を使用したことで発生したアカウントの制限などについて、作者は責任を負いかねます。'
   ];
   var noticeMode = null;   // 'first'(初めて。確認して使う) / 'back'(読み直し。戻る) / null
   function noticeOk() { try { return localStorage.getItem(NOTICE_KEY) === NOTICE_VER; } catch (e) { return false; } }
