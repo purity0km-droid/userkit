@@ -97,8 +97,9 @@
     else if (i % 29 === 10) msgs.push({ id, type: 'info', rows: [['時間', '放課後 ' + i], ['場所', '旧校舎']], person: [CHAR, [['気分', '少し眠い']]] });
     else if (i % 23 === 5) msgs.push({ id, type: 'multi', parts: [[CHAR, `第${i}話: 先に行くね`], ['narr', `${CHAR2}が扉の陰から顔を出す。`], [CHAR2, `第${i}話: 待って、私も!`]] });
     else if (SCENE && i % 41 === 7) msgs.push({ id, type: 'char', anon: true, text: `第${i}話: (名前の無い声)誰かいるの?`, narr: null });
-    else if (SCENE && i % 43 === 11) msgs.push({ id, type: 'narr', text: `第${i}話: 鐘が鳴った。` });
-    else if (i % 2 === 0) msgs.push({ id, type: 'char', text: `第${i}話: *本を閉じて* ねえ、聞いてる?`, narr: i % 6 === 0 ? `窓の外で雨が降り出した(${i})。` : null });
+    // 地の文だけの返答の後ろに、夢のプラグインの札(「のぞく」のボタンか、過去の夢の印。どちらも .caption1)が付くことがある
+    else if (SCENE && i % 43 === 11) msgs.push({ id, type: 'narr', text: `第${i}話: 鐘が鳴った。`, dream: i === 11 ? 'peek' : i === 54 ? 'past' : null });
+    else if (i % 2 === 0) msgs.push({ id, type: 'char', text: `第${i}話: *本を閉じて* ねえ、聞いてる?`, narr: i % 6 === 0 ? `窓の外で雨が降り出した(${i})。` : null, dream: SCENE && i === 40 ? 'peek' : null });
     else msgs.push({ id, type: 'user', text: i % 10 === 3 ? 'うん' : `第${i}話: うん、聞いてるよ`, noName: SCENE && i % 8 === 1, client: SCENE && i >= BASE - 6 });
   }
   if (SCENE) msgs.push({ id: 'pending', type: 'pending', text: '送信中の発言' });
@@ -166,6 +167,12 @@
   const sNarr = (t, plain) => E('div', 'flex flex-row items-start px-2 py-3',
     E('div', 'flex flex-row gap-2 rounded-12 p-2 pr-3 bg-gray-main', icon(),
       E('div', 'flex flex-[0_1_auto] flex-col', plain ? E('span', 'chat [overflow-wrap:anywhere] whitespace-pre-wrap text-white/70', t) : md(t))));
+  // 夢のプラグインの札(zeta の dream プラグインと同じ形)。書き出さない
+  const sDream = (st) => E('div', 'my-2 flex min-h-8 items-center gap-2 px-4 body2 text-gray-300',
+    (() => { const s = E('span', 'text-lg text-indigo-200', '☾'); s.setAttribute('aria-hidden', 'true'); return s; })(),
+    E('span', 'min-w-0 flex-1 truncate', CHAR + 'の夢'),
+    st === 'past' ? E('span', 'shrink-0 caption1 text-gray-500', '過去の夢')
+      : (() => { const b = E('button', 'shrink-0 rounded-full bg-white/5 px-3 py-1 caption1 text-indigo-200', 'のぞく'); b.type = 'button'; return b; })());
   const infoLine = ([a, b], cls) => E('span', cls || 'chat native:mt-1', E('span', 'font-bold text-white', a), '  ', E('span', 'text-white/70', b));
   const sInfo = (m) => {
     const root = E('div', 'mx-2 my-3 flex flex-row items-start rounded-12 bg-gray-main py-2');
@@ -200,6 +207,7 @@
     if (m.type === 'narr') op.append(sNarr(m.text, true));
     if (m.type === 'multi') for (const [who, t] of m.parts) op.append(who === 'narr' ? sNarr(t) : sLeft(who, t));
     if (m.type === 'info') op.append(sInfo(m));
+    if (m.dream) op.append(sDream(m.dream));
     if (m.type === 'dice') op.append(E('div', 'flex flex-row px-2', E('span', 'body14', '🎲 4')));   // プラグインの表示(文の箱が無い)
     if (m.type === 'image') op.append(E('div', 'flex flex-row justify-end pr-2 pb-2', E('div', 'mt-1 overflow-hidden rounded-xl bg-gray-sub1', E('img', 'size-full object-cover'))));
     if (m.type === 'divider') op.append(E('div', 'flex flex-row items-center gap-2 px-4 py-3', E('span', 'caption1 text-white/50', ME + ' として参加')));

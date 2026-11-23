@@ -18,7 +18,8 @@
  *   iframe の中(今の画面):
  *     1件の塊   … [role="log"] の中の [data-index][data-key](キーは message-<id>。送った直後は別の id)
  *     文        … .chat(吹き出し・地の文・インフォボックスの行。マークダウンは中に p / em / strong)
- *     左右      … 右(自分)は外枠に ml-auto / items-end / self-end。左は名前 .caption1 が文の近くにある。どちらも無ければ地の文
+ *     左右      … 右(自分)は外枠に ml-auto / items-end / self-end。左は名前 .caption1 が文の近く(前)にある。どちらも無ければ地の文
+ *     プラグインの札 … 夢の札(☾ 〜の夢 と「のぞく」のボタン)などは文の後ろに付き、.caption1 を含む。名前とみなさない
  *     インフォボックス … 行が .chat > span.font-bold(ラベル) + span(値)。閉じていると .text-ellipsis の1行(押すと開く)
  *     再生成候補 … 横にずらして並ぶ。行の左右からはみ出した候補は拾わない
  *     トーク名  … 見出しの .title16.truncate
@@ -31,7 +32,7 @@
  */
 (function () {
   'use strict';
-  var VER = '1.2.0';
+  var VER = '1.2.1';
 
   if (window.__talklog && window.__talklog.ver) {
     if (window.__talklogAuto) { window.__talklogAuto = false; window.__talklog.open(); }
@@ -245,16 +246,20 @@
     }
     return false;
   }
-  /** 文の近く(外枠の中で、文へ続く道の脇)にある名前。無ければ null */
+  /**
+   * 文の近く(外枠の中で、文へ続く道の脇)にある名前。無ければ null
+   * zeta は名前を文より前(上)に置く。文の後ろ(下)にある .caption1 は名前ではないので見ない:
+   * 地の文だけの返答の下に付く夢の札(「のぞく」のボタン・過去の夢の印)、最新の返答の下の操作のバーなど
+   */
   function nameNear(c, frame) {
     for (var e = c, d = 0; e && e !== frame && d < NEAR - 1; e = e.parentElement, d++) {
-      var p = e.parentElement;
-      if (!p) break;
-      for (var i = 0; i < p.children.length; i++) {
-        var s = p.children[i];
-        if (s === e) continue;
-        var cap = s.matches(SEL.name) ? s : s.querySelector(SEL.name);
-        if (cap && !cap.closest(SEL.text)) return cap.textContent.trim();
+      for (var s = e.previousElementSibling; s; s = s.previousElementSibling) {
+        var caps = s.matches(SEL.name) ? [s] : s.querySelectorAll(SEL.name);
+        for (var i = 0; i < caps.length; i++) {
+          var cap = caps[i];
+          if (cap.closest(SEL.text) || cap.closest('button,[role="button"]')) continue;
+          return cap.textContent.trim();
+        }
       }
     }
     return null;
