@@ -33,7 +33,7 @@
  */
 (function () {
   'use strict';
-  var VER = '1.3.1';
+  var VER = '1.4.0';
 
   if (window.__talklog && window.__talklog.ver) {
     if (window.__talklogAuto) { window.__talklogAuto = false; window.__talklog.open(); }
@@ -686,15 +686,21 @@
       var b = ps[i].closest('article') || ps[i].parentElement;
       if (boxes.indexOf(b) < 0) boxes.push(b);
     }
-    var text = boxes.length === 1 ? [].map.call(boxes[0].querySelectorAll('p[data-dream="paragraph"]'), function (p) { return p.textContent.trim(); }) : null;
+    var text = boxes.length === 1 ? [].map.call(boxes[0].querySelectorAll('p[data-dream="paragraph"]'), dreamParaText) : null;
     return { at: m ? +m[1] : 0, of: m ? +m[2] : 0, done: !!m && !m[3], box: boxes.length === 1 ? boxes[0] : null, text: text };
+  }
+  /** 段落の文。段落の中の改行(文字の改行と <br>)は残す */
+  function dreamParaText(p) {
+    var c = p.cloneNode(true), brs = c.querySelectorAll('br');
+    for (var i = 0; i < brs.length; i++) brs[i].replaceWith('\n');
+    return c.textContent.replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').trim();
   }
   function dreamButtons(panel) {
     var f = panel.querySelector('footer');
     var bs = f ? f.querySelectorAll('button') : [];
     return { prev: bs[0] || null, next: bs.length > 1 ? bs[bs.length - 1] : null };
   }
-  /** 開いたパネルを最後のページまでめくって読む。読めなければ null。wait = パネルが開くまで待つ時間 */
+  /** 開いたパネルを最後のページまでめくって読む。ページごとの段落の配列 [[段落, …], …] を返す。読めなければ null。wait = パネルが開くまで待つ時間 */
   async function readDream(wait) {
     var panel = null;
     for (var w = 0; w * 150 < wait && !(panel = dreamPanel()); w++) await sleep(150);
@@ -720,8 +726,8 @@
     }
     if (!last || pages.length < last.of) return null;
     for (var i = 0; i < pages.length; i++) if (!pages[i]) return null;
-    var paras = [].concat.apply([], pages).filter(Boolean);
-    return paras.length ? paras.join('\n') : null;
+    pages = pages.map(function (pg) { return pg.filter(Boolean); }).filter(function (pg) { return pg.length; });
+    return pages.length ? pages : null;
   }
   async function closeDream() {
     var panel = dreamPanel();
@@ -747,8 +753,9 @@
       if (dreamPage(panel).at === pg.at) return;
     }
   }
-  function keepDream(key, owner, body) {
-    dreams.set(key, { owner: owner, body: '☾' + owner + '\n' + body });
+  /** title = 札の「〜の夢」、pages = zeta で読んだページごとの段落 */
+  function keepDream(key, title, pages) {
+    dreams.set(key, { title: title, pages: pages });
   }
   /** 次に自動で開く札(最新の返答より前で、まだ開いていない物)。zeta は画面の少し外の行も描いておくので、画面の外の札も含む */
   function nextAutoDream(skip) {
@@ -788,8 +795,8 @@
         dreamMsg = { text: '☾' + c.owner + 'を開いて読んでいます…' };
         updatePanel();
         c.btn.click();
-        var body = await readDream(6000);
-        if (body) keepDream(key, c.owner, body);
+        var pages = await readDream(6000);
+        if (pages) keepDream(key, c.owner, pages);
         shut = await closeDream();
       } finally {
         if (back && shut) await returnTo(back, t, my);
@@ -814,9 +821,9 @@
     dreamMsg = { text: '☾' + owner + 'を読んでいます。ページは talklog がめくります…' };
     updatePanel();
     try {
-      var body = await readDream(60000);
-      if (body) {
-        keepDream(key, owner, body);
+      var pages = await readDream(60000);
+      if (pages) {
+        keepDream(key, owner, pages);
         await firstDreamPage();
         dreamMsg = { text: '☾' + owner + 'も書き出す内容に加えました。読み終えたら、パネルを閉じてください。' };
       } else if (dreamPanel()) {
@@ -994,9 +1001,12 @@
         if (x.kind === 'info' && !opts.info) return;
         out.push({ kind: x.kind, name: x.name, right: x.right, body: x.body });
       });
-      // 夢は、その返答の後ろに地の文として入れる(「☾〜の夢」の行で始まる。読む側が夢を知らなくても地の文として出る)
+      // 夢は、その返答の後ろに地の文として入れる(「☾〜の夢」の行と空行で区切った段落。読む側が夢を知らなくても地の文として出る)。
+      // dream にはページの区切りもそのまま持たせる(1.3.x は dream: true で、段落を改行 1 つでつないでいた)
       var d = opts.dream && dreams.get(k);
-      if (d) out.push({ kind: 'narration', name: '', right: false, body: d.body, dream: true });
+      if (d) out.push({ kind: 'narration', name: '', right: false,
+        body: '☾' + d.title + '\n\n' + [].concat.apply([], d.pages).join('\n\n'),
+        dream: { title: d.title, pages: d.pages.map(function (pg) { return pg.slice(); }) } });
     });
     return out;
   }

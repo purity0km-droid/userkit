@@ -127,8 +127,8 @@
       if (m.type === 'multi') for (const [who, t] of m.parts) out.push(who === 'narr' ? { kind: 'narration', name: '', right: false, body: t } : { kind: 'speech', name: who, right: false, body: t });
       if (m.type === 'info') out.push({ kind: 'info', name: 'インフォボックス', right: false, body: m.rows.map(([a, b]) => a + '：' + b).concat(['【' + m.person[0] + '】'], m.person[1].map(([a, b]) => a + '：' + b)).join('\n') });
       if (m.type === 'cands') out.push({ kind: 'speech', name: CHAR, right: false, body: m.cands[m.active] });
-      // 夢は見たことのある物(と、買った最新の夢)だけ。「☾〜の夢」の行で始まる地の文として、その返答の後ろに入る
-      if (m.dream && (m.dream.st === 'peek' || m.dream.bought)) out.push({ kind: 'narration', name: '', right: false, body: '☾' + CHAR + 'の夢\n' + m.dream.pages.flat().join('\n') });
+      // 夢は見たことのある物(と、買った最新の夢)だけ。「☾〜の夢」の行と空行で区切った段落の地の文として、その返答の後ろに入る(1.4.0 から dream にページの区切り)
+      if (m.dream && (m.dream.st === 'peek' || m.dream.bought)) out.push({ kind: 'narration', name: '', right: false, body: '☾' + CHAR + 'の夢\n\n' + m.dream.pages.flat().join('\n\n'), dream: { title: CHAR + 'の夢', pages: m.dream.pages } });
     }
     return out;
   };
